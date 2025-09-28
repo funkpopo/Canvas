@@ -53,3 +53,19 @@ class EventMessage(BaseModel):
     involved_object: str
     namespace: str | None = None
     timestamp: datetime
+
+
+class MetricsServerStatus(BaseModel):
+    installed: bool
+    healthy: bool
+    message: str | None = None
+
+
+class ClusterCapacityMetrics(BaseModel):
+    has_metrics: bool = False
+    cpu_total_mcores: int | None = None
+    cpu_used_mcores: int | None = None
+    cpu_percent: float | None = None
+    memory_total_bytes: int | None = None
+    memory_used_bytes: int | None = None
+    memory_percent: float | None = None

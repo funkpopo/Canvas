@@ -36,6 +36,8 @@ export default function ClustersPage() {
         queryClient.invalidateQueries({ queryKey: queryKeys.clusterOverview }),
         queryClient.invalidateQueries({ queryKey: queryKeys.events }),
         queryClient.invalidateQueries({ queryKey: queryKeys.workloads }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.clusterCapacity }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.metricsStatus }),
       ]);
     },
   });
@@ -119,4 +121,3 @@ export default function ClustersPage() {
     </div>
   );
 }
-

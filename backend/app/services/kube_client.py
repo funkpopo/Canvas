@@ -20,6 +20,8 @@ from app.schemas.kubernetes import (
     EventMessage,
     NamespaceSummary,
     NodeSummary,
+    MetricsServerStatus,
+    ClusterCapacityMetrics,
     WorkloadSummary,
 )
 from app.services.cluster_config import ClusterConfigService
@@ -378,3 +380,243 @@ class KubernetesService:
 
         config.load_kube_config_from_dict(kubeconfig_dict, context=context_name)
         return cluster_config.name
+
+    # ---------------------------
+    # Metrics & capacity helpers
+    # ---------------------------
+
+    def _parse_cpu_to_mcores(self, value: str | int | float | None) -> int:
+        if value is None:
+            return 0
+        if isinstance(value, (int, float)):
+            # Interpret whole cores -> mcores
+            return int(float(value) * 1000)
+        s = str(value).strip()
+        try:
+            if s.endswith("m"):
+                return int(float(s[:-1]))
+            if s.endswith("n"):
+                # nanocores -> mcores (1m = 1e6 n)
+                return int(float(s[:-1]) / 1_000_000.0)
+            # plain number -> cores
+            return int(float(s) * 1000)
+        except Exception:
+            return 0
+
+    def _parse_memory_to_bytes(self, value: str | int | float | None) -> int:
+        if value is None:
+            return 0
+        if isinstance(value, (int, float)):
+            return int(value)
+        s = str(value).strip()
+        # Binary suffixes
+        factors = {
+            "Ei": 1024**6,
+            "Pi": 1024**5,
+            "Ti": 1024**4,
+            "Gi": 1024**3,
+            "Mi": 1024**2,
+            "Ki": 1024,
+            # Decimal suffixes
+            "E": 10**18,
+            "P": 10**15,
+            "T": 10**12,
+            "G": 10**9,
+            "M": 10**6,
+            "k": 10**3,
+        }
+        for suf, mult in factors.items():
+            if s.endswith(suf):
+                try:
+                    return int(float(s[: -len(suf)]) * mult)
+                except Exception:
+                    return 0
+        try:
+            # No suffix -> bytes
+            return int(float(s))
+        except Exception:
+            return 0
+
+    async def get_metrics_server_status(self) -> MetricsServerStatus:
+        """Return whether metrics.k8s.io is available and working."""
+        await self._rate_limiter.acquire()
+        try:
+            await self._ensure_clients()
+            co = client.CustomObjectsApi(self._api_client)
+
+            def _check() -> MetricsServerStatus:
+                try:
+                    # Quick capability probe
+                    resp = co.list_cluster_custom_object(
+                        group="metrics.k8s.io", version="v1beta1", plural="nodes"
+                    )
+                    items = resp.get("items", [])
+                    return MetricsServerStatus(
+                        installed=True,
+                        healthy=True,
+                        message=f"metrics-server responding with {len(items)} node metrics",
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    # Could be NotFound (group missing) or other errors
+                    return MetricsServerStatus(
+                        installed=False,
+                        healthy=False,
+                        message=str(exc),
+                    )
+
+            return await asyncio.to_thread(_check)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.metrics_status_error", error=str(exc))
+            return MetricsServerStatus(installed=False, healthy=False, message=str(exc))
+
+    async def install_metrics_server(self, insecure_kubelet_tls: bool = False) -> MetricsServerStatus:
+        """Install metrics-server by applying the official components manifest.
+
+        Optionally inject --kubelet-insecure-tls for environments where kubelet
+        has self-signed certs (kind/minikube/managed clusters with custom CAs).
+        """
+        await self._rate_limiter.acquire()
+        try:
+            await self._ensure_clients()
+
+            import httpx
+            import tempfile
+            from kubernetes.utils import create_from_yaml
+
+            url = (
+                "https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml"
+            )
+
+            def _download_and_apply() -> MetricsServerStatus:
+                # Fetch manifest
+                with httpx.Client(timeout=30) as http:
+                    r = http.get(url)
+                    r.raise_for_status()
+                    content = r.text
+
+                # Optionally patch deployment args
+                try:
+                    docs = list(yaml.safe_load_all(content))
+                except Exception as exc:  # noqa: BLE001
+                    return MetricsServerStatus(
+                        installed=False, healthy=False, message=f"YAML parse failed: {exc}"
+                    )
+
+                if insecure_kubelet_tls:
+                    for d in docs:
+                        if isinstance(d, dict) and d.get("kind") == "Deployment" and d.get("metadata", {}).get("name") == "metrics-server":
+                            containers = (
+                                d.get("spec", {})
+                                .get("template", {})
+                                .get("spec", {})
+                                .get("containers", [])
+                            )
+                            if containers:
+                                args = containers[0].get("args", []) or []
+                                if "--kubelet-insecure-tls" not in args:
+                                    args.append("--kubelet-insecure-tls")
+                                if not any(a.startswith("--kubelet-preferred-address-types=") for a in args):
+                                    args.append(
+                                        "--kubelet-preferred-address-types=InternalIP,Hostname,InternalDNS,ExternalDNS,ExternalIP"
+                                    )
+                                containers[0]["args"] = args
+
+                # Write to temp file and apply via utils
+                with tempfile.NamedTemporaryFile("w+", suffix=".yaml", delete=True) as tf:
+                    yaml.safe_dump_all(docs, tf)
+                    tf.flush()
+                    try:
+                        create_from_yaml(self._api_client, tf.name, verbose=False)
+                    except Exception:
+                        # Best-effort: resources may already exist; continue to status probe
+                        pass
+
+                return MetricsServerStatus(
+                    installed=True,
+                    healthy=False,
+                    message="metrics-server applied; waiting to become Ready",
+                )
+
+            result = await asyncio.to_thread(_download_and_apply)
+
+            # Return status (best-effort quick probe)
+            status = await self.get_metrics_server_status()
+            if status.installed:
+                return status
+            return result
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.metrics_install_failed", error=str(exc))
+            return MetricsServerStatus(installed=False, healthy=False, message=str(exc))
+
+    async def get_cluster_capacity(self) -> ClusterCapacityMetrics:
+        """Aggregate CPU/Memory capacity and live usage (if metrics-server present)."""
+        await self._rate_limiter.acquire()
+        try:
+            core_v1, _ = await self._ensure_clients()
+
+            def _collect_capacity() -> tuple[int, int]:
+                nodes = core_v1.list_node().items
+                total_cpu_m = 0
+                total_mem_b = 0
+                for n in nodes:
+                    alloc = n.status.allocatable or {}
+                    total_cpu_m += self._parse_cpu_to_mcores(alloc.get("cpu"))
+                    total_mem_b += self._parse_memory_to_bytes(alloc.get("memory"))
+                return total_cpu_m, total_mem_b
+
+            cpu_total_m, mem_total_b = await asyncio.to_thread(_collect_capacity)
+
+            usage_cpu_m = None
+            usage_mem_b = None
+            has_metrics = False
+
+            # Try to get live usage via metrics.k8s.io
+            try:
+                co = client.CustomObjectsApi(self._api_client)
+
+                def _collect_usage() -> tuple[int, int, bool]:
+                    try:
+                        data = co.list_cluster_custom_object(
+                            group="metrics.k8s.io", version="v1beta1", plural="nodes"
+                        )
+                        items = data.get("items", [])
+                        cpu_used_m = 0
+                        mem_used_b = 0
+                        for it in items:
+                            usage = (it.get("usage") or {}) if isinstance(it, dict) else {}
+                            cpu_used_m += self._parse_cpu_to_mcores(usage.get("cpu"))
+                            mem_used_b += self._parse_memory_to_bytes(usage.get("memory"))
+                        return cpu_used_m, mem_used_b, True
+                    except Exception:
+                        return 0, 0, False
+
+                u_cpu_m, u_mem_b, ok = await asyncio.to_thread(_collect_usage)
+                if ok:
+                    usage_cpu_m = u_cpu_m
+                    usage_mem_b = u_mem_b
+                    has_metrics = True
+            except Exception:
+                has_metrics = False
+
+            # Build response
+            if cpu_total_m <= 0 or mem_total_b <= 0:
+                return ClusterCapacityMetrics(has_metrics=has_metrics)
+
+            cpu_pct = None
+            mem_pct = None
+            if has_metrics and usage_cpu_m is not None and usage_mem_b is not None:
+                cpu_pct = max(0.0, min(100.0, (usage_cpu_m / cpu_total_m) * 100.0)) if cpu_total_m else None
+                mem_pct = max(0.0, min(100.0, (usage_mem_b / mem_total_b) * 100.0)) if mem_total_b else None
+
+            return ClusterCapacityMetrics(
+                has_metrics=has_metrics,
+                cpu_total_mcores=cpu_total_m or None,
+                cpu_used_mcores=usage_cpu_m if has_metrics else None,
+                cpu_percent=cpu_pct,
+                memory_total_bytes=mem_total_b or None,
+                memory_used_bytes=usage_mem_b if has_metrics else None,
+                memory_percent=mem_pct,
+            )
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.capacity_error", error=str(exc))
+            return ClusterCapacityMetrics(has_metrics=False)

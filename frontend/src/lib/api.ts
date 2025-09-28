@@ -6,6 +6,8 @@ export const queryKeys = {
   events: ["cluster", "events"] as const,
   clusterConfig: ["cluster", "config"] as const,
   clusterConfigsAll: ["cluster", "configs", "all"] as const,
+  metricsStatus: ["metrics", "status"] as const,
+  clusterCapacity: ["cluster", "capacity"] as const,
 } as const;
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -126,4 +128,35 @@ export function selectActiveClusterByName(name: string): Promise<ClusterConfigRe
     method: "POST",
     body: JSON.stringify({ name }),
   });
+}
+
+export interface MetricsServerStatusResponse {
+  installed: boolean;
+  healthy: boolean;
+  message: string | null;
+}
+
+export interface ClusterCapacityResponse {
+  has_metrics: boolean;
+  cpu_total_mcores: number | null;
+  cpu_used_mcores: number | null;
+  cpu_percent: number | null;
+  memory_total_bytes: number | null;
+  memory_used_bytes: number | null;
+  memory_percent: number | null;
+}
+
+export function fetchMetricsStatus(): Promise<MetricsServerStatusResponse> {
+  return request<MetricsServerStatusResponse>("/metrics/status");
+}
+
+export function installMetricsServer(insecureKubeletTls = false): Promise<MetricsServerStatusResponse> {
+  return request<MetricsServerStatusResponse>("/metrics/install", {
+    method: "POST",
+    body: JSON.stringify({ insecure_kubelet_tls: insecureKubeletTls }),
+  });
+}
+
+export function fetchClusterCapacity(): Promise<ClusterCapacityResponse> {
+  return request<ClusterCapacityResponse>("/metrics/capacity");
 }
