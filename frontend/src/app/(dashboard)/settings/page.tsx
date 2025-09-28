@@ -19,8 +19,6 @@ import {
   queryKeys,
   fetchClusterConfig,
   saveClusterConfig,
-  listClusterConfigs,
-  selectActiveClusterByName,
   type ClusterConfigPayload,
   type ClusterConfigResponse,
 } from "@/lib/api";
@@ -44,10 +42,7 @@ export default function SettingsPage() {
     queryFn: fetchClusterConfig,
   });
 
-  const { data: allConfigs } = useQuery({
-    queryKey: queryKeys.clusterConfigsAll,
-    queryFn: listClusterConfigs,
-  });
+  // Cluster selection moved to /clusters page
 
   useEffect(() => {
     if (config) {
@@ -87,17 +82,7 @@ export default function SettingsPage() {
     },
   });
 
-  const selectMutation = useMutation({
-    mutationFn: async (name: string) => selectActiveClusterByName(name),
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.clusterConfig }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.clusterOverview }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.events }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.workloads }),
-      ]);
-    },
-  });
+  // Removed: switching clusters from settings
 
   const { clusterStatus, lastUpdated } = useMemo(() => {
     if (!config) {
@@ -290,44 +275,7 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      <Card className="border-border bg-surface text-text-primary">
-        <CardHeader>
-          <CardTitle className="text-text-primary">Saved clusters</CardTitle>
-          <CardDescription>Manage and switch between multiple clusters.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {allConfigs && allConfigs.length > 0 ? (
-            allConfigs.map((c) => {
-              const isActive = config ? c.id === config.id : false;
-              return (
-                <div key={c.id} className="flex items-center justify-between rounded-lg border border-border bg-muted/30 p-3">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <p className="font-medium text-text-primary">{c.name}</p>
-                      {isActive && (
-                        <StatusBadge status="ready" label="Active" size="sm" />
-                      )}
-                    </div>
-                    <p className="text-xs text-text-muted">{c.api_server ?? (c.kubeconfig_present ? "kubeconfig" : "no endpoint")}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={isActive || selectMutation.isPending}
-                      onClick={() => !isActive && selectMutation.mutate(c.name)}
-                    >
-                      {isActive ? "Active" : selectMutation.isPending ? "Switching..." : "Set active"}
-                    </Button>
-                  </div>
-                </div>
-              );
-            })
-          ) : (
-            <p className="text-sm text-text-muted">No clusters saved yet.</p>
-          )}
-        </CardContent>
-      </Card>
+      {/* Cluster list and switching has moved to /clusters */}
     </div>
   );
 }

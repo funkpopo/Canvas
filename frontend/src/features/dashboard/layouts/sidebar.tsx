@@ -10,6 +10,7 @@ import {
   Activity,
   Settings,
   Zap,
+  Globe,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -17,6 +18,7 @@ import { badgePresets } from "@/shared/ui/badge";
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: Home },
+  { name: "Clusters", href: "/clusters", icon: Globe },
   { name: "Nodes", href: "/nodes", icon: Server },
   { name: "Namespaces", href: "/namespaces", icon: Folder },
   { name: "Workloads", href: "/workloads", icon: Layers },

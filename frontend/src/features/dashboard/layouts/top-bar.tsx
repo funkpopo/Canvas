@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import Link from "next/link";
 
 import { ThemeToggle } from "@/shared/theme/theme-toggle";
 import { Badge, badgePresets } from "@/shared/ui/badge";
@@ -17,9 +18,17 @@ export function TopBar() {
       <div className="flex items-center gap-4">
         <div>
           <p className={`${badgePresets.label} text-text-muted`}>Active cluster</p>
-          <p className="text-sm font-medium text-text-primary">
-            {config?.api_server ? "Connected cluster" : "No cluster configured"}
-          </p>
+          <div className="flex items-center gap-3">
+            <p className="text-sm font-medium text-text-primary">
+              {config?.name ?? "No cluster configured"}
+            </p>
+            <Link
+              href="/clusters"
+              className="text-xs text-primary hover:underline"
+            >
+              Change
+            </Link>
+          </div>
         </div>
         {config?.api_server && (
           <Badge
