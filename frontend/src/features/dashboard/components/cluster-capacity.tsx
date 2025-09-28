@@ -16,6 +16,7 @@ import {
   fetchClusterCapacity,
   fetchMetricsStatus,
   installMetricsServer,
+  fetchStorageSummary,
 } from "@/lib/api";
 import { Button } from "@/shared/ui/button";
 import { cn, formatBytes, formatMillicores } from "@/lib/utils";
@@ -33,6 +34,10 @@ export function ClusterCapacity() {
   const { data: metricsStatus } = useQuery({
     queryKey: queryKeys.metricsStatus,
     queryFn: fetchMetricsStatus,
+  });
+  const { data: storage } = useQuery({
+    queryKey: queryKeys.clusterStorage,
+    queryFn: fetchStorageSummary,
   });
 
   const installMutation = useMutation({
@@ -78,20 +83,6 @@ export function ClusterCapacity() {
         : "Install metrics-server to view usage",
       color: "bg-chart-2",
     },
-    {
-      label: "Storage",
-      icon: HardDrive,
-      value: 0,
-      usage: "No capacity data available",
-      color: "bg-chart-3",
-    },
-    {
-      label: "Pods",
-      icon: Users,
-      value: 0,
-      usage: `${totalPods} total pods`,
-      color: "bg-chart-4",
-    },
   ];
 
   return (
@@ -108,32 +99,6 @@ export function ClusterCapacity() {
         ) : (
           metrics.map((metric) => {
             const Icon = metric.icon;
-            // Special rendering for Pods: show healthy vs unhealthy counts instead of a progress bar
-            if (metric.label === "Pods") {
-              return (
-                <div key={metric.label} className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-muted text-accent">
-                        <Icon className="h-4 w-4" aria-hidden />
-                      </span>
-                      <div>
-                        <p className="text-sm font-medium text-text-primary">{metric.label}</p>
-                        <p className="text-xs text-text-muted">{metric.usage}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="success-light" size="sm" className={badgePresets.metric}>
-                        {healthyPods} healthy
-                      </Badge>
-                      <Badge variant="error-light" size="sm" className={badgePresets.metric}>
-                        {unhealthyPods} unhealthy
-                      </Badge>
-                    </div>
-                  </div>
-                </div>
-              );
-            }
 
             return (
               <div key={metric.label} className="space-y-3">
@@ -162,6 +127,56 @@ export function ClusterCapacity() {
               </div>
             );
           })
+        )}
+
+        {/* Pods health summary */}
+        {!isLoadingOverview && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-muted text-accent">
+                  <Users className="h-4 w-4" aria-hidden />
+                </span>
+                <div>
+                  <p className="text-sm font-medium text-text-primary">Pods</p>
+                  <p className="text-xs text-text-muted">{totalPods} total pods</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge variant="success-light" size="sm" className={badgePresets.metric}>
+                  {healthyPods} healthy
+                </Badge>
+                <Badge variant="error-light" size="sm" className={badgePresets.metric}>
+                  {unhealthyPods} unhealthy
+                </Badge>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Volumes (PVC/PV) summary across all namespaces */}
+        {storage && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-muted text-accent">
+                  <HardDrive className="h-4 w-4" aria-hidden />
+                </span>
+                <div>
+                  <p className="text-sm font-medium text-text-primary">Volumes</p>
+                  <p className="text-xs text-text-muted">PVC/PV across all namespaces</p>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="neutral-light" size="sm" className={badgePresets.metric}>
+                  PVC {storage.pvc_total} (Bound {storage.pvc_by_status?.["Bound"] ?? 0}, Pending {storage.pvc_by_status?.["Pending"] ?? 0})
+                </Badge>
+                <Badge variant="info-light" size="sm" className={badgePresets.metric}>
+                  PV {storage.pv_total} (Available {storage.pv_by_phase?.["Available"] ?? 0}, Bound {storage.pv_by_phase?.["Bound"] ?? 0})
+                </Badge>
+              </div>
+            </div>
+          </div>
         )}
 
         {!capacity?.has_metrics && (

@@ -8,6 +8,8 @@ export const queryKeys = {
   clusterConfigsAll: ["cluster", "configs", "all"] as const,
   metricsStatus: ["metrics", "status"] as const,
   clusterCapacity: ["cluster", "capacity"] as const,
+  clusterStorage: ["cluster", "storage"] as const,
+  namespaces: ["namespaces", "list"] as const,
 } as const;
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -159,4 +161,27 @@ export function installMetricsServer(insecureKubeletTls = false): Promise<Metric
 
 export function fetchClusterCapacity(): Promise<ClusterCapacityResponse> {
   return request<ClusterCapacityResponse>("/metrics/capacity");
+}
+
+export interface StorageSummaryResponse {
+  pvc_total: number;
+  pvc_by_status: Record<string, number>;
+  pvc_by_namespace: Record<string, number>;
+  pv_total: number;
+  pv_by_phase: Record<string, number>;
+}
+
+export function fetchStorageSummary(): Promise<StorageSummaryResponse> {
+  return request<StorageSummaryResponse>("/cluster/storage");
+}
+
+export interface NamespaceSummaryResponse {
+  name: string;
+  status: "Active" | "Terminating" | "Unknown";
+  resource_quota: Record<string, string> | null;
+  labels: Record<string, string>;
+}
+
+export function fetchNamespaces(): Promise<NamespaceSummaryResponse[]> {
+  return request<NamespaceSummaryResponse[]>("/namespaces/");
 }

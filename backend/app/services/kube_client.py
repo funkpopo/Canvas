@@ -23,6 +23,7 @@ from app.schemas.kubernetes import (
     MetricsServerStatus,
     ClusterCapacityMetrics,
     WorkloadSummary,
+    ClusterStorageSummary,
 )
 from app.services.cluster_config import ClusterConfigService
 
@@ -219,6 +220,50 @@ class KubernetesService:
                 return []
 
         return await self._cached("workloads", _fetch)
+
+    async def get_storage_summary(self) -> ClusterStorageSummary:
+        async def _fetch() -> ClusterStorageSummary:
+            await self._rate_limiter.acquire()
+            try:
+                core_v1, _ = await self._ensure_clients()
+
+                def _collect() -> ClusterStorageSummary:
+                    pvc_list = core_v1.list_persistent_volume_claim_for_all_namespaces(limit=1000).items
+                    pv_list = core_v1.list_persistent_volume().items
+
+                    pvc_by_status: dict[str, int] = {}
+                    pvc_by_namespace: dict[str, int] = {}
+                    for pvc in pvc_list:
+                        status = (pvc.status.phase or "Unknown") if pvc.status else "Unknown"
+                        pvc_by_status[status] = pvc_by_status.get(status, 0) + 1
+                        ns = pvc.metadata.namespace if pvc.metadata else "default"
+                        pvc_by_namespace[ns] = pvc_by_namespace.get(ns, 0) + 1
+
+                    pv_by_phase: dict[str, int] = {}
+                    for pv in pv_list:
+                        phase = (pv.status.phase or "Unknown") if pv.status else "Unknown"
+                        pv_by_phase[phase] = pv_by_phase.get(phase, 0) + 1
+
+                    return ClusterStorageSummary(
+                        pvc_total=len(pvc_list),
+                        pvc_by_status=pvc_by_status,
+                        pvc_by_namespace=pvc_by_namespace,
+                        pv_total=len(pv_list),
+                        pv_by_phase=pv_by_phase,
+                    )
+
+                return await asyncio.to_thread(_collect)
+            except Exception as exc:  # pragma: no cover
+                logger.warning("kubernetes.storage_summary_error", error=str(exc))
+                return ClusterStorageSummary(
+                    pvc_total=0,
+                    pvc_by_status={},
+                    pvc_by_namespace={},
+                    pv_total=0,
+                    pv_by_phase={},
+                )
+
+        return await self._cached("storage_summary", _fetch)
 
     async def stream_events(self) -> list[EventMessage]:
         async def _fetch() -> list[EventMessage]:

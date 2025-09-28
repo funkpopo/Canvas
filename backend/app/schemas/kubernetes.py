@@ -69,3 +69,16 @@ class ClusterCapacityMetrics(BaseModel):
     memory_total_bytes: int | None = None
     memory_used_bytes: int | None = None
     memory_percent: float | None = None
+
+
+class ClusterStorageSummary(BaseModel):
+    """Summary of PVC/PV across the cluster.
+
+    - pvc_by_status keys typically: Bound, Pending, Lost
+    - pv_by_phase keys typically: Available, Bound, Released, Failed
+    """
+    pvc_total: int
+    pvc_by_status: dict[str, int]
+    pvc_by_namespace: dict[str, int]
+    pv_total: int
+    pv_by_phase: dict[str, int]
