@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
-import { Settings, Zap, Globe, ChevronsLeft, ChevronsRight } from "lucide-react";
+import { Settings, Zap, Globe, ChevronsLeft, ChevronsRight, Server, FolderTree, Package, Rss } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { badgePresets } from "@/shared/ui/badge";
@@ -71,7 +71,7 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        "border-r border-border bg-surface flex-shrink-0 sticky top-0 h-screen overflow-y-auto transition-all duration-200",
+        "border-r border-border bg-surface flex-shrink-0 h-screen sticky top-0 transition-all duration-200",
         collapsed ? "w-16" : "w-64",
       )}
     >
@@ -86,16 +86,9 @@ export function Sidebar() {
             </div>
             {!collapsed && <span>Canvas</span>}
           </Link>
-          <button
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            className="rounded-md p-2 text-text-muted hover:bg-muted hover:text-text-primary"
-            onClick={() => setCollapsed((v) => !v)}
-          >
-            {collapsed ? <ChevronsRight className="h-4 w-4" /> : <ChevronsLeft className="h-4 w-4" />}
-          </button>
         </div>
 
-        <nav className="flex-1 space-y-1 px-2 py-2">
+        <nav className="flex-1 space-y-1 px-2 py-2 overflow-y-auto">
           {/* Clusters tree */}
           <div>
             <button
@@ -137,50 +130,54 @@ export function Sidebar() {
                             <Link
                               href="/nodes"
                               className={cn(
-                                "block rounded-md px-2 py-1 text-xs",
+                                "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",
                                 isPathActive("/nodes")
                                   ? "bg-accent text-accent-foreground"
                                   : "text-text-muted hover:bg-muted hover:text-text-primary",
                               )}
                               title="Nodes"
                             >
-                              Nodes
+                              <Server className="h-4 w-4" />
+                              <span>Nodes</span>
                             </Link>
                             <Link
                               href="/namespaces"
                               className={cn(
-                                "block rounded-md px-2 py-1 text-xs",
+                                "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",
                                 isPathActive("/namespaces")
                                   ? "bg-accent text-accent-foreground"
                                   : "text-text-muted hover:bg-muted hover:text-text-primary",
                               )}
                               title="Namespaces"
                             >
-                              Namespaces
+                              <FolderTree className="h-4 w-4" />
+                              <span>Namespaces</span>
                             </Link>
                             <Link
                               href="/workloads"
                               className={cn(
-                                "block rounded-md px-2 py-1 text-xs",
+                                "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",
                                 isPathActive("/workloads")
                                   ? "bg-accent text-accent-foreground"
                                   : "text-text-muted hover:bg-muted hover:text-text-primary",
                               )}
                               title="Workloads"
                             >
-                              Workloads
+                              <Package className="h-4 w-4" />
+                              <span>Workloads</span>
                             </Link>
                             <Link
                               href="/events"
                               className={cn(
-                                "block rounded-md px-2 py-1 text-xs",
+                                "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",
                                 isPathActive("/events")
                                   ? "bg-accent text-accent-foreground"
                                   : "text-text-muted hover:bg-muted hover:text-text-primary",
                               )}
                               title="Events"
                             >
-                              Events
+                              <Rss className="h-4 w-4" />
+                              <span>Events</span>
                             </Link>
                           </div>
                         )}
@@ -215,6 +212,17 @@ export function Sidebar() {
             );
           })}
         </nav>
+
+        <div className="mt-auto border-t border-border p-2">
+          <button
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            className="w-full rounded-md px-3 py-2 text-left text-sm text-text-muted hover:bg-muted hover:text-text-primary flex items-center justify-between"
+            onClick={() => setCollapsed((v) => !v)}
+          >
+            {!collapsed && <span>Collapse</span>}
+            {collapsed ? <ChevronsRight className="h-4 w-4" /> : <ChevronsLeft className="h-4 w-4" />}
+          </button>
+        </div>
       </div>
     </aside>
   );

@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import {
@@ -17,14 +18,38 @@ const typeVariants = {
   Error: "error-light" as const,
 };
 
-export function EventFeed() {
+export interface EventFeedFilters {
+  types?: string[];
+  resources?: string[];
+}
+
+export function EventFeed({ types = [], resources = [] }: EventFeedFilters) {
   const { data: events, isLoading, isError } = useQuery({
     queryKey: queryKeys.events,
     queryFn: fetchEvents,
     refetchInterval: 5000,
   });
 
-  const recentEvents = events?.slice(0, 10) || [];
+  const filtered = useMemo(() => {
+    if (!events) return [] as typeof events;
+
+    const tset = new Set(types.map((t) => t.toLowerCase()));
+    const rset = new Set(resources.map((r) => r.toLowerCase()));
+
+    const byType = (e: NonNullable<typeof events>[number]) =>
+      tset.size === 0 || (e.type && tset.has(String(e.type).toLowerCase()));
+
+    const byResource = (e: NonNullable<typeof events>[number]) => {
+      if (rset.size === 0) return true;
+      const io = (e.involved_object ?? "").toLowerCase();
+      const kind = io.split("/")[0];
+      return rset.has(kind) || Array.from(rset).some((r) => io.includes(r));
+    };
+
+    return events.filter((e) => byType(e) && byResource(e));
+  }, [events, types, resources]);
+
+  const recentEvents = filtered.slice(0, 20);
 
   return (
     <Card className="relative overflow-hidden border-border bg-surface">
@@ -32,8 +57,8 @@ export function EventFeed() {
         <CardTitle className="text-lg text-text-primary">Live events</CardTitle>
         <CardDescription>Real-time cluster events as they happen</CardDescription>
       </CardHeader>
-      <CardContent>
-        <ScrollArea className="h-[400px] pr-4">
+      <CardContent className="flex flex-col">
+        <ScrollArea className="pr-4 max-h-[calc(100vh-280px)] md:max-h-[calc(100vh-260px)] lg:max-h-[calc(100vh-240px)]">
           {isLoading ? (
             <p className="text-sm text-text-muted">Loading events…</p>
           ) : isError ? (

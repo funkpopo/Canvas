@@ -141,6 +141,7 @@ export default function SettingsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
+          <div id="connectivity" />
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <label htmlFor="cluster-name" className="block">
@@ -182,7 +183,7 @@ export default function SettingsPage() {
 
           <div className="grid gap-6 xl:grid-cols-2">
             <div className="space-y-6">
-              <div>
+              <div id="credentials">
                 <p className={`${badgePresets.label} text-text-muted`}>
                   Option 1: Connection details
                 </p>
@@ -229,7 +230,7 @@ export default function SettingsPage() {
               </div>
             </div>
             <div className="space-y-6">
-              <div>
+              <div id="kubeconfig">
                 <p className={`${badgePresets.label} text-text-muted`}>
                   Option 2: Upload kubeconfig
                 </p>
