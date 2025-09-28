@@ -13,9 +13,18 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { queryKeys, fetchClusterConfig, saveClusterConfig, ClusterConfigPayload } from "@/lib/api";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  queryKeys,
+  fetchClusterConfig,
+  saveClusterConfig,
+  ClusterConfigPayload,
+} from "@/lib/api";
 
-const fieldStyles = "w-full rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm text-white placeholder:text-[color:var(--canvas-muted)] focus:outline-none focus:ring-2 focus:ring-teal-500/60";
+const fieldStyles =
+  "w-full rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm text-white placeholder:text-[color:var(--canvas-muted)] focus:outline-none focus:ring-2 focus:ring-teal-500/60";
+
+type ConnectionMode = "token" | "kubeconfig";
 
 function sanitize(value: string): string | null {
   const trimmed = value.trim();
@@ -29,6 +38,7 @@ export default function SettingsPage() {
   });
   const queryClient = useQueryClient();
 
+  const [mode, setMode] = useState<ConnectionMode>("token");
   const [name, setName] = useState("");
   const [apiServer, setApiServer] = useState("");
   const [namespace, setNamespace] = useState("");
@@ -52,6 +62,7 @@ export default function SettingsPage() {
     setToken(config.token ?? "");
     setCertificate(config.certificate_authority_data ?? "");
     setInsecure(Boolean(config.insecure_skip_tls_verify));
+    setMode(config.kubeconfig ? "kubeconfig" : "token");
   }, [config]);
 
   const mutation = useMutation({
@@ -85,21 +96,43 @@ export default function SettingsPage() {
       setErrorMessage("请填写集群名称");
       return;
     }
-    if (!apiServer.trim() && !kubeconfig.trim()) {
-      setErrorMessage("至少提供 API Server 地址或完整 kubeconfig");
+
+    if (mode === "token") {
+      if (!apiServer.trim()) {
+        setErrorMessage("请填写 API Server 地址");
+        return;
+      }
+      if (!token.trim()) {
+        setErrorMessage("请提供访问令牌");
+        return;
+      }
+    } else if (!kubeconfig.trim()) {
+      setErrorMessage("请粘贴完整 kubeconfig");
       return;
     }
 
-    const payload: ClusterConfigPayload = {
-      name: name.trim(),
-      api_server: sanitize(apiServer),
-      namespace: sanitize(namespace),
-      context: sanitize(context),
-      kubeconfig: kubeconfig.trim().length > 0 ? kubeconfig : null,
-      token: token.length > 0 ? token : "", // empty string clears stored token
-      certificate_authority_data: certificate.trim().length > 0 ? certificate : null,
-      insecure_skip_tls_verify: insecure,
-    };
+    const payload: ClusterConfigPayload =
+      mode === "token"
+        ? {
+            name: name.trim(),
+            api_server: sanitize(apiServer),
+            namespace: sanitize(namespace),
+            context: sanitize(context),
+            kubeconfig: null,
+            token: token.trim().length > 0 ? token.trim() : "",
+            certificate_authority_data: certificate.trim().length > 0 ? certificate : null,
+            insecure_skip_tls_verify: insecure,
+          }
+        : {
+            name: name.trim(),
+            api_server: null,
+            namespace: sanitize(namespace),
+            context: sanitize(context),
+            kubeconfig: kubeconfig.trim().length > 0 ? kubeconfig : null,
+            token: "",
+            certificate_authority_data: null,
+            insecure_skip_tls_verify: false,
+          };
 
     mutation.mutate(payload);
   }
@@ -142,71 +175,113 @@ export default function SettingsPage() {
       <Card className="border-[var(--canvas-border)] bg-[var(--canvas-panel)]/85">
         <CardHeader>
           <CardTitle className="text-white">Cluster connection</CardTitle>
-          <CardDescription>Provide the connection details Canvas should use to talk to your cluster.</CardDescription>
+          <CardDescription>
+            Choose between bearer token and kubeconfig authentication for Canvas to reach your cluster.
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <form className="space-y-5" onSubmit={handleSubmit}>
+          <form className="space-y-6" onSubmit={handleSubmit}>
             <div className="grid gap-4 md:grid-cols-2">
               <label className="space-y-2">
                 <span className="text-xs uppercase tracking-[0.3em] text-[color:var(--canvas-muted)]">Cluster name</span>
-                <input className={fieldStyles} value={name} onChange={(event) => setName(event.target.value)} placeholder="production-cluster" />
-              </label>
-              <label className="space-y-2">
-                <span className="text-xs uppercase tracking-[0.3em] text-[color:var(--canvas-muted)]">API server</span>
                 <input
                   className={fieldStyles}
-                  value={apiServer}
-                  onChange={(event) => setApiServer(event.target.value)}
-                  placeholder="https://my-cluster.example.com"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder="production-cluster"
+                />
+              </label>
+              <label className="space-y-2">
+                <span className="text-xs uppercase tracking-[0.3em] text-[color:var(--canvas-muted)]">Namespace (optional)</span>
+                <input
+                  className={fieldStyles}
+                  value={namespace}
+                  onChange={(event) => setNamespace(event.target.value)}
+                  placeholder="default"
                 />
               </label>
             </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              <label className="space-y-2">
-                <span className="text-xs uppercase tracking-[0.3em] text-[color:var(--canvas-muted)]">Namespace (optional)</span>
-                <input className={fieldStyles} value={namespace} onChange={(event) => setNamespace(event.target.value)} placeholder="default" />
-              </label>
-              <label className="space-y-2">
-                <span className="text-xs uppercase tracking-[0.3em] text-[color:var(--canvas-muted)]">Context (optional)</span>
-                <input className={fieldStyles} value={context} onChange={(event) => setContext(event.target.value)} placeholder="gke-context" />
-              </label>
-            </div>
             <label className="space-y-2">
-              <span className="text-xs uppercase tracking-[0.3em] text-[color:var(--canvas-muted)]">Bearer token</span>
+              <span className="text-xs uppercase tracking-[0.3em] text-[color:var(--canvas-muted)]">Context (optional)</span>
               <input
                 className={fieldStyles}
-                value={token}
-                onChange={(event) => setToken(event.target.value)}
-                placeholder="Paste service account token"
+                value={context}
+                onChange={(event) => setContext(event.target.value)}
+                placeholder="gke-context"
               />
             </label>
-            <label className="space-y-2">
-              <span className="text-xs uppercase tracking-[0.3em] text-[color:var(--canvas-muted)]">Certificate authority data</span>
-              <textarea
-                className={`${fieldStyles} min-h-[120px]`}
-                value={certificate}
-                onChange={(event) => setCertificate(event.target.value)}
-                placeholder="Base64 encoded certificate-authority-data"
-              />
-            </label>
-            <label className="space-y-2">
-              <span className="text-xs uppercase tracking-[0.3em] text-[color:var(--canvas-muted)]">Inline kubeconfig (optional)</span>
-              <textarea
-                className={`${fieldStyles} min-h-[180px] font-mono text-xs`}
-                value={kubeconfig}
-                onChange={(event) => setKubeconfig(event.target.value)}
-                placeholder="apiVersion: v1\nclusters:\n  - name: ..."
-              />
-            </label>
-            <label className="flex items-center gap-3 text-sm text-slate-200">
-              <input
-                type="checkbox"
-                checked={insecure}
-                onChange={(event) => setInsecure(event.target.checked)}
-                className="h-4 w-4 rounded border-white/20 bg-black/20"
-              />
-              Skip TLS verification
-            </label>
+
+            <Tabs
+              value={mode}
+              onValueChange={(value) => setMode(value as ConnectionMode)}
+              className="space-y-4"
+            >
+              <TabsList className="w-full md:w-auto">
+                <TabsTrigger value="token" className="md:min-w-[140px]">
+                  Bearer token
+                </TabsTrigger>
+                <TabsTrigger value="kubeconfig" className="md:min-w-[140px]">
+                  Kubeconfig
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="token" className="space-y-4">
+                <p className="text-xs uppercase tracking-[0.3em] text-[color:var(--canvas-muted)]">
+                  Provide the API server endpoint, token, and TLS preferences.
+                </p>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <label className="space-y-2">
+                    <span className="text-xs uppercase tracking-[0.3em] text-[color:var(--canvas-muted)]">API server</span>
+                    <input
+                      className={fieldStyles}
+                      value={apiServer}
+                      onChange={(event) => setApiServer(event.target.value)}
+                      placeholder="https://my-cluster.example.com"
+                    />
+                  </label>
+                  <label className="space-y-2 md:col-span-1">
+                    <span className="text-xs uppercase tracking-[0.3em] text-[color:var(--canvas-muted)]">Bearer token</span>
+                    <textarea
+                      className={`${fieldStyles} min-h-[108px] resize-y`}
+                      value={token}
+                      onChange={(event) => setToken(event.target.value)}
+                      placeholder="Paste service account token"
+                    />
+                  </label>
+                </div>
+                <label className="space-y-2">
+                  <span className="text-xs uppercase tracking-[0.3em] text-[color:var(--canvas-muted)]">Certificate authority data</span>
+                  <textarea
+                    className={`${fieldStyles} min-h-[120px]`}
+                    value={certificate}
+                    onChange={(event) => setCertificate(event.target.value)}
+                    placeholder="Base64 encoded certificate-authority-data"
+                  />
+                </label>
+                <label className="flex items-center gap-3 text-sm text-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={insecure}
+                    onChange={(event) => setInsecure(event.target.checked)}
+                    className="h-4 w-4 rounded border-white/20 bg-black/20"
+                  />
+                  Skip TLS verification
+                </label>
+              </TabsContent>
+              <TabsContent value="kubeconfig" className="space-y-4">
+                <p className="text-xs uppercase tracking-[0.3em] text-[color:var(--canvas-muted)]">
+                  Paste a complete kubeconfig. Token, certificates, and TLS options will be read from it.
+                </p>
+                <label className="space-y-2">
+                  <span className="text-xs uppercase tracking-[0.3em] text-[color:var(--canvas-muted)]">Inline kubeconfig</span>
+                  <textarea
+                    className={`${fieldStyles} min-h-[220px] font-mono text-xs`}
+                    value={kubeconfig}
+                    onChange={(event) => setKubeconfig(event.target.value)}
+                    placeholder="apiVersion: v1\nclusters:\n  - name: ..."
+                  />
+                </label>
+              </TabsContent>
+            </Tabs>
 
             {statusMessage ? (
               <p className="text-sm text-emerald-200">{statusMessage}</p>
@@ -216,7 +291,11 @@ export default function SettingsPage() {
             ) : null}
 
             <div className="flex justify-end">
-              <Button type="submit" disabled={mutation.isPending} className="bg-gradient-to-r from-emerald-400 to-cyan-500 text-slate-900 hover:from-emerald-300 hover:to-cyan-400">
+              <Button
+                type="submit"
+                disabled={mutation.isPending}
+                className="bg-gradient-to-r from-emerald-400 to-cyan-500 text-slate-900 hover:from-emerald-300 hover:to-cyan-400"
+              >
                 {mutation.isPending ? "Saving…" : "Save configuration"}
               </Button>
             </div>
