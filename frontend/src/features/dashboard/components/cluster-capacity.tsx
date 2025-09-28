@@ -9,7 +9,7 @@ import {
   CardTitle,
 } from "@/shared/ui/card";
 import { Progress } from "@/shared/ui/progress";
-import { badgePresets } from "@/shared/ui/badge";
+import { Badge, badgePresets } from "@/shared/ui/badge";
 import {
   queryKeys,
   fetchClusterOverview,
@@ -49,6 +49,12 @@ export function ClusterCapacity() {
   const cpuPercent = capacity?.cpu_percent ? Math.round(capacity.cpu_percent) : 0;
   const memPercent = capacity?.memory_percent ? Math.round(capacity.memory_percent) : 0;
 
+  const totalPods = overview?.total_pods ?? 0;
+  const healthyPods = overview?.healthy_pods ?? 0;
+  const pendingPods = overview?.pending_pods ?? 0;
+  const failingPods = overview?.failing_pods ?? 0;
+  const unhealthyPods = pendingPods + failingPods;
+
   const metrics = [
     {
       label: "CPU",
@@ -82,8 +88,8 @@ export function ClusterCapacity() {
     {
       label: "Pods",
       icon: Users,
-      value: overview?.total_pods ? Math.min((overview.total_pods / 110) * 100, 100) : 0,
-      usage: `${overview?.total_pods ?? 0} pods running`,
+      value: 0,
+      usage: `${totalPods} total pods`,
       color: "bg-chart-4",
     },
   ];
@@ -102,6 +108,33 @@ export function ClusterCapacity() {
         ) : (
           metrics.map((metric) => {
             const Icon = metric.icon;
+            // Special rendering for Pods: show healthy vs unhealthy counts instead of a progress bar
+            if (metric.label === "Pods") {
+              return (
+                <div key={metric.label} className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-muted text-accent">
+                        <Icon className="h-4 w-4" aria-hidden />
+                      </span>
+                      <div>
+                        <p className="text-sm font-medium text-text-primary">{metric.label}</p>
+                        <p className="text-xs text-text-muted">{metric.usage}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="success-light" size="sm" className={badgePresets.metric}>
+                        {healthyPods} healthy
+                      </Badge>
+                      <Badge variant="error-light" size="sm" className={badgePresets.metric}>
+                        {unhealthyPods} unhealthy
+                      </Badge>
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+
             return (
               <div key={metric.label} className="space-y-3">
                 <div className="flex items-center justify-between">
