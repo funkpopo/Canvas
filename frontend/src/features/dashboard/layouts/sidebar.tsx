@@ -3,18 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
-import {
-  Home,
-  Server,
-  Folder,
-  Layers,
-  Activity,
-  Settings,
-  Zap,
-  Globe,
-  ChevronsLeft,
-  ChevronsRight,
-} from "lucide-react";
+import { Settings, Zap, Globe, ChevronsLeft, ChevronsRight } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { badgePresets } from "@/shared/ui/badge";
@@ -56,14 +45,12 @@ export function Sidebar() {
     },
   });
 
+  // Only keep top-level entries that are not cluster-scoped
   const navItems = useMemo(
     () => [
       { name: "Clusters", href: "/clusters", icon: Globe },
-      { name: "Dashboard", href: "/", icon: Home },
-      { name: "Nodes", href: "/nodes", icon: Server },
-      { name: "Namespaces", href: "/namespaces", icon: Folder },
-      { name: "Workloads", href: "/workloads", icon: Layers },
-      { name: "Events", href: "/events", icon: Activity },
+      // Dashboard removed from sidebar; selecting a cluster navigates to "/"
+      // Cluster-scoped sections (Nodes/Namespaces/Workloads/Events) are shown under each Cluster
       { name: "Settings", href: "/settings", icon: Settings },
     ],
     [],
@@ -115,33 +102,79 @@ export function Sidebar() {
                   clusters.map((c) => {
                     const isActive = active ? c.id === active.id : false;
                     return (
-                      <button
-                        key={c.id}
-                        className={cn(
-                          "flex w-full items-center justify-between rounded-md px-2 py-1 text-xs",
-                          isActive ? "bg-muted text-text-primary" : "text-text-muted hover:bg-muted hover:text-text-primary",
+                      <div key={c.id} className="space-y-1">
+                        <button
+                          className={cn(
+                            "flex w-full items-center justify-between rounded-md px-2 py-1 text-xs",
+                            isActive ? "bg-muted text-text-primary" : "text-text-muted hover:bg-muted hover:text-text-primary",
+                          )}
+                          disabled={selectMutation.isPending}
+                          onClick={async () => {
+                            await selectMutation.mutateAsync(c.name);
+                          }}
+                          title={c.name}
+                        >
+                          <span className="truncate">{c.name}</span>
+                          {isActive && <span className="ml-2 text-[10px] text-primary">active</span>}
+                        </button>
+                        {isActive && (
+                          <div className="ml-2 space-y-1">
+                            {/* Cluster-scoped section links nested under the active cluster */}
+                            <Link
+                              href="/nodes"
+                              className={cn(
+                                "block rounded-md px-2 py-1 text-xs",
+                                pathname === "/nodes" ? "bg-accent text-accent-foreground" : "text-text-muted hover:bg-muted hover:text-text-primary",
+                              )}
+                              title="Nodes"
+                            >
+                              Nodes
+                            </Link>
+                            <Link
+                              href="/namespaces"
+                              className={cn(
+                                "block rounded-md px-2 py-1 text-xs",
+                                pathname === "/namespaces" ? "bg-accent text-accent-foreground" : "text-text-muted hover:bg-muted hover:text-text-primary",
+                              )}
+                              title="Namespaces"
+                            >
+                              Namespaces
+                            </Link>
+                            <Link
+                              href="/workloads"
+                              className={cn(
+                                "block rounded-md px-2 py-1 text-xs",
+                                pathname === "/workloads" ? "bg-accent text-accent-foreground" : "text-text-muted hover:bg-muted hover:text-text-primary",
+                              )}
+                              title="Workloads"
+                            >
+                              Workloads
+                            </Link>
+                            <Link
+                              href="/events"
+                              className={cn(
+                                "block rounded-md px-2 py-1 text-xs",
+                                pathname === "/events" ? "bg-accent text-accent-foreground" : "text-text-muted hover:bg-muted hover:text-text-primary",
+                              )}
+                              title="Events"
+                            >
+                              Events
+                            </Link>
+                          </div>
                         )}
-                        disabled={selectMutation.isPending}
-                        onClick={async () => {
-                          await selectMutation.mutateAsync(c.name);
-                        }}
-                        title={c.name}
-                      >
-                        <span className="truncate">{c.name}</span>
-                        {isActive && <span className="ml-2 text-[10px] text-primary">active</span>}
-                      </button>
+                      </div>
                     );
                   })
                 ) : (
                   <Link href="/clusters" className="block rounded-md px-2 py-1 text-xs text-text-muted hover:text-text-primary">
-                    No clusters — add one
+                    No clusters – add one
                   </Link>
                 )}
               </div>
             )}
           </div>
 
-          {/* Remaining sections */}
+          {/* Remaining sections (non cluster-scoped) */}
           {navItems.filter((n) => n.name !== "Clusters").map((item) => {
             const isActive = pathname === item.href;
             return (

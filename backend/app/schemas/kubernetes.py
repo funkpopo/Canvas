@@ -82,3 +82,22 @@ class ClusterStorageSummary(BaseModel):
     pvc_by_namespace: dict[str, int]
     pv_total: int
     pv_by_phase: dict[str, int]
+
+
+class PodWithContainers(BaseModel):
+    name: str
+    containers: list[str]
+
+
+class ContainerMetricPoint(BaseModel):
+    ts: datetime
+    cpu_mcores: int
+    memory_bytes: int
+
+
+class ContainerMetricSeries(BaseModel):
+    has_metrics: bool = False
+    namespace: str
+    pod: str
+    container: str
+    points: list[ContainerMetricPoint]

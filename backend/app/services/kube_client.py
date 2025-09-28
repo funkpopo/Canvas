@@ -665,3 +665,66 @@ class KubernetesService:
         except Exception as exc:  # pragma: no cover
             logger.warning("kubernetes.capacity_error", error=str(exc))
             return ClusterCapacityMetrics(has_metrics=False)
+
+    async def list_pods_with_containers(self, namespace: str) -> list[dict[str, object]]:
+        """List pods and their container names within a namespace."""
+        await self._rate_limiter.acquire()
+        try:
+            core_v1, _ = await self._ensure_clients()
+
+            def _collect() -> list[dict[str, object]]:
+                pods = core_v1.list_namespaced_pod(namespace=namespace, limit=1000).items
+                results: list[dict[str, object]] = []
+                for pod in pods:
+                    name = pod.metadata.name if pod.metadata else ""
+                    containers = []
+                    try:
+                        for c in (pod.spec.containers or []):  # type: ignore[attr-defined]
+                            containers.append(c.name)
+                    except Exception:
+                        containers = []
+                    results.append({"name": name, "containers": containers})
+                return results
+
+            return await asyncio.to_thread(_collect)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.list_pods_error", error=str(exc))
+            return []
+
+    async def collect_container_metrics_once(self) -> list[tuple[datetime, str, str, str, int, int]]:
+        """Collect a single snapshot of container usage across all namespaces.
+
+        Returns a list of tuples: (ts, namespace, pod, container, cpu_mcores, memory_bytes)
+        """
+        await self._rate_limiter.acquire()
+        try:
+            await self._ensure_clients()
+            co = client.CustomObjectsApi(self._api_client)
+
+            def _collect() -> list[tuple[datetime, str, str, str, int, int]]:
+                now = datetime.now(tz=timezone.utc)
+                try:
+                    data = co.list_cluster_custom_object(
+                        group="metrics.k8s.io", version="v1beta1", plural="pods"
+                    )
+                    items = data.get("items", []) if isinstance(data, dict) else []
+                except Exception:
+                    items = []
+                results: list[tuple[datetime, str, str, str, int, int]] = []
+                for it in items:
+                    meta = it.get("metadata", {}) if isinstance(it, dict) else {}
+                    ns = meta.get("namespace") or it.get("namespace") or "default"
+                    pod = meta.get("name") or it.get("name") or ""
+                    containers = it.get("containers", []) if isinstance(it, dict) else []
+                    for c in containers:
+                        name = c.get("name") or ""
+                        usage = c.get("usage", {}) if isinstance(c, dict) else {}
+                        cpu_m = self._parse_cpu_to_mcores(usage.get("cpu"))
+                        mem_b = self._parse_memory_to_bytes(usage.get("memory"))
+                        results.append((now, str(ns), str(pod), str(name), int(cpu_m), int(mem_b)))
+                return results
+
+            return await asyncio.to_thread(_collect)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.collect_container_metrics_error", error=str(exc))
+            return []

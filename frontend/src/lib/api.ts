@@ -10,6 +10,15 @@ export const queryKeys = {
   clusterCapacity: ["cluster", "capacity"] as const,
   clusterStorage: ["cluster", "storage"] as const,
   namespaces: ["namespaces", "list"] as const,
+  podsInNamespace: (ns: string) => ["namespaces", ns, "pods"] as const,
+  containerSeries: (ns: string, pod: string, container: string, window: string) => [
+    "metrics",
+    "container",
+    ns,
+    pod,
+    container,
+    window,
+  ] as const,
 } as const;
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -184,4 +193,43 @@ export interface NamespaceSummaryResponse {
 
 export function fetchNamespaces(): Promise<NamespaceSummaryResponse[]> {
   return request<NamespaceSummaryResponse[]>("/namespaces/");
+}
+
+export interface PodWithContainersResponse {
+  name: string;
+  containers: string[];
+}
+
+export function fetchPodsInNamespace(ns: string): Promise<PodWithContainersResponse[]> {
+  const encoded = encodeURIComponent(ns);
+  return request<PodWithContainersResponse[]>(`/namespaces/${encoded}/pods`);
+}
+
+export interface ContainerMetricPointResponse {
+  ts: string;
+  cpu_mcores: number;
+  memory_bytes: number;
+}
+
+export interface ContainerMetricSeriesResponse {
+  has_metrics: boolean;
+  namespace: string;
+  pod: string;
+  container: string;
+  points: ContainerMetricPointResponse[];
+}
+
+export function fetchContainerSeries(
+  ns: string,
+  pod: string,
+  container: string,
+  window: string,
+): Promise<ContainerMetricSeriesResponse> {
+  const params = new URLSearchParams({
+    namespace: ns,
+    pod,
+    container,
+    window,
+  });
+  return request<ContainerMetricSeriesResponse>(`/metrics/container?${params.toString()}`);
 }
