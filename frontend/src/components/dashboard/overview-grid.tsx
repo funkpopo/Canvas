@@ -29,7 +29,10 @@ export function OverviewGrid() {
         value={isLoading ? "…" : data?.kubernetes_version ?? "unknown"}
         description={isError ? "无法连接到后端" : data?.cluster_name ?? "未配置"}
         trend={
-          <Badge variant="outline" className="border-emerald-400/40 bg-emerald-500/10 text-[10px] uppercase tracking-[0.4em] text-emerald-100">
+          <Badge
+            variant="outline"
+            className="border-emerald-300/60 bg-emerald-300/15 text-[10px] font-semibold uppercase tracking-[0.4em] text-emerald-700 backdrop-blur-sm transition-colors dark:border-emerald-400/40 dark:bg-emerald-500/15 dark:text-emerald-100"
+          >
             {isLoading ? "加载中" : "Active"}
           </Badge>
         }
@@ -39,7 +42,10 @@ export function OverviewGrid() {
         value={`${readyNodes}/${totalNodes}`}
         description="Ready / total nodes"
         trend={
-          <Badge variant="outline" className="border-sky-400/40 bg-sky-500/10 text-[10px] uppercase tracking-[0.4em] text-sky-100">
+          <Badge
+            variant="outline"
+            className="border-sky-300/50 bg-sky-300/15 text-[10px] font-semibold uppercase tracking-[0.4em] text-sky-700 backdrop-blur-sm transition-colors dark:border-sky-400/40 dark:bg-sky-500/15 dark:text-sky-100"
+          >
             {nodeHealthPercent}% ready
           </Badge>
         }
@@ -49,7 +55,10 @@ export function OverviewGrid() {
         value={data?.namespace_count ?? (isLoading ? "…" : 0)}
         description="Namespaces discovered"
         trend={
-          <Badge variant="outline" className="border-white/20 bg-white/10 text-[10px] uppercase tracking-[0.4em] text-slate-200">
+          <Badge
+            variant="outline"
+            className="border-[color:var(--canvas-control-border)] bg-[color:var(--canvas-control-surface)] text-[10px] font-semibold uppercase tracking-[0.4em] text-[color:var(--canvas-muted)] backdrop-blur-sm transition-colors dark:text-[color:var(--canvas-fg)]"
+          >
             {isLoading ? "加载中" : "Synced"}
           </Badge>
         }
@@ -59,7 +68,10 @@ export function OverviewGrid() {
         value={totalPods}
         description={`${healthyPods} healthy • ${pendingPods} pending • ${failingPods} failing`}
         trend={
-          <Badge variant="outline" className="border-emerald-400/40 bg-emerald-500/10 text-[10px] uppercase tracking-[0.4em] text-emerald-100">
+          <Badge
+            variant="outline"
+            className="border-emerald-300/60 bg-emerald-300/15 text-[10px] font-semibold uppercase tracking-[0.4em] text-emerald-700 backdrop-blur-sm transition-colors dark:border-emerald-400/40 dark:bg-emerald-500/15 dark:text-emerald-100"
+          >
             {podHealthPercent}% healthy • {pendingPercent}% pending • {failingPercent}% failing
           </Badge>
         }
@@ -67,3 +79,4 @@ export function OverviewGrid() {
     </section>
   );
 }
+

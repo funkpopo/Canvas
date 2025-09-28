@@ -25,10 +25,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="bg-[var(--canvas-bg)]">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-[var(--canvas-bg)] text-[var(--canvas-fg)]`}
-      >
+    <html lang="en" className="dark" suppressHydrationWarning>
+      <body className={geistSans.variable + " " + geistMono.variable + " antialiased"}>
         <Providers>{children}</Providers>
       </body>
     </html>

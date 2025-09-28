@@ -10,19 +10,25 @@ interface ResourceCardProps {
 
 export function ResourceCard({ label, value, trend, description }: ResourceCardProps) {
   return (
-    <Card className="relative overflow-hidden border-[var(--canvas-border)] bg-[linear-gradient(135deg,rgba(14,165,233,0.18)_0%,rgba(14,116,144,0.18)_40%,rgba(15,23,42,0.85)_100%)]">
+    <Card className="relative overflow-hidden rounded-2xl border-[color:var(--canvas-card-border)] bg-[linear-gradient(135deg,var(--canvas-card-gradient-from)_0%,var(--canvas-card-gradient-to)_100%)] shadow-[0_22px_60px_rgba(15,23,42,0.12)] transition-colors duration-300 dark:shadow-[0_32px_80px_rgba(2,6,23,0.55)]">
       <div
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,var(--canvas-border)/35,transparent_70%)]"
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,var(--canvas-card-highlight),transparent_75%)] opacity-90"
         aria-hidden
       />
-      <CardContent className="relative z-10 flex min-h-[150px] flex-col justify-between p-6">
-        <div className="flex items-center justify-between text-xs uppercase tracking-[0.4em] text-[color:var(--canvas-muted)]">
+      <div
+        className="pointer-events-none absolute inset-px rounded-[calc(var(--radius-xl))] border border-white/20 mix-blend-overlay dark:border-white/5"
+        aria-hidden
+      />
+      <CardContent className="relative z-10 flex min-h-[160px] flex-col justify-between gap-8 p-6">
+        <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.42em] text-[color:var(--canvas-muted)]">
           <span>{label}</span>
           {trend}
         </div>
-        <div>
-          <p className="text-3xl font-semibold text-white">{value}</p>
-          {description ? <p className="mt-1 text-sm text-[color:var(--canvas-muted)]">{description}</p> : null}
+        <div className="space-y-2">
+          <p className="text-3xl font-semibold text-[color:var(--canvas-fg)]">{value}</p>
+          {description ? (
+            <p className="text-sm text-[color:var(--canvas-muted)]">{description}</p>
+          ) : null}
         </div>
       </CardContent>
     </Card>

@@ -1,6 +1,6 @@
 "use client";
 
-import { Theme } from "@radix-ui/themes";
+import { ThemeProvider } from "@/components/theme/theme-provider";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { PropsWithChildren, useState } from "react";
@@ -19,11 +19,11 @@ export function Providers({ children }: PropsWithChildren) {
   );
 
   return (
-    <Theme appearance="inherit" accentColor="teal" panelBackground="translucent">
+    <ThemeProvider>
       <QueryClientProvider client={queryClient}>
         {children}
         <ReactQueryDevtools initialIsOpen={false} position="bottom" />
       </QueryClientProvider>
-    </Theme>
+    </ThemeProvider>
   );
 }
