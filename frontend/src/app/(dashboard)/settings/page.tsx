@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 
 import { Button } from "@/shared/ui/button";
@@ -15,12 +15,21 @@ import {
 import { PageHeader } from "@/features/dashboard/layouts/page-header";
 import { StatusBadge } from "@/shared/ui/status-badge";
 import { badgePresets } from "@/shared/ui/badge";
-import { queryKeys, fetchClusterConfig } from "@/lib/api";
+import {
+  queryKeys,
+  fetchClusterConfig,
+  saveClusterConfig,
+  listClusterConfigs,
+  selectActiveClusterByName,
+  type ClusterConfigPayload,
+  type ClusterConfigResponse,
+} from "@/lib/api";
 
 const inputStyles =
   "w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-focus focus:bg-surface-raised transition-colors";
 
 export default function SettingsPage() {
+  const queryClient = useQueryClient();
   const [apiServer, setApiServer] = useState("");
   const [bearerToken, setBearerToken] = useState("");
   const [caCert, setCaCert] = useState("");
@@ -35,15 +44,70 @@ export default function SettingsPage() {
     queryFn: fetchClusterConfig,
   });
 
+  const { data: allConfigs } = useQuery({
+    queryKey: queryKeys.clusterConfigsAll,
+    queryFn: listClusterConfigs,
+  });
+
+  useEffect(() => {
+    if (config) {
+      setClusterName(config.name ?? "");
+      setApiServer(config.api_server ?? "");
+      setNamespace(config.namespace ?? "");
+      setContext(config.context ?? "");
+      setKubeconfig(config.kubeconfig ?? "");
+      setBearerToken(config.token ?? "");
+      setCaCert(config.certificate_authority_data ?? "");
+      setSkipTlsVerify(!!config.insecure_skip_tls_verify);
+    }
+  }, [config]);
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const payload: ClusterConfigPayload = {
+        name: clusterName.trim(),
+        api_server: apiServer.trim() ? apiServer.trim() : null,
+        namespace: namespace.trim() ? namespace.trim() : null,
+        context: context.trim() ? context.trim() : null,
+        kubeconfig: kubeconfig.trim() ? kubeconfig.trim() : null,
+        token: bearerToken.trim() ? bearerToken.trim() : null,
+        certificate_authority_data: caCert.trim() ? caCert.trim() : null,
+        insecure_skip_tls_verify: skipTlsVerify,
+      };
+      return await saveClusterConfig(payload);
+    },
+    onSuccess: async (_data: ClusterConfigResponse) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.clusterConfig }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.clusterOverview }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.events }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.workloads }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.clusterConfigsAll }),
+      ]);
+    },
+  });
+
+  const selectMutation = useMutation({
+    mutationFn: async (name: string) => selectActiveClusterByName(name),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.clusterConfig }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.clusterOverview }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.events }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.workloads }),
+      ]);
+    },
+  });
+
   const { clusterStatus, lastUpdated } = useMemo(() => {
     if (!config) {
       return { clusterStatus: "Not configured", lastUpdated: "Never" };
     }
 
-    const hasCredentials = config.token_present || config.kubeconfig_present;
-    const hasEndpoint = Boolean(config.api_server);
+    const hasKubeconfig = config.kubeconfig_present;
+    const hasTokenAndEndpoint = config.token_present && Boolean(config.api_server);
 
-    if (hasCredentials && hasEndpoint) {
+    if (hasKubeconfig || hasTokenAndEndpoint) {
       return {
         clusterStatus: "Connected",
         lastUpdated: new Date().toLocaleTimeString(),
@@ -206,10 +270,62 @@ export default function SettingsPage() {
               />
             </div>
             <div className="flex items-center gap-3">
-              <Button variant="outline">Test connection</Button>
-              <Button>Save configuration</Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  // Lightweight connectivity check by fetching overview
+                  queryClient.invalidateQueries({ queryKey: queryKeys.clusterOverview });
+                }}
+              >
+                Test connection
+              </Button>
+              <Button
+                onClick={() => saveMutation.mutate()}
+                disabled={saveMutation.isPending || !clusterName.trim() || (!kubeconfig.trim() && !apiServer.trim())}
+              >
+                {saveMutation.isPending ? "Saving..." : "Save configuration"}
+              </Button>
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-border bg-surface text-text-primary">
+        <CardHeader>
+          <CardTitle className="text-text-primary">Saved clusters</CardTitle>
+          <CardDescription>Manage and switch between multiple clusters.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {allConfigs && allConfigs.length > 0 ? (
+            allConfigs.map((c) => {
+              const isActive = config ? c.id === config.id : false;
+              return (
+                <div key={c.id} className="flex items-center justify-between rounded-lg border border-border bg-muted/30 p-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium text-text-primary">{c.name}</p>
+                      {isActive && (
+                        <StatusBadge status="ready" label="Active" size="sm" />
+                      )}
+                    </div>
+                    <p className="text-xs text-text-muted">{c.api_server ?? (c.kubeconfig_present ? "kubeconfig" : "no endpoint")}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={isActive || selectMutation.isPending}
+                      onClick={() => !isActive && selectMutation.mutate(c.name)}
+                    >
+                      {isActive ? "Active" : selectMutation.isPending ? "Switching..." : "Set active"}
+                    </Button>
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <p className="text-sm text-text-muted">No clusters saved yet.</p>
+          )}
         </CardContent>
       </Card>
     </div>

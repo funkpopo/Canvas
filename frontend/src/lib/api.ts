@@ -5,6 +5,7 @@ export const queryKeys = {
   workloads: ["cluster", "workloads"] as const,
   events: ["cluster", "events"] as const,
   clusterConfig: ["cluster", "config"] as const,
+  clusterConfigsAll: ["cluster", "configs", "all"] as const,
 } as const;
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -80,6 +81,8 @@ export interface ClusterConfigResponse {
   certificate_authority_data: string | null;
 }
 
+export type ClusterConfigDetail = ClusterConfigResponse;
+
 export interface ClusterConfigPayload {
   name: string;
   api_server: string | null;
@@ -103,13 +106,24 @@ export function fetchEvents(): Promise<EventMessageResponse[]> {
   return request<EventMessageResponse[]>("/events/");
 }
 
-export function fetchClusterConfig(): Promise<ClusterConfigResponse | null> {
-  return request<ClusterConfigResponse | null>("/cluster/config/");
+export function fetchClusterConfig(): Promise<ClusterConfigDetail | null> {
+  return request<ClusterConfigDetail | null>("/cluster/config/");
 }
 
 export function saveClusterConfig(payload: ClusterConfigPayload): Promise<ClusterConfigResponse> {
   return request<ClusterConfigResponse>("/cluster/config/", {
     method: "PUT",
     body: JSON.stringify(payload),
+  });
+}
+
+export function listClusterConfigs(): Promise<ClusterConfigResponse[]> {
+  return request<ClusterConfigResponse[]>("/cluster/config/all");
+}
+
+export function selectActiveClusterByName(name: string): Promise<ClusterConfigResponse> {
+  return request<ClusterConfigResponse>("/cluster/config/select", {
+    method: "POST",
+    body: JSON.stringify({ name }),
   });
 }

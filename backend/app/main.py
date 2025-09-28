@@ -20,6 +20,9 @@ async def lifespan(app: FastAPI):
     logger = structlog.get_logger("lifespan")
     logger.info("application.startup", environment=settings.app_env)
 
+    # Ensure database schema is initialized
+    await init_db()
+
     service = get_kubernetes_service()
     cache_warm_task = PeriodicTask(
         interval_seconds=max(settings.cache_ttl_seconds, 30),

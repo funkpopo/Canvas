@@ -1,10 +1,15 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from app.dependencies import get_kubernetes_service, provide_cluster_config_service
 from app.models.cluster_config import ClusterConfig
-from app.schemas.config import ClusterConfigDetail, ClusterConfigPayload
+from app.schemas.config import (
+    ClusterConfigDetail,
+    ClusterConfigPayload,
+    ClusterConfigResponse,
+    SelectClusterRequest,
+)
 from app.services.cluster_config import ClusterConfigService
 from app.services.kube_client import KubernetesService
 
@@ -52,3 +57,53 @@ async def upsert_cluster_config(
     config = await config_service.upsert_default(payload)
     await kube_service.invalidate()
     return _to_detail(config)
+
+
+@router.get(
+    "/all",
+    response_model=list[ClusterConfigResponse],
+    summary="List all saved cluster configurations",
+)
+async def list_cluster_configs(
+    config_service: ClusterConfigService = Depends(provide_cluster_config_service),
+) -> list[ClusterConfigResponse]:
+    configs = await config_service.list_configs()
+    return [
+        ClusterConfigResponse(
+            id=c.id,
+            name=c.name,
+            api_server=c.api_server,
+            namespace=c.namespace,
+            context=c.context,
+            kubeconfig_present=bool(c.kubeconfig),
+            token_present=bool(c.token),
+            certificate_authority_data_present=bool(c.certificate_authority_data),
+            insecure_skip_tls_verify=c.insecure_skip_tls_verify,
+            created_at=c.created_at,
+            updated_at=c.updated_at,
+        )
+        for c in configs
+    ]
+
+
+@router.post(
+    "/select",
+    response_model=ClusterConfigDetail,
+    summary="Select active cluster by name or id",
+)
+async def select_active_cluster(
+    payload: SelectClusterRequest,
+    config_service: ClusterConfigService = Depends(provide_cluster_config_service),
+    kube_service: KubernetesService = Depends(get_kubernetes_service),
+) -> ClusterConfigDetail:
+    # For now support selection by name only (simple, name is unique)
+    if payload.name:
+        config = await config_service.set_default_by_name(payload.name)
+    else:
+        raise HTTPException(status_code=400, detail="Selection requires 'name'")
+
+    if not config:
+        raise HTTPException(status_code=404, detail="Cluster configuration not found")
+
+    await kube_service.invalidate()
+    return _to_detail(config, include_sensitive=False)

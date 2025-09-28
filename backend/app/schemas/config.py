@@ -38,3 +38,14 @@ class ClusterConfigDetail(ClusterConfigResponse):
     kubeconfig: str | None = None
     token: str | None = None
     certificate_authority_data: str | None = None
+
+
+class SelectClusterRequest(BaseModel):
+    id: int | None = None
+    name: str | None = None
+
+    @model_validator(mode="after")
+    def validate_selector(self) -> "SelectClusterRequest":
+        if not self.id and not self.name:
+            raise ValueError("Either id or name must be provided")
+        return self
