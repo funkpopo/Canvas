@@ -1,6 +1,6 @@
 "use client";
 
-import { ThemeProvider } from "@/components/theme/theme-provider";
+import { ThemeProvider } from "@/shared/theme/theme-provider";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { PropsWithChildren, useState } from "react";
@@ -27,3 +27,4 @@ export function Providers({ children }: PropsWithChildren) {
     </ThemeProvider>
   );
 }
+
