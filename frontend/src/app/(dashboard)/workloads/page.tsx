@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { GitBranch, LayoutDashboard, Timer } from "lucide-react";
 import { PageHeader } from "@/features/dashboard/layouts/page-header";
@@ -94,46 +95,52 @@ export default function WorkloadsPage() {
           ) : (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {deployments.map((workload, index) => (
-                <Card key={`${workload.namespace}-${workload.name}`} className="relative overflow-hidden">
-                  <CardHeader>
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-purple-600">
-                          <LayoutDashboard className="h-5 w-5 text-white" />
+                <Link
+                  key={`${workload.namespace}-${workload.name}`}
+                  href={`/workloads/deployments/${encodeURIComponent(workload.namespace)}/${encodeURIComponent(workload.name)}`}
+                  className="block"
+                >
+                  <Card className="relative overflow-hidden hover:bg-hover cursor-pointer transition-colors">
+                    <CardHeader>
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-purple-600">
+                            <LayoutDashboard className="h-5 w-5 text-white" />
+                          </div>
+                          <div>
+                            <CardTitle className="text-base text-text-primary">{workload.name}</CardTitle>
+                            <CardDescription>{workload.namespace} namespace</CardDescription>
+                          </div>
                         </div>
-                        <div>
-                          <CardTitle className="text-base text-text-primary">{workload.name}</CardTitle>
-                          <CardDescription>{workload.namespace} namespace</CardDescription>
-                        </div>
+                        <StatusBadge 
+                          status={workload.status === "Healthy" ? "healthy" : "warning"} 
+                          label={workload.status}
+                          size="sm"
+                        />
                       </div>
-                      <StatusBadge 
-                        status={workload.status === "Healthy" ? "healthy" : "warning"} 
-                        label={workload.status}
-                        size="sm"
-                      />
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-text-muted">Replicas</span>
-                      <Badge variant="neutral-light" size="sm" className={badgePresets.metric}>
-                        {workload.replicas_ready ?? 0}/{workload.replicas_desired ?? 0}
-                      </Badge>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-text-muted">Version</span>
-                      <Badge variant="neutral-light" size="sm" className={badgePresets.metric}>
-                        {workload.version || 'N/A'}
-                      </Badge>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-text-muted">Updated</span>
-                      <span className="text-xs text-text-muted">
-                        {workload.updated_at ? new Date(workload.updated_at).toLocaleString() : 'Unknown'}
-                      </span>
-                    </div>
-                  </CardContent>
-                </Card>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-text-muted">Replicas</span>
+                        <Badge variant="neutral-light" size="sm" className={badgePresets.metric}>
+                          {workload.replicas_ready ?? 0}/{workload.replicas_desired ?? 0}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-text-muted">Version</span>
+                        <Badge variant="neutral-light" size="sm" className={badgePresets.metric}>
+                          {workload.version || 'N/A'}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-text-muted">Updated</span>
+                        <span className="text-xs text-text-muted">
+                          {workload.updated_at ? new Date(workload.updated_at).toLocaleString() : 'Unknown'}
+                        </span>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </Link>
               ))}
             </div>
           )}

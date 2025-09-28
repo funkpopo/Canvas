@@ -56,6 +56,18 @@ export function Sidebar() {
     [],
   );
 
+  // Helper to determine active state for links (exact or nested paths)
+  const isPathActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
+
+  // Cluster-scoped roots to highlight/expand when visiting their pages
+  const clusterScopedRoots = ["/nodes", "/namespaces", "/workloads", "/events"] as const;
+  const onClusterScopedPage = clusterScopedRoots.some((root) => isPathActive(root));
+
+  // Auto-open the Clusters section when navigating to cluster-scoped pages
+  useEffect(() => {
+    if (onClusterScopedPage) setClustersOpen(true);
+  }, [onClusterScopedPage]);
+
   return (
     <aside
       className={cn(
@@ -90,7 +102,9 @@ export function Sidebar() {
               onClick={() => setClustersOpen((v) => !v)}
               className={cn(
                 "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                pathname === "/clusters" ? "bg-accent text-accent-foreground" : "text-text-muted hover:bg-muted hover:text-text-primary",
+                isPathActive("/clusters") || onClusterScopedPage
+                  ? "bg-accent text-accent-foreground"
+                  : "text-text-muted hover:bg-muted hover:text-text-primary",
               )}
             >
               <Globe className="h-4 w-4" />
@@ -124,7 +138,9 @@ export function Sidebar() {
                               href="/nodes"
                               className={cn(
                                 "block rounded-md px-2 py-1 text-xs",
-                                pathname === "/nodes" ? "bg-accent text-accent-foreground" : "text-text-muted hover:bg-muted hover:text-text-primary",
+                                isPathActive("/nodes")
+                                  ? "bg-accent text-accent-foreground"
+                                  : "text-text-muted hover:bg-muted hover:text-text-primary",
                               )}
                               title="Nodes"
                             >
@@ -134,7 +150,9 @@ export function Sidebar() {
                               href="/namespaces"
                               className={cn(
                                 "block rounded-md px-2 py-1 text-xs",
-                                pathname === "/namespaces" ? "bg-accent text-accent-foreground" : "text-text-muted hover:bg-muted hover:text-text-primary",
+                                isPathActive("/namespaces")
+                                  ? "bg-accent text-accent-foreground"
+                                  : "text-text-muted hover:bg-muted hover:text-text-primary",
                               )}
                               title="Namespaces"
                             >
@@ -144,7 +162,9 @@ export function Sidebar() {
                               href="/workloads"
                               className={cn(
                                 "block rounded-md px-2 py-1 text-xs",
-                                pathname === "/workloads" ? "bg-accent text-accent-foreground" : "text-text-muted hover:bg-muted hover:text-text-primary",
+                                isPathActive("/workloads")
+                                  ? "bg-accent text-accent-foreground"
+                                  : "text-text-muted hover:bg-muted hover:text-text-primary",
                               )}
                               title="Workloads"
                             >
@@ -154,7 +174,9 @@ export function Sidebar() {
                               href="/events"
                               className={cn(
                                 "block rounded-md px-2 py-1 text-xs",
-                                pathname === "/events" ? "bg-accent text-accent-foreground" : "text-text-muted hover:bg-muted hover:text-text-primary",
+                                isPathActive("/events")
+                                  ? "bg-accent text-accent-foreground"
+                                  : "text-text-muted hover:bg-muted hover:text-text-primary",
                               )}
                               title="Events"
                             >
@@ -176,7 +198,7 @@ export function Sidebar() {
 
           {/* Remaining sections (non cluster-scoped) */}
           {navItems.filter((n) => n.name !== "Clusters").map((item) => {
-            const isActive = pathname === item.href;
+            const isActive = isPathActive(item.href);
             return (
               <Link
                 key={item.name}

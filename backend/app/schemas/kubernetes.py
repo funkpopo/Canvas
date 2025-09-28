@@ -101,3 +101,12 @@ class ContainerMetricSeries(BaseModel):
     pod: str
     container: str
     points: list[ContainerMetricPoint]
+
+
+class OperationResult(BaseModel):
+    ok: bool
+    message: str | None = None
+
+
+class YamlContent(BaseModel):
+    yaml: str

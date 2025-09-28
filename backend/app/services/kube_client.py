@@ -728,3 +728,189 @@ class KubernetesService:
         except Exception as exc:  # pragma: no cover
             logger.warning("kubernetes.collect_container_metrics_error", error=str(exc))
             return []
+
+    # ---------------------------
+    # Deployment management APIs
+    # ---------------------------
+
+    async def list_pods_for_deployment(self, namespace: str, name: str) -> list[dict[str, object]]:
+        """List pods belonging to a Deployment, including their container names.
+
+        Uses the Deployment's label selector (matchLabels) to find pods.
+        """
+        await self._rate_limiter.acquire()
+        try:
+            core_v1, apps_v1 = await self._ensure_clients()
+
+            def _collect() -> list[dict[str, object]]:
+                dep = apps_v1.read_namespaced_deployment(name=name, namespace=namespace)
+                sel = dep.spec.selector
+
+                def _selector_to_string(selector) -> str | None:
+                    if not selector:
+                        return None
+                    parts: list[str] = []
+                    try:
+                        ml = getattr(selector, "match_labels", None) or {}
+                        for k, v in ml.items():
+                            parts.append(f"{k}={v}")
+                    except Exception:
+                        pass
+                    try:
+                        exprs = getattr(selector, "match_expressions", None) or []
+                        for e in exprs:
+                            key = getattr(e, "key", None)
+                            op = getattr(e, "operator", None)
+                            values = getattr(e, "values", None) or []
+                            if not key or not op:
+                                continue
+                            if op == "In" and values:
+                                parts.append(f"{key} in ({','.join(map(str, values))})")
+                            elif op == "NotIn" and values:
+                                parts.append(f"{key} notin ({','.join(map(str, values))})")
+                            elif op == "Exists":
+                                parts.append(f"{key}")
+                            elif op == "DoesNotExist":
+                                parts.append(f"!{key}")
+                            else:
+                                # Unsupported operators (e.g., Gt/Lt) are ignored in string form
+                                pass
+                    except Exception:
+                        pass
+                    return ",".join(parts) if parts else None
+
+                label_selector = _selector_to_string(sel)
+
+                pods = (
+                    core_v1.list_namespaced_pod(namespace=namespace, label_selector=label_selector).items
+                    if label_selector
+                    else core_v1.list_namespaced_pod(namespace=namespace).items
+                )
+                results: list[dict[str, object]] = []
+                for pod in pods:
+                    name_ = pod.metadata.name if pod.metadata else ""
+                    containers: list[str] = []
+                    try:
+                        for c in (pod.spec.containers or []):  # type: ignore[attr-defined]
+                            containers.append(c.name)
+                    except Exception:
+                        containers = []
+                    results.append({"name": name_, "containers": containers})
+                return results
+
+            return await asyncio.to_thread(_collect)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.list_pods_for_deployment_error", error=str(exc))
+            return []
+
+    async def restart_deployment(self, namespace: str, name: str) -> tuple[bool, str | None]:
+        """Trigger a rollout restart by annotating the pod template."""
+        await self._rate_limiter.acquire()
+        try:
+            _, apps_v1 = await self._ensure_clients()
+
+            def _do() -> None:
+                ts = datetime.now(tz=timezone.utc).isoformat()
+                body = {
+                    "spec": {
+                        "template": {
+                            "metadata": {
+                                "annotations": {
+                                    "kubectl.kubernetes.io/restartedAt": ts
+                                }
+                            }
+                        }
+                    }
+                }
+                apps_v1.patch_namespaced_deployment(name=name, namespace=namespace, body=body)
+
+            await asyncio.to_thread(_do)
+            return True, None
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.restart_deployment_error", error=str(exc))
+            return False, str(exc)
+
+    async def scale_deployment(self, namespace: str, name: str, replicas: int) -> tuple[bool, str | None]:
+        """Scale deployment by patching .spec.replicas."""
+        await self._rate_limiter.acquire()
+        try:
+            _, apps_v1 = await self._ensure_clients()
+
+            def _do() -> None:
+                body = {"spec": {"replicas": int(replicas)}}
+                apps_v1.patch_namespaced_deployment(name=name, namespace=namespace, body=body)
+
+            await asyncio.to_thread(_do)
+            return True, None
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.scale_deployment_error", error=str(exc))
+            return False, str(exc)
+
+    async def delete_deployment(self, namespace: str, name: str) -> tuple[bool, str | None]:
+        """Delete a deployment."""
+        await self._rate_limiter.acquire()
+        try:
+            _, apps_v1 = await self._ensure_clients()
+
+            def _do() -> None:
+                apps_v1.delete_namespaced_deployment(name=name, namespace=namespace)
+
+            await asyncio.to_thread(_do)
+            return True, None
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.delete_deployment_error", error=str(exc))
+            return False, str(exc)
+
+    async def get_deployment_yaml(self, namespace: str, name: str) -> str | None:
+        """Return the YAML manifest for a deployment."""
+        await self._rate_limiter.acquire()
+        try:
+            _, apps_v1 = await self._ensure_clients()
+
+            def _do() -> str:
+                dep = apps_v1.read_namespaced_deployment(name=name, namespace=namespace)
+                # Sanitize to dict then to YAML
+                api_client = self._api_client or ApiClient()
+                data = api_client.sanitize_for_serialization(dep)
+                # Remove managedFields to shorten output if present
+                md = data.get("metadata", {}) if isinstance(data, dict) else {}
+                if isinstance(md, dict) and "managedFields" in md:
+                    md.pop("managedFields", None)
+                return yaml.safe_dump(data, sort_keys=False)
+
+            return await asyncio.to_thread(_do)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.get_deployment_yaml_error", error=str(exc))
+            return None
+
+    async def apply_deployment_yaml(self, namespace: str, name: str, yaml_text: str) -> tuple[bool, str | None]:
+        """Apply changes from YAML by patching the Deployment (spec only)."""
+        await self._rate_limiter.acquire()
+        try:
+            _, apps_v1 = await self._ensure_clients()
+
+            def _do() -> None:
+                try:
+                    obj = yaml.safe_load(yaml_text) or {}
+                except Exception as exc:  # noqa: BLE001
+                    raise RuntimeError(f"Invalid YAML: {exc}")
+
+                if not isinstance(obj, dict):
+                    raise RuntimeError("YAML must be a mapping")
+                meta = obj.get("metadata", {}) if isinstance(obj, dict) else {}
+                spec = obj.get("spec", {}) if isinstance(obj, dict) else {}
+                kind = obj.get("kind")
+                # Basic validation
+                if kind and str(kind) != "Deployment":
+                    raise RuntimeError("YAML kind must be Deployment")
+                body = {"spec": spec} if spec else {}
+                if not body:
+                    raise RuntimeError("YAML missing spec to apply")
+                # Use namespace/name from path to avoid accidental rename
+                apps_v1.patch_namespaced_deployment(name=name, namespace=namespace, body=body)
+
+            await asyncio.to_thread(_do)
+            return True, None
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.apply_deployment_yaml_error", error=str(exc))
+            return False, str(exc)

@@ -18,7 +18,11 @@ export function formatBytes(bytes: number | null | undefined): string {
 }
 
 export function formatMillicores(mcores: number | null | undefined): string {
-  if (!mcores || mcores <= 0) return "0 cores";
+  if (!mcores || mcores <= 0) return "0m";
+  // Show millicores when under 1 core to avoid 0.0 rounding issues
+  if (mcores < 1000) {
+    return `${Math.round(mcores)}m`;
+  }
   const cores = mcores / 1000;
   return cores >= 10 ? `${cores.toFixed(0)} cores` : `${cores.toFixed(1)} cores`;
 }

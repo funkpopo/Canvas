@@ -19,6 +19,8 @@ export const queryKeys = {
     container,
     window,
   ] as const,
+  deploymentPods: (ns: string, name: string) => ["deployments", ns, name, "pods"] as const,
+  deploymentYaml: (ns: string, name: string) => ["deployments", ns, name, "yaml"] as const,
 } as const;
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -203,6 +205,56 @@ export interface PodWithContainersResponse {
 export function fetchPodsInNamespace(ns: string): Promise<PodWithContainersResponse[]> {
   const encoded = encodeURIComponent(ns);
   return request<PodWithContainersResponse[]>(`/namespaces/${encoded}/pods`);
+}
+
+// Deployment management & details
+export function fetchDeploymentPods(ns: string, name: string): Promise<PodWithContainersResponse[]> {
+  const en = encodeURIComponent(ns);
+  const nm = encodeURIComponent(name);
+  return request<PodWithContainersResponse[]>(`/workloads/deployments/${en}/${nm}/pods`);
+}
+
+export interface OperationResultResponse {
+  ok: boolean;
+  message?: string | null;
+}
+
+export function restartDeployment(ns: string, name: string): Promise<OperationResultResponse> {
+  const en = encodeURIComponent(ns);
+  const nm = encodeURIComponent(name);
+  return request<OperationResultResponse>(`/workloads/deployments/${en}/${nm}/restart`, { method: "POST" });
+}
+
+export function scaleDeployment(ns: string, name: string, replicas: number): Promise<OperationResultResponse> {
+  const en = encodeURIComponent(ns);
+  const nm = encodeURIComponent(name);
+  return request<OperationResultResponse>(`/workloads/deployments/${en}/${nm}/scale`, {
+    method: "POST",
+    body: JSON.stringify({ replicas }),
+  });
+}
+
+export function deleteDeployment(ns: string, name: string): Promise<OperationResultResponse> {
+  const en = encodeURIComponent(ns);
+  const nm = encodeURIComponent(name);
+  return request<OperationResultResponse>(`/workloads/deployments/${en}/${nm}`, { method: "DELETE" });
+}
+
+export interface YamlContentResponse { yaml: string }
+
+export function fetchDeploymentYaml(ns: string, name: string): Promise<YamlContentResponse> {
+  const en = encodeURIComponent(ns);
+  const nm = encodeURIComponent(name);
+  return request<YamlContentResponse>(`/workloads/deployments/${en}/${nm}/yaml`);
+}
+
+export function updateDeploymentYaml(ns: string, name: string, yaml: string): Promise<OperationResultResponse> {
+  const en = encodeURIComponent(ns);
+  const nm = encodeURIComponent(name);
+  return request<OperationResultResponse>(`/workloads/deployments/${en}/${nm}/yaml`, {
+    method: "PUT",
+    body: JSON.stringify({ yaml }),
+  });
 }
 
 export interface ContainerMetricPointResponse {
