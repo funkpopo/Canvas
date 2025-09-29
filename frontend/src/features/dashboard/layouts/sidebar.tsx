@@ -19,7 +19,7 @@ export function Sidebar() {
   const { data: clusters } = useQuery({ queryKey: queryKeys.clusterConfigsAll, queryFn: listClusterConfigs });
 
   const [collapsed, setCollapsed] = useState<boolean>(false);
-  const [clustersOpen, setClustersOpen] = useState<boolean>(true);
+  const [clustersOpen] = useState<boolean>(true);
 
   useEffect(() => {
     const saved = localStorage.getItem("sidebarCollapsed");
@@ -91,8 +91,8 @@ export function Sidebar() {
         <nav className="flex-1 space-y-1 px-2 py-2 overflow-y-auto">
           {/* Clusters tree */}
           <div>
-            <button
-              onClick={() => setClustersOpen((v) => !v)}
+            <Link
+              href="/clusters"
               className={cn(
                 "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                 isPathActive("/clusters") || onClusterScopedPage
@@ -102,7 +102,7 @@ export function Sidebar() {
             >
               <Globe className="h-4 w-4" />
               {!collapsed && <span>Clusters</span>}
-            </button>
+            </Link>
             {clustersOpen && !collapsed && (
               <div className="mt-1 space-y-1 pl-9">
                 {clusters && clusters.length > 0 ? (

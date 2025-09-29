@@ -45,16 +45,13 @@ export default function ClustersPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="Multi-cluster"
-        title="Select a cluster"
-        description="Choose a saved cluster to open its dedicated dashboard."
+        eyebrow="Clusters"
+        title="Clusters overview"
+        description="View and manage all saved clusters."
         actions={
           <div className="flex items-center gap-3">
-            <Button
-              variant="outline"
-              onClick={() => router.push("/settings")}
-            >
-              Add or edit cluster
+            <Button onClick={() => router.push("/clusters/manage")}>
+              Add cluster
             </Button>
           </div>
         }
@@ -104,7 +101,7 @@ export default function ClustersPage() {
                       disabled={selectMutation.isPending}
                       onClick={async () => {
                         await selectMutation.mutateAsync(c.name);
-                        router.push("/settings");
+                        router.push("/clusters/manage");
                       }}
                     >
                       Edit settings
@@ -114,7 +111,7 @@ export default function ClustersPage() {
               );
             })
           ) : (
-            <p className="text-sm text-text-muted">No clusters saved yet.</p>
+            <p className="text-sm text-text-muted">No clusters saved yet. Click "Add cluster" to create one.</p>
           )}
         </CardContent>
       </Card>
