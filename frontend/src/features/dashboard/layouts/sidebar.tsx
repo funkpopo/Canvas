@@ -21,7 +21,7 @@ export function Sidebar() {
   const { data: clusters } = useQuery({ queryKey: queryKeys.clusterConfigsAll, queryFn: listClusterConfigs });
 
   const [collapsed, setCollapsed] = useState<boolean>(false);
-  const [clustersOpen] = useState<boolean>(true);
+  const [clustersOpen, setClustersOpen] = useState<boolean>(true);
 
   useEffect(() => {
     const saved = localStorage.getItem("sidebarCollapsed");

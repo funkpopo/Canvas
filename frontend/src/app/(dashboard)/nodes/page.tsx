@@ -1,3 +1,5 @@
+"use client";
+
 import { PageHeader } from "@/features/dashboard/layouts/page-header";
 import {
   Card,
@@ -6,7 +8,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/shared/ui/card";
-import { Badge, badgePresets } from "@/shared/ui/badge";
+import { badgePresets } from "@/shared/ui/badge";
 import { useI18n } from "@/shared/i18n/i18n";
 
 export default function NodesPage() {
