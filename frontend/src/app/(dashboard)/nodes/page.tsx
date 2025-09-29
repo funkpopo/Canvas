@@ -1,5 +1,7 @@
 "use client";
 
+import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/features/dashboard/layouts/page-header";
 import {
   Card,
@@ -8,15 +10,43 @@ import {
   CardHeader,
   CardTitle,
 } from "@/shared/ui/card";
-import { badgePresets } from "@/shared/ui/badge";
+import { Badge, badgePresets } from "@/shared/ui/badge";
+import { StatusBadge } from "@/shared/ui/status-badge";
 import { useI18n } from "@/shared/i18n/i18n";
+import { fetchNodes, queryKeys, type NodeSummaryResponse } from "@/lib/api";
 
 export default function NodesPage() {
   const { t } = useI18n();
-  // TODO: Replace with actual API call when nodes endpoint is available
-  const totalNodes = 0;
-  const readyNodes = 0;
-  const spotInstances = 0;
+  const { data: nodes, isLoading, isError } = useQuery({
+    queryKey: queryKeys.nodes,
+    queryFn: fetchNodes,
+  });
+
+  const { totalNodes, readyNodes, masters, workers } = useMemo(() => {
+    const list: NodeSummaryResponse[] = nodes ?? [];
+    const total = list.length;
+    const ready = list.filter((n) => n.status === "Ready").length;
+    const masterNodes = list.filter((n) =>
+      (n.roles || []).some((r) => r === "master" || r === "control-plane")
+    );
+    const workerNodes = list.filter((n) =>
+      !(n.roles || []).some((r) => r === "master" || r === "control-plane")
+    );
+    return {
+      totalNodes: total,
+      readyNodes: ready,
+      masters: {
+        total: masterNodes.length,
+        ready: masterNodes.filter((n) => n.status === "Ready").length,
+      },
+      workers: {
+        total: workerNodes.length,
+        ready: workerNodes.filter((n) => n.status === "Ready").length,
+      },
+    };
+  }, [nodes]);
+
+  const spotInstances = 0; // No signal yet
 
   return (
     <div className="flex flex-col gap-6">
@@ -46,12 +76,97 @@ export default function NodesPage() {
       />
 
       <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <CardContent className="flex items-center justify-center py-8">
-            <div className="text-center space-y-2">
-              <p className="text-text-muted">{t("nodes.empty.title")}</p>
-              <p className="text-xs text-text-muted">{t("nodes.empty.desc")}</p>
+        {/* Control plane (master) status */}
+        <Card className="relative overflow-hidden">
+          <CardHeader>
+            <div className="flex items-start justify-between">
+              <div>
+                <CardTitle className="text-base text-text-primary">{t("nodes.section.masters")}</CardTitle>
+                <CardDescription>
+                  {masters.total > 0
+                    ? `${masters.ready}/${masters.total} ${t("status.ready")}`
+                    : t("nodes.empty.title")}
+                </CardDescription>
+              </div>
+              <StatusBadge
+                status={masters.total === 0
+                  ? "unknown"
+                  : masters.ready === masters.total
+                    ? "healthy"
+                    : masters.ready > 0
+                      ? "warning"
+                      : "failed"}
+                label={masters.total > 0
+                  ? `${masters.ready}/${masters.total} ${t("status.ready")}`
+                  : t("common.unknown")}
+                size="sm"
+              />
             </div>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <p className="text-sm text-text-muted">{t("common.loading")}</p>
+            ) : isError ? (
+              <p className="text-sm text-text-muted">{t("workloads.error.load")}</p>
+            ) : masters.total === 0 ? (
+              <div className="text-sm text-text-muted">{t("nodes.empty.desc")}</div>
+            ) : (
+              <div className="flex items-center gap-2 text-sm">
+                <Badge variant="success-light" size="sm" className={badgePresets.metric}>
+                  {t("status.ready")}: {masters.ready}
+                </Badge>
+                <Badge variant="error-light" size="sm" className={badgePresets.metric}>
+                  {t("status.unhealthy")}: {masters.total - masters.ready}
+                </Badge>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Worker status */}
+        <Card className="relative overflow-hidden">
+          <CardHeader>
+            <div className="flex items-start justify-between">
+              <div>
+                <CardTitle className="text-base text-text-primary">{t("nodes.section.workers")}</CardTitle>
+                <CardDescription>
+                  {workers.total > 0
+                    ? `${workers.ready}/${workers.total} ${t("status.ready")}`
+                    : t("nodes.empty.title")}
+                </CardDescription>
+              </div>
+              <StatusBadge
+                status={workers.total === 0
+                  ? "unknown"
+                  : workers.ready === workers.total
+                    ? "healthy"
+                    : workers.ready > 0
+                      ? "warning"
+                      : "failed"}
+                label={workers.total > 0
+                  ? `${workers.ready}/${workers.total} ${t("status.ready")}`
+                  : t("common.unknown")}
+                size="sm"
+              />
+            </div>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <p className="text-sm text-text-muted">{t("common.loading")}</p>
+            ) : isError ? (
+              <p className="text-sm text-text-muted">{t("workloads.error.load")}</p>
+            ) : workers.total === 0 ? (
+              <div className="text-sm text-text-muted">{t("nodes.empty.desc")}</div>
+            ) : (
+              <div className="flex items-center gap-2 text-sm">
+                <Badge variant="success-light" size="sm" className={badgePresets.metric}>
+                  {t("status.ready")}: {workers.ready}
+                </Badge>
+                <Badge variant="error-light" size="sm" className={badgePresets.metric}>
+                  {t("status.unhealthy")}: {workers.total - workers.ready}
+                </Badge>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

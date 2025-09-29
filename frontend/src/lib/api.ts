@@ -9,6 +9,7 @@ export const queryKeys = {
   metricsStatus: ["metrics", "status"] as const,
   clusterCapacity: ["cluster", "capacity"] as const,
   clusterStorage: ["cluster", "storage"] as const,
+  nodes: ["cluster", "nodes"] as const,
   namespaces: ["namespaces", "list"] as const,
   podsInNamespace: (ns: string) => ["namespaces", ns, "pods"] as const,
   containerSeries: (ns: string, pod: string, container: string, window: string) => [
@@ -55,6 +56,17 @@ export interface ClusterOverviewResponse {
   pending_pods: number;
   failing_pods: number;
   generated_at: string;
+}
+
+export interface NodeSummaryResponse {
+  name: string;
+  status: "Ready" | "NotReady" | "Unknown";
+  roles: string[];
+  cpu_allocatable: string;
+  memory_allocatable: string;
+  cpu_usage?: number | null;
+  memory_usage?: number | null;
+  age?: string | null;
 }
 
 export type WorkloadStatus = "Healthy" | "Degraded" | "Warning" | "Unknown";
@@ -184,6 +196,10 @@ export interface StorageSummaryResponse {
 
 export function fetchStorageSummary(): Promise<StorageSummaryResponse> {
   return request<StorageSummaryResponse>("/cluster/storage");
+}
+
+export function fetchNodes(): Promise<NodeSummaryResponse[]> {
+  return request<NodeSummaryResponse[]>("/nodes/");
 }
 
 export interface NamespaceSummaryResponse {

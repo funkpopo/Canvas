@@ -209,6 +209,8 @@ const dictEn = {
   "nodes.eyebrow": "Node management",
   "nodes.title": "Scale infrastructure dynamically",
   "nodes.desc": "Monitor node pools, track resource utilization, and automate capacity planning across availability zones.",
+  "nodes.section.masters": "Control plane nodes",
+  "nodes.section.workers": "Worker nodes",
   "nodes.meta.ready": "Ready nodes",
   "nodes.meta.ready.help": "Active worker nodes across all pools.",
   "nodes.meta.spot": "Spot instances",
@@ -385,6 +387,10 @@ const dictEn = {
 } as const;
 
 const dictZh = {
+  // Node sections
+  "nodes.section.masters": "主节点",
+  "nodes.section.workers": "工作节点",
+
   // Common
   "global": "全局",
   "common.loading": "加载中...",
