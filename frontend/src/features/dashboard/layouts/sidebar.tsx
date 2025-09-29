@@ -62,7 +62,7 @@ export function Sidebar() {
   const isPathActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
 
   // Cluster-scoped roots to highlight/expand when visiting their pages
-  const clusterScopedRoots = ["/nodes", "/namespaces", "/workloads", "/events"] as const;
+  const clusterScopedRoots = ["/nodes", "/namespaces", "/workloads", "/events", "/pods", "/services"] as const;
   const onClusterScopedPage = clusterScopedRoots.some((root) => isPathActive(root));
 
   // Auto-open the Clusters section when navigating to cluster-scoped pages
@@ -172,6 +172,32 @@ export function Sidebar() {
                             >
                               <Package className="h-4 w-4" />
                               <span>{t("sidebar.workloads")}</span>
+                            </Link>
+                            <Link
+                              href="/pods"
+                              className={cn(
+                                "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",
+                                isPathActive("/pods")
+                                  ? "bg-accent text-accent-foreground"
+                                  : "text-text-muted hover:bg-muted hover:text-text-primary",
+                              )}
+                              title={t("sidebar.pods")}
+                            >
+                              <Package className="h-4 w-4" />
+                              <span>{t("sidebar.pods")}</span>
+                            </Link>
+                            <Link
+                              href="/services"
+                              className={cn(
+                                "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",
+                                isPathActive("/services")
+                                  ? "bg-accent text-accent-foreground"
+                                  : "text-text-muted hover:bg-muted hover:text-text-primary",
+                              )}
+                              title={t("sidebar.services")}
+                            >
+                              <FolderTree className="h-4 w-4" />
+                              <span>{t("sidebar.services")}</span>
                             </Link>
                             <Link
                               href="/events"

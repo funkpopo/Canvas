@@ -21,6 +21,18 @@ export const queryKeys = {
   nodeSeries: (name: string, window: string) => ["metrics", "node", name, window] as const,
   namespaces: ["namespaces", "list"] as const,
   podsInNamespace: (ns: string) => ["namespaces", ns, "pods"] as const,
+  podsSummary: (ns?: string, name?: string, phase?: string, restart?: string) =>
+    [
+      "pods",
+      "summary",
+      ns ?? "all",
+      name ?? "",
+      phase ?? "",
+      restart ?? "",
+    ] as const,
+  podDetail: (ns: string, name: string) => ["pods", ns, name, "detail"] as const,
+  services: (ns?: string) => ["services", ns ?? "all"] as const,
+  serviceYaml: (ns: string, name: string) => ["services", ns, name, "yaml"] as const,
   containerSeries: (ns: string, pod: string, container: string, window: string) => [
     "metrics",
     "container",
@@ -450,6 +462,99 @@ export interface PodWithContainersResponse {
 export function fetchPodsInNamespace(ns: string): Promise<PodWithContainersResponse[]> {
   const encoded = encodeURIComponent(ns);
   return request<PodWithContainersResponse[]>(`/namespaces/${encoded}/pods`);
+}
+
+export interface PodSummaryResponse {
+  namespace: string;
+  name: string;
+  containers: string[];
+  ready_containers?: number | null;
+  total_containers?: number | null;
+  node_name?: string | null;
+  node_ip?: string | null;
+  pod_ip?: string | null;
+  phase?: string | null;
+  restart_policy?: string | null;
+  created_at?: string | null;
+}
+
+export function fetchPodsSummary(params: {
+  namespace?: string;
+  name?: string;
+  phase?: string;
+  restart_policy?: string;
+}): Promise<PodSummaryResponse[]> {
+  const qs = new URLSearchParams();
+  if (params.namespace && params.namespace !== "all") qs.set("namespace", params.namespace);
+  if (params.name) qs.set("name", params.name);
+  if (params.phase) qs.set("phase", params.phase);
+  if (params.restart_policy) qs.set("restart_policy", params.restart_policy);
+  const s = qs.toString();
+  return request<PodSummaryResponse[]>(`/pods/?${s}`);
+}
+
+export interface PodDetailResponse {
+  namespace: string;
+  name: string;
+  containers: Array<{ name: string; ready?: boolean | null; restart_count?: number | null; image?: string | null }>;
+  node_name?: string | null;
+  node_ip?: string | null;
+  pod_ip?: string | null;
+  phase?: string | null;
+  restart_policy?: string | null;
+  created_at?: string | null;
+}
+
+export function fetchPodDetail(ns: string, name: string): Promise<PodDetailResponse> {
+  const en = encodeURIComponent(ns);
+  const nm = encodeURIComponent(name);
+  return request<PodDetailResponse>(`/pods/${en}/${nm}`);
+}
+
+// Services
+export interface ServicePortResponse {
+  name?: string | null;
+  port?: number | null;
+  target_port?: string | number | null;
+  node_port?: number | null;
+  protocol?: string | null;
+}
+
+export interface ServiceSummaryResponse {
+  namespace: string;
+  name: string;
+  type?: string | null;
+  cluster_ip?: string | null;
+  ports: ServicePortResponse[];
+  created_at?: string | null;
+}
+
+export function fetchServices(namespace?: string): Promise<ServiceSummaryResponse[]> {
+  const params = new URLSearchParams();
+  if (namespace && namespace !== "all") params.set("namespace", namespace);
+  return request<ServiceSummaryResponse[]>(`/services/?${params.toString()}`);
+}
+
+export function fetchServiceYaml(ns: string, name: string): Promise<YamlContentResponse> {
+  const en = encodeURIComponent(ns);
+  const nm = encodeURIComponent(name);
+  return request<YamlContentResponse>(`/services/${en}/${nm}/yaml`);
+}
+
+export function updateServiceYaml(ns: string, name: string, yaml: string): Promise<OperationResultResponse> {
+  const en = encodeURIComponent(ns);
+  const nm = encodeURIComponent(name);
+  return request<OperationResultResponse>(`/services/${en}/${nm}/yaml`, { method: "PUT", body: JSON.stringify({ yaml }) });
+}
+
+export function deleteService(ns: string, name: string): Promise<OperationResultResponse> {
+  const en = encodeURIComponent(ns);
+  const nm = encodeURIComponent(name);
+  return request<OperationResultResponse>(`/services/${en}/${nm}`, { method: "DELETE" });
+}
+
+export function createServiceFromYaml(yaml: string): Promise<OperationResultResponse> {
+  return request<OperationResultResponse>(`/services/`, { method: "POST", body: JSON.stringify({ yaml }) });
 }
 
 // Deployment management & details

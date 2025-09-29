@@ -151,6 +151,39 @@ class PodWithContainers(BaseModel):
     containers: list[str]
 
 
+class PodSummary(BaseModel):
+    namespace: str
+    name: str
+    containers: list[str]
+    ready_containers: int | None = None
+    total_containers: int | None = None
+    node_name: str | None = None
+    node_ip: str | None = None
+    pod_ip: str | None = None
+    phase: str | None = None
+    restart_policy: str | None = None
+    created_at: datetime | None = None
+
+
+class ContainerStatus(BaseModel):
+    name: str
+    ready: bool | None = None
+    restart_count: int | None = None
+    image: str | None = None
+
+
+class PodDetail(BaseModel):
+    namespace: str
+    name: str
+    containers: list[ContainerStatus] = Field(default_factory=list)
+    node_name: str | None = None
+    node_ip: str | None = None
+    pod_ip: str | None = None
+    phase: str | None = None
+    restart_policy: str | None = None
+    created_at: datetime | None = None
+
+
 class ContainerMetricPoint(BaseModel):
     ts: datetime
     cpu_mcores: int
@@ -226,6 +259,24 @@ class PersistentVolumeClaimSummary(BaseModel):
     capacity: str | None = None
     access_modes: list[str] = Field(default_factory=list)
     volume_name: str | None = None
+    created_at: datetime | None = None
+
+
+# Services
+class ServicePort(BaseModel):
+    name: str | None = None
+    port: int | None = None
+    target_port: str | int | None = None
+    node_port: int | None = None
+    protocol: str | None = None
+
+
+class ServiceSummary(BaseModel):
+    namespace: str
+    name: str
+    type: str | None = None
+    cluster_ip: str | None = None
+    ports: list[ServicePort] = Field(default_factory=list)
     created_at: datetime | None = None
 
 

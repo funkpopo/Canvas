@@ -37,6 +37,11 @@ from app.schemas.kubernetes import (
     PersistentVolumeClaimSummary,
     VolumeFileEntry,
     FileContent,
+    PodSummary,
+    PodDetail,
+    ContainerStatus,
+    ServiceSummary,
+    ServicePort,
 )
 from app.services.cluster_config import ClusterConfigService
 
@@ -1500,6 +1505,121 @@ class KubernetesService:
             logger.warning("kubernetes.list_pods_error", error=str(exc))
             return []
 
+    async def list_pods_summary(
+        self,
+        namespace: str | None = None,
+        name: str | None = None,
+        phase: str | None = None,
+        restart_policy: str | None = None,
+    ) -> list[PodSummary]:
+        """List pods with details and optional filters."""
+        await self._rate_limiter.acquire()
+        try:
+            core_v1, _ = await self._ensure_clients()
+
+            def _collect() -> list[PodSummary]:
+                pods = (
+                    core_v1.list_namespaced_pod(namespace=namespace, limit=2000).items
+                    if namespace
+                    else core_v1.list_pod_for_all_namespaces(limit=2000).items
+                )
+                items: list[PodSummary] = []
+                for p in pods:
+                    md = getattr(p, "metadata", None)
+                    sp = getattr(p, "spec", None)
+                    st = getattr(p, "status", None)
+                    ns = getattr(md, "namespace", None) or namespace or "default"
+                    nm = getattr(md, "name", None) or ""
+                    conts: list[str] = []
+                    try:
+                        for c in (getattr(sp, "containers", None) or []):
+                            conts.append(getattr(c, "name", ""))
+                    except Exception:
+                        conts = []
+                    ready = None
+                    total = None
+                    try:
+                        statuses = getattr(st, "container_statuses", None) or []
+                        total = len(statuses)
+                        ready = sum(1 for s in statuses if getattr(s, "ready", False))
+                    except Exception:
+                        pass
+                    node_name = getattr(sp, "node_name", None)
+                    node_ip = getattr(st, "host_ip", None)
+                    pod_ip = getattr(st, "pod_ip", None)
+                    ph = getattr(st, "phase", None)
+                    rp = getattr(sp, "restart_policy", None)
+                    created = getattr(md, "creation_timestamp", None)
+
+                    item = PodSummary(
+                        namespace=str(ns),
+                        name=str(nm),
+                        containers=conts,
+                        ready_containers=ready,
+                        total_containers=total,
+                        node_name=node_name,
+                        node_ip=node_ip,
+                        pod_ip=pod_ip,
+                        phase=ph,
+                        restart_policy=rp,
+                        created_at=created,
+                    )
+
+                    # Filters
+                    if name and name not in item.name:
+                        continue
+                    if phase and (item.phase or "").lower() != phase.lower():
+                        continue
+                    if restart_policy and (item.restart_policy or "").lower() != restart_policy.lower():
+                        continue
+                    items.append(item)
+                return items
+
+            return await asyncio.to_thread(_collect)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.list_pods_summary_error", error=str(exc))
+            return []
+
+    async def get_pod_detail(self, namespace: str, name: str) -> PodDetail:
+        await self._rate_limiter.acquire()
+        try:
+            core_v1, _ = await self._ensure_clients()
+
+            def _do() -> PodDetail:
+                pod = core_v1.read_namespaced_pod(name=name, namespace=namespace)
+                md = getattr(pod, "metadata", None)
+                sp = getattr(pod, "spec", None)
+                st = getattr(pod, "status", None)
+                statuses: list[ContainerStatus] = []
+                try:
+                    for s in (getattr(st, "container_statuses", None) or []):
+                        statuses.append(
+                            ContainerStatus(
+                                name=getattr(s, "name", ""),
+                                ready=getattr(s, "ready", None),
+                                restart_count=getattr(s, "restart_count", None),
+                                image=getattr(s, "image", None),
+                            )
+                        )
+                except Exception:
+                    statuses = []
+                return PodDetail(
+                    namespace=str(getattr(md, "namespace", namespace)),
+                    name=str(getattr(md, "name", name)),
+                    containers=statuses,
+                    node_name=getattr(sp, "node_name", None),
+                    node_ip=getattr(st, "host_ip", None),
+                    pod_ip=getattr(st, "pod_ip", None),
+                    phase=getattr(st, "phase", None),
+                    restart_policy=getattr(sp, "restart_policy", None),
+                    created_at=getattr(md, "creation_timestamp", None),
+                )
+
+            return await asyncio.to_thread(_do)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.get_pod_detail_error", error=str(exc))
+            return PodDetail(namespace=namespace, name=name)
+
     async def collect_container_metrics_once(self) -> list[tuple[datetime, str, str, str, int, int]]:
         """Collect a single snapshot of container usage across all namespaces.
 
@@ -1756,4 +1876,142 @@ class KubernetesService:
             return True, None
         except Exception as exc:  # pragma: no cover
             logger.warning("kubernetes.apply_deployment_yaml_error", error=str(exc))
+            return False, str(exc)
+
+    async def list_services(self, namespace: str | None = None) -> list[ServiceSummary]:
+        """List Services in a namespace or across all namespaces."""
+        await self._rate_limiter.acquire()
+        try:
+            core_v1, _ = await self._ensure_clients()
+
+            def _collect() -> list[ServiceSummary]:
+                svcs = (
+                    core_v1.list_namespaced_service(namespace=namespace, limit=2000).items
+                    if namespace
+                    else core_v1.list_service_for_all_namespaces(limit=2000).items
+                )
+                items: list[ServiceSummary] = []
+                for s in svcs:
+                    md = getattr(s, "metadata", None)
+                    sp = getattr(s, "spec", None)
+                    st = getattr(s, "status", None)
+                    ns = getattr(md, "namespace", None) or namespace or "default"
+                    nm = getattr(md, "name", None) or ""
+                    svc_type = getattr(sp, "type", None)
+                    cluster_ip = getattr(sp, "cluster_ip", None) or getattr(sp, "clusterIP", None)
+                    ports: list[ServicePort] = []
+                    try:
+                        for p in (getattr(sp, "ports", None) or []):
+                            ports.append(
+                                ServicePort(
+                                    name=getattr(p, "name", None),
+                                    port=getattr(p, "port", None),
+                                    target_port=getattr(p, "target_port", None) or getattr(p, "targetPort", None),
+                                    node_port=getattr(p, "node_port", None) or getattr(p, "nodePort", None),
+                                    protocol=getattr(p, "protocol", None),
+                                )
+                            )
+                    except Exception:
+                        ports = []
+                    created = getattr(md, "creation_timestamp", None)
+                    items.append(
+                        ServiceSummary(
+                            namespace=str(ns),
+                            name=str(nm),
+                            type=svc_type,
+                            cluster_ip=cluster_ip,
+                            ports=ports,
+                            created_at=created,
+                        )
+                    )
+                return items
+
+            return await asyncio.to_thread(_collect)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.list_services_error", error=str(exc))
+            return []
+
+    async def get_service_yaml(self, namespace: str, name: str) -> str | None:
+        await self._rate_limiter.acquire()
+        try:
+            core_v1, _ = await self._ensure_clients()
+
+            def _do() -> str:
+                svc = core_v1.read_namespaced_service(name=name, namespace=namespace)
+                api_client = self._api_client or ApiClient()
+                data = api_client.sanitize_for_serialization(svc)
+                md = data.get("metadata", {}) if isinstance(data, dict) else {}
+                if isinstance(md, dict) and "managedFields" in md:
+                    md.pop("managedFields", None)
+                return yaml.safe_dump(data, sort_keys=False)
+
+            return await asyncio.to_thread(_do)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.get_service_yaml_error", error=str(exc))
+            return None
+
+    async def apply_service_yaml(self, namespace: str, name: str, yaml_text: str) -> tuple[bool, str | None]:
+        await self._rate_limiter.acquire()
+        try:
+            core_v1, _ = await self._ensure_clients()
+
+            def _do() -> None:
+                try:
+                    obj = yaml.safe_load(yaml_text) or {}
+                except Exception as exc:  # noqa: BLE001
+                    raise RuntimeError(f"Invalid YAML: {exc}")
+                if not isinstance(obj, dict):
+                    raise RuntimeError("YAML must be a mapping")
+                kind = obj.get("kind")
+                if kind and str(kind) != "Service":
+                    raise RuntimeError("YAML kind must be Service")
+                # Use server-side apply or patch full object; prefer patch to spec
+                core_v1.patch_namespaced_service(name=name, namespace=namespace, body=obj)
+
+            await asyncio.to_thread(_do)
+            return True, None
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.apply_service_yaml_error", error=str(exc))
+            return False, str(exc)
+
+    async def create_service_from_yaml(self, yaml_text: str) -> tuple[bool, str | None]:
+        await self._rate_limiter.acquire()
+        try:
+            core_v1, _ = await self._ensure_clients()
+
+            def _do() -> None:
+                try:
+                    obj = yaml.safe_load(yaml_text) or {}
+                except Exception as exc:  # noqa: BLE001
+                    raise RuntimeError(f"Invalid YAML: {exc}")
+                if not isinstance(obj, dict):
+                    raise RuntimeError("YAML must be a mapping")
+                kind = obj.get("kind")
+                if not kind or str(kind) != "Service":
+                    raise RuntimeError("YAML kind must be Service")
+                md = obj.get("metadata", {}) if isinstance(obj, dict) else {}
+                ns = md.get("namespace")
+                name = md.get("name")
+                if not ns or not name:
+                    raise RuntimeError("metadata.namespace and metadata.name required")
+                core_v1.create_namespaced_service(namespace=str(ns), body=obj)
+
+            await asyncio.to_thread(_do)
+            return True, None
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.create_service_error", error=str(exc))
+            return False, str(exc)
+
+    async def delete_service(self, namespace: str, name: str) -> tuple[bool, str | None]:
+        await self._rate_limiter.acquire()
+        try:
+            core_v1, _ = await self._ensure_clients()
+
+            def _do() -> None:
+                core_v1.delete_namespaced_service(name=name, namespace=namespace)
+
+            await asyncio.to_thread(_do)
+            return True, None
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.delete_service_error", error=str(exc))
             return False, str(exc)
