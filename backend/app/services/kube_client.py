@@ -9,6 +9,7 @@ import structlog
 import yaml
 from cachetools import TTLCache
 from kubernetes import client, config
+from kubernetes.stream import stream
 from kubernetes.client import ApiClient
 from kubernetes.config.config_exception import ConfigException
 
@@ -31,6 +32,11 @@ from app.schemas.kubernetes import (
     ClusterCapacityMetrics,
     WorkloadSummary,
     ClusterStorageSummary,
+    StorageClassSummary,
+    StorageClassCreate,
+    PersistentVolumeClaimSummary,
+    VolumeFileEntry,
+    FileContent,
 )
 from app.services.cluster_config import ClusterConfigService
 
@@ -666,6 +672,260 @@ class KubernetesService:
                 )
 
         return await self._cached("storage_summary", _fetch)
+
+    async def list_storage_classes(self) -> list[StorageClassSummary]:
+        await self._rate_limiter.acquire()
+        try:
+            await self._ensure_clients()
+            storage_v1 = client.StorageV1Api(self._api_client)
+
+            def _collect() -> list[StorageClassSummary]:
+                try:
+                    classes = storage_v1.list_storage_class().items
+                except Exception:
+                    classes = []
+                items: list[StorageClassSummary] = []
+                for sc in classes:
+                    md = getattr(sc, "metadata", None)
+                    params = getattr(sc, "parameters", None) or {}
+                    items.append(
+                        StorageClassSummary(
+                            name=getattr(md, "name", ""),
+                            provisioner=getattr(sc, "provisioner", None),
+                            reclaim_policy=getattr(sc, "reclaim_policy", None),
+                            volume_binding_mode=getattr(sc, "volume_binding_mode", None),
+                            allow_volume_expansion=getattr(sc, "allow_volume_expansion", None),
+                            parameters={str(k): str(v) for k, v in params.items()} if isinstance(params, dict) else {},
+                            created_at=getattr(md, "creation_timestamp", None),
+                        )
+                    )
+                return items
+
+            return await asyncio.to_thread(_collect)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.list_storage_classes_error", error=str(exc))
+            return []
+
+    async def create_storage_class(self, spec: StorageClassCreate) -> tuple[bool, str | None]:
+        await self._rate_limiter.acquire()
+        try:
+            await self._ensure_clients()
+            storage_v1 = client.StorageV1Api(self._api_client)
+
+            def _do() -> None:
+                body = client.V1StorageClass(
+                    metadata=client.V1ObjectMeta(name=spec.name),
+                    provisioner=spec.provisioner,
+                    reclaim_policy=spec.reclaim_policy,
+                    volume_binding_mode=spec.volume_binding_mode,
+                    allow_volume_expansion=spec.allow_volume_expansion,
+                    parameters=spec.parameters or {},
+                )
+                storage_v1.create_storage_class(body=body)
+
+            await asyncio.to_thread(_do)
+            return True, None
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.create_storage_class_error", error=str(exc))
+            return False, str(exc)
+
+    async def delete_storage_class(self, name: str) -> tuple[bool, str | None]:
+        await self._rate_limiter.acquire()
+        try:
+            await self._ensure_clients()
+            storage_v1 = client.StorageV1Api(self._api_client)
+
+            def _do() -> None:
+                storage_v1.delete_storage_class(name=name)
+
+            await asyncio.to_thread(_do)
+            return True, None
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.delete_storage_class_error", error=str(exc))
+            return False, str(exc)
+
+    async def list_pvcs(self, namespace: str | None = None) -> list[PersistentVolumeClaimSummary]:
+        await self._rate_limiter.acquire()
+        try:
+            core_v1, _ = await self._ensure_clients()
+
+            def _collect() -> list[PersistentVolumeClaimSummary]:
+                if namespace and namespace != "all":
+                    pvcs = core_v1.list_namespaced_persistent_volume_claim(namespace=namespace, limit=1000).items
+                else:
+                    pvcs = core_v1.list_persistent_volume_claim_for_all_namespaces(limit=1000).items
+                items: list[PersistentVolumeClaimSummary] = []
+                for pvc in pvcs:
+                    md = getattr(pvc, "metadata", None)
+                    stat = getattr(pvc, "status", None)
+                    spec = getattr(pvc, "spec", None)
+                    cap = None
+                    try:
+                        capd = getattr(stat, "capacity", None) or {}
+                        cap = str(capd.get("storage")) if capd else None
+                    except Exception:
+                        cap = None
+                    access_modes = list(getattr(spec, "access_modes", []) or [])
+                    items.append(
+                        PersistentVolumeClaimSummary(
+                            namespace=getattr(md, "namespace", "default"),
+                            name=getattr(md, "name", ""),
+                            status=(getattr(stat, "phase", None) or None),
+                            storage_class=getattr(spec, "storage_class_name", None),
+                            capacity=cap,
+                            access_modes=[str(m) for m in access_modes],
+                            volume_name=getattr(stat, "volume_name", None),
+                            created_at=getattr(md, "creation_timestamp", None),
+                        )
+                    )
+                return items
+
+            return await asyncio.to_thread(_collect)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.list_pvcs_error", error=str(exc))
+            return []
+
+    async def _ensure_browser_pod(self, namespace: str, pvc: str) -> str:
+        core_v1, _ = await self._ensure_clients()
+
+        def _ensure() -> str:
+            name = f"canvas-pvc-browse-{pvc[:40]}"
+            try:
+                pod = core_v1.read_namespaced_pod(name=name, namespace=namespace)
+                phase = getattr(pod.status, "phase", None)
+                if phase == "Running":
+                    return name
+            except Exception:
+                # create it
+                pass
+            body = client.V1Pod(
+                metadata=client.V1ObjectMeta(name=name, labels={"app": "canvas-pvc-browser"}),
+                spec=client.V1PodSpec(
+                    restart_policy="Never",
+                    containers=[
+                        client.V1Container(
+                            name="sh",
+                            image="busybox:1.36",
+                            command=["sh", "-c", "sleep 43200"],
+                            volume_mounts=[client.V1VolumeMount(name="data", mount_path="/data")],
+                        )
+                    ],
+                    volumes=[client.V1Volume(name="data", persistent_volume_claim=client.V1PersistentVolumeClaimVolumeSource(claim_name=pvc))],
+                ),
+            )
+            try:
+                core_v1.create_namespaced_pod(namespace=namespace, body=body)
+            except Exception:
+                # ignore if already exists or cannot create
+                pass
+            return name
+
+        name = await asyncio.to_thread(_ensure)
+        # Wait briefly for Running
+        for _ in range(30):
+            try:
+                pod = core_v1.read_namespaced_pod(name=name, namespace=namespace)
+                if getattr(pod.status, "phase", None) == "Running":
+                    break
+            except Exception:
+                pass
+            await asyncio.sleep(0.5)
+        return name
+
+    async def _exec_in_pod(self, namespace: str, pod: str, cmd: list[str]) -> str:
+        core_v1, _ = await self._ensure_clients()
+        return await asyncio.to_thread(
+            lambda: stream(core_v1.connect_get_namespaced_pod_exec, pod, namespace, command=cmd, stderr=True, stdin=False, stdout=True, tty=False)
+        )
+
+    async def list_volume_path(self, namespace: str, pvc: str, path: str) -> list[VolumeFileEntry]:
+        await self._rate_limiter.acquire()
+        try:
+            pod = await self._ensure_browser_pod(namespace, pvc)
+            norm = "/" + path.strip("/") if path and path != "/" else "/"
+            full = f"/data{norm}"
+            out = await self._exec_in_pod(namespace, pod, ["sh", "-c", f"ls -al {full} || true"])
+            entries: list[VolumeFileEntry] = []
+            for line in out.splitlines():
+                line = line.rstrip("\n")
+                if not line or line.startswith("total "):
+                    continue
+                parts = line.split()
+                if len(parts) < 6:
+                    continue
+                perm = parts[0]
+                # busybox ls -al often: perms, links, user, group, size, mon, day, time|year, name
+                try:
+                    size = int(parts[4])
+                except Exception:
+                    size = None
+                name = " ".join(parts[8:]) if len(parts) > 8 else parts[-1]
+                if name in (".", ".."):
+                    continue
+                is_dir = perm.startswith("d")
+                # crude mtime join
+                mtime = None
+                if len(parts) >= 8:
+                    mtime = f"{parts[5]} {parts[6]} {parts[7]}"
+                entries.append(
+                    VolumeFileEntry(
+                        name=name,
+                        path=(norm.rstrip("/") + "/" + name).replace("//", "/"),
+                        is_dir=is_dir,
+                        permissions=perm,
+                        size=size,
+                        mtime=mtime,
+                    )
+                )
+            # Sort: dirs first, then by name
+            entries.sort(key=lambda e: (not e.is_dir, e.name.lower()))
+            return entries
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.list_volume_path_error", error=str(exc))
+            return []
+
+    async def read_file_base64(self, namespace: str, pvc: str, path: str) -> FileContent | None:
+        await self._rate_limiter.acquire()
+        try:
+            pod = await self._ensure_browser_pod(namespace, pvc)
+            norm = "/" + path.strip("/") if path and path != "/" else "/"
+            full = f"/data{norm}"
+            out = await self._exec_in_pod(namespace, pod, ["sh", "-c", f"test -f {full} && base64 {full} || true"])
+            if not out:
+                return None
+            return FileContent(path=path, base64_data=out.strip())
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.read_file_error", error=str(exc))
+            return None
+
+    async def write_file_base64(self, namespace: str, pvc: str, path: str, base64_data: str) -> tuple[bool, str | None]:
+        await self._rate_limiter.acquire()
+        try:
+            pod = await self._ensure_browser_pod(namespace, pvc)
+            norm = "/" + path.strip("/") if path and path != "/" else "/"
+            full = f"/data{norm}"
+            # Write via temp file
+            safe_tmp = "/tmp/canvas_upload.b64"
+            script = f"cat > {safe_tmp} << 'EOF'\n{base64_data}\nEOF\nbase64 -d {safe_tmp} > {full}\nrm -f {safe_tmp}"
+            await self._exec_in_pod(namespace, pod, ["sh", "-c", script])
+            return True, None
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.write_file_error", error=str(exc))
+            return False, str(exc)
+
+    async def rename_path(self, namespace: str, pvc: str, old_path: str, new_name: str) -> tuple[bool, str | None]:
+        await self._rate_limiter.acquire()
+        try:
+            pod = await self._ensure_browser_pod(namespace, pvc)
+            norm = "/" + old_path.strip("/") if old_path and old_path != "/" else "/"
+            parent = "/".join(norm.rstrip("/").split("/")[:-1]) or "/"
+            src = f"/data{norm}"
+            dst = f"/data{parent}/{new_name}".replace("//", "/")
+            await self._exec_in_pod(namespace, pod, ["sh", "-c", f"mv {src} {dst} || true"])
+            return True, None
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.rename_path_error", error=str(exc))
+            return False, str(exc)
 
     async def stream_events(self) -> list[EventMessage]:
         async def _fetch() -> list[EventMessage]:

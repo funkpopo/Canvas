@@ -117,8 +117,10 @@ export function Sidebar() {
                         <button
                           className={cn(
                             // Increase cluster name font size for better readability
-                            "flex w-full items-center justify-between rounded-md px-2 py-1 text-base",
-                            isActive ? "bg-muted text-text-primary" : "text-text-muted hover:bg-muted hover:text-text-primary",
+                            "flex w-full items-center justify-between rounded-md px-2 py-1 text-base border",
+                            isActive
+                              ? "border-primary text-text-primary"
+                              : "border-transparent text-text-muted hover:text-text-primary",
                           )}
                           disabled={selectMutation.isPending}
                           onClick={async () => {
@@ -183,6 +185,19 @@ export function Sidebar() {
                             >
                               <Rss className="h-4 w-4" />
                               <span>{t("sidebar.events")}</span>
+                            </Link>
+                            <Link
+                              href="/storage"
+                              className={cn(
+                                "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",
+                                isPathActive("/storage")
+                                  ? "bg-accent text-accent-foreground"
+                                  : "text-text-muted hover:bg-muted hover:text-text-primary",
+                              )}
+                              title={t("sidebar.storage")}
+                            >
+                              <FolderTree className="h-4 w-4" />
+                              <span>{t("sidebar.storage")}</span>
                             </Link>
                           </div>
                         )}

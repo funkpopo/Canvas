@@ -184,3 +184,48 @@ class OperationResult(BaseModel):
 
 class YamlContent(BaseModel):
     yaml: str
+
+
+# Storage management
+class StorageClassSummary(BaseModel):
+    name: str
+    provisioner: str | None = None
+    reclaim_policy: str | None = None
+    volume_binding_mode: str | None = None
+    allow_volume_expansion: bool | None = None
+    parameters: dict[str, str] = Field(default_factory=dict)
+    created_at: datetime | None = None
+
+
+class StorageClassCreate(BaseModel):
+    name: str
+    provisioner: str
+    reclaim_policy: str | None = None
+    volume_binding_mode: str | None = None
+    allow_volume_expansion: bool | None = None
+    parameters: dict[str, str] = Field(default_factory=dict)
+
+
+class PersistentVolumeClaimSummary(BaseModel):
+    namespace: str
+    name: str
+    status: str | None = None
+    storage_class: str | None = None
+    capacity: str | None = None
+    access_modes: list[str] = Field(default_factory=list)
+    volume_name: str | None = None
+    created_at: datetime | None = None
+
+
+class VolumeFileEntry(BaseModel):
+    name: str
+    path: str
+    is_dir: bool
+    permissions: str | None = None
+    size: int | None = None
+    mtime: str | None = None
+
+
+class FileContent(BaseModel):
+    path: str
+    base64_data: str

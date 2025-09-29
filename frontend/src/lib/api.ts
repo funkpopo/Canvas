@@ -9,6 +9,9 @@ export const queryKeys = {
   metricsStatus: ["metrics", "status"] as const,
   clusterCapacity: ["cluster", "capacity"] as const,
   clusterStorage: ["cluster", "storage"] as const,
+  storageClasses: ["storage", "classes"] as const,
+  pvcs: (ns?: string) => ["storage", "pvcs", ns ?? "all"] as const,
+  volumeList: (ns: string, pvc: string, path: string) => ["storage", "browser", ns, pvc, path] as const,
   nodes: ["cluster", "nodes"] as const,
   nodeDetail: (name: string) => ["nodes", name, "detail"] as const,
   nodeEvents: (name: string) => ["nodes", name, "events"] as const,
@@ -254,6 +257,106 @@ export interface StorageSummaryResponse {
 
 export function fetchStorageSummary(): Promise<StorageSummaryResponse> {
   return request<StorageSummaryResponse>("/cluster/storage");
+}
+
+// Storage classes
+export interface StorageClassSummaryResponse {
+  name: string;
+  provisioner?: string | null;
+  reclaim_policy?: string | null;
+  volume_binding_mode?: string | null;
+  allow_volume_expansion?: boolean | null;
+  parameters: Record<string, string>;
+  created_at?: string | null;
+}
+
+export interface StorageClassCreatePayload {
+  name: string;
+  provisioner: string;
+  reclaim_policy?: string | null;
+  volume_binding_mode?: string | null;
+  allow_volume_expansion?: boolean | null;
+  parameters?: Record<string, string>;
+}
+
+export function fetchStorageClasses(): Promise<StorageClassSummaryResponse[]> {
+  return request<StorageClassSummaryResponse[]>("/storage/classes");
+}
+
+export function createStorageClass(payload: StorageClassCreatePayload): Promise<OperationResultResponse> {
+  return request<OperationResultResponse>("/storage/classes", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function deleteStorageClass(name: string): Promise<OperationResultResponse> {
+  const nm = encodeURIComponent(name);
+  return request<OperationResultResponse>(`/storage/classes/${nm}`, { method: "DELETE" });
+}
+
+// PVCs
+export interface PersistentVolumeClaimSummaryResponse {
+  namespace: string;
+  name: string;
+  status?: string | null;
+  storage_class?: string | null;
+  capacity?: string | null;
+  access_modes: string[];
+  volume_name?: string | null;
+  created_at?: string | null;
+}
+
+export function fetchPvcs(namespace?: string): Promise<PersistentVolumeClaimSummaryResponse[]> {
+  const params = new URLSearchParams();
+  if (namespace && namespace !== "all") params.set("namespace", namespace);
+  return request<PersistentVolumeClaimSummaryResponse[]>(`/storage/pvcs?${params.toString()}`);
+}
+
+// Volume browser
+export interface VolumeFileEntryResponse {
+  name: string;
+  path: string;
+  is_dir: boolean;
+  permissions?: string | null;
+  size?: number | null;
+  mtime?: string | null;
+}
+
+export function fetchVolumeList(ns: string, pvc: string, path: string): Promise<VolumeFileEntryResponse[]> {
+  const en = encodeURIComponent(ns);
+  const pv = encodeURIComponent(pvc);
+  const params = new URLSearchParams({ path });
+  return request<VolumeFileEntryResponse[]>(`/storage/browser/${en}/${pv}/list?${params.toString()}`);
+}
+
+export interface FileContentResponse { path: string; base64_data: string }
+
+export function readVolumeFile(ns: string, pvc: string, path: string): Promise<FileContentResponse | null> {
+  const en = encodeURIComponent(ns);
+  const pv = encodeURIComponent(pvc);
+  const params = new URLSearchParams({ path });
+  return request<FileContentResponse | null>(`/storage/browser/${en}/${pv}/read?${params.toString()}`);
+}
+
+export function writeVolumeFile(ns: string, pvc: string, path: string, base64: string): Promise<OperationResultResponse> {
+  const en = encodeURIComponent(ns);
+  const pv = encodeURIComponent(pvc);
+  return request<OperationResultResponse>(`/storage/browser/${en}/${pv}/write`, {
+    method: "PUT",
+    body: JSON.stringify({ path, base64_data: base64 }),
+  });
+}
+
+export function renameVolumePath(ns: string, pvc: string, oldPath: string, newName: string): Promise<OperationResultResponse> {
+  const en = encodeURIComponent(ns);
+  const pv = encodeURIComponent(pvc);
+  const params = new URLSearchParams({ old_path: oldPath, new_name: newName });
+  return request<OperationResultResponse>(`/storage/browser/${en}/${pv}/rename?${params.toString()}`, { method: "POST" });
+}
+
+export function downloadVolumePath(ns: string, pvc: string, path: string): string {
+  const en = encodeURIComponent(ns);
+  const pv = encodeURIComponent(pvc);
+  const params = new URLSearchParams({ path });
+  return `${API_BASE_URL}/storage/browser/${en}/${pv}/download?${params.toString()}`;
 }
 
 export function fetchNodes(): Promise<NodeSummaryResponse[]> {
