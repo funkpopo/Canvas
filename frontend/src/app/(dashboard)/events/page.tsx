@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Filter, Rss } from "lucide-react";
 import { PageHeader } from "@/features/dashboard/layouts/page-header";
@@ -15,6 +16,7 @@ import { Badge, badgePresets } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { EventFeed } from "@/features/dashboard/components/event-feed";
 import { useI18n } from "@/shared/i18n/i18n";
+import { queryKeys, fetchEvents, type EventMessageResponse } from "@/lib/api";
 // modal removed: inline filters shown above feed
 
 function FiltersContent({
@@ -142,6 +144,66 @@ export default function EventsPage() {
   const activeTypes = useMemo(() => selectedTypes, [selectedTypes]);
   const activeResources = useMemo(() => selectedResources, [selectedResources]);
 
+  // Fetch events for header metrics
+  const { data: events } = useQuery<EventMessageResponse[]>({
+    queryKey: queryKeys.events,
+    queryFn: fetchEvents,
+    refetchInterval: 5000,
+  });
+
+  // Reuse same filtering logic as EventFeed for consistent metrics
+  const filteredForHeader: EventMessageResponse[] = useMemo(() => {
+    const list: EventMessageResponse[] = events ?? [];
+
+    const tset = new Set(activeTypes.map((t) => t.toLowerCase()));
+    const rset = new Set(activeResources.map((r) => r.toLowerCase()));
+    const q = searchQuery.trim().toLowerCase();
+    const ns = namespaceQuery.trim().toLowerCase();
+
+    const byType = (e: EventMessageResponse) =>
+      tset.size === 0 || (e.type && tset.has(String(e.type).toLowerCase()));
+
+    const byResource = (e: EventMessageResponse) => {
+      if (rset.size === 0) return true;
+      const io = (e.involved_object ?? "").toLowerCase();
+      const kind = io.split("/")[0];
+      return rset.has(kind) || Array.from(rset).some((r) => io.includes(r));
+    };
+
+    const bySearch = (e: EventMessageResponse) => {
+      if (!q) return true;
+      const reason = (e.reason ?? "").toLowerCase();
+      const message = (e.message ?? "").toLowerCase();
+      const io = (e.involved_object ?? "").toLowerCase();
+      const type = (e.type ?? "").toLowerCase();
+      return (
+        reason.includes(q) || message.includes(q) || io.includes(q) || type.includes(q)
+      );
+    };
+
+    const byNamespace = (e: EventMessageResponse) => {
+      if (!ns) return true;
+      const nsv = (e.namespace ?? "").toLowerCase();
+      return nsv.includes(ns);
+    };
+
+    return list.filter((e) => byType(e) && byResource(e) && bySearch(e) && byNamespace(e));
+  }, [events, activeTypes, activeResources, searchQuery, namespaceQuery]);
+
+  // Compute 5-minute window metrics
+  const metrics = useMemo(() => {
+    const now = Date.now();
+    const windowMs = 5 * 60 * 1000;
+    const cutoff = now - windowMs;
+    const inWindow = filteredForHeader.filter((e) => {
+      const ts = e?.timestamp ? new Date(e.timestamp).getTime() : NaN;
+      return Number.isFinite(ts) && ts >= cutoff;
+    });
+    const perMinute = Math.round(inWindow.length / 5);
+    const warnings = inWindow.filter((e) => String(e.type || "").toLowerCase() === "warning").length;
+    return { perMinute, warnings };
+  }, [filteredForHeader]);
+
   // Initialize from URL on mount
   useEffect(() => {
     const typesParam = searchParams.get("types");
@@ -196,12 +258,12 @@ export default function EventsPage() {
           <>
             <div>
               <p className={`${badgePresets.label} text-text-muted`}>{t("events.meta.rate")}</p>
-              <p className="mt-1 text-lg font-semibold text-text-primary">142</p>
+              <p className="mt-1 text-lg font-semibold text-text-primary">{metrics.perMinute}</p>
               <p className="text-xs text-text-muted">{t("events.meta.rate.help")}</p>
             </div>
             <div>
               <p className={`${badgePresets.label} text-text-muted`}>{t("events.meta.warning")}</p>
-              <p className="mt-1 text-lg font-semibold text-text-primary">23</p>
+              <p className="mt-1 text-lg font-semibold text-text-primary">{metrics.warnings}</p>
               <p className="text-xs text-text-muted">{t("events.meta.warning.help")}</p>
             </div>
             <div>

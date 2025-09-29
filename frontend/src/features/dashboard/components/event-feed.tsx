@@ -1,3 +1,5 @@
+"use client";
+
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 
@@ -10,7 +12,7 @@ import {
 } from "@/shared/ui/card";
 import { Badge, badgePresets } from "@/shared/ui/badge";
 import { ScrollArea } from "@/shared/ui/scroll-area";
-import { queryKeys, fetchEvents } from "@/lib/api";
+import { queryKeys, fetchEvents, type EventMessageResponse } from "@/lib/api";
 import { useI18n } from "@/shared/i18n/i18n";
 
 const typeVariants = {
@@ -28,14 +30,14 @@ export interface EventFeedFilters {
 
 export function EventFeed({ types = [], resources = [], search = "", namespace = "" }: EventFeedFilters) {
   const { t } = useI18n();
-  const { data: events, isLoading, isError } = useQuery({
+  const { data: events, isLoading, isError } = useQuery<EventMessageResponse[]>({
     queryKey: queryKeys.events,
     queryFn: fetchEvents,
     refetchInterval: 5000,
   });
 
-  const filtered = useMemo(() => {
-    if (!events) return [] as typeof events;
+  const filtered: EventMessageResponse[] = useMemo(() => {
+    const list: EventMessageResponse[] = events ?? [];
 
     const tset = new Set(types.map((t) => t.toLowerCase()));
     const rset = new Set(resources.map((r) => r.toLowerCase()));
@@ -72,7 +74,7 @@ export function EventFeed({ types = [], resources = [], search = "", namespace =
       return nsv.includes(ns);
     };
 
-    return events.filter((e) => byType(e) && byResource(e) && bySearch(e) && byNamespace(e));
+    return list.filter((e) => byType(e) && byResource(e) && bySearch(e) && byNamespace(e));
   }, [events, types, resources, search, namespace]);
 
   const recentEvents = filtered.slice(0, 20);
