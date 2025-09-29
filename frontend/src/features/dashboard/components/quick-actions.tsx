@@ -32,7 +32,7 @@ export function QuickActions() {
       description: config ? (config.api_server ?? t("quick.connectivity.desc.configured")) : t("quick.connectivity.desc.none"),
       status: (config ? "ready" : "pending") as StatusType,
       action: t("quick.connectivity.action"),
-      href: "/settings#connectivity",
+      href: "/clusters/manage",
     },
     {
       icon: ShieldCheck,
@@ -40,7 +40,7 @@ export function QuickActions() {
       description: config?.token_present ? t("quick.creds.desc.present") : t("quick.creds.desc.missing"),
       status: (config?.token_present ? "ready" : "pending") as StatusType,
       action: t("quick.creds.action"),
-      href: "/settings#credentials",
+      href: "/clusters/manage",
     },
     {
       icon: FileText,
@@ -48,7 +48,7 @@ export function QuickActions() {
       description: config?.kubeconfig_present ? t("quick.kubeconfig.desc.present") : t("quick.kubeconfig.desc.missing"), 
       status: (config?.kubeconfig_present ? "ready" : "pending") as StatusType,
       action: t("quick.kubeconfig.action"),
-      href: "/settings#kubeconfig",
+      href: "/clusters/manage",
     },
   ];
 

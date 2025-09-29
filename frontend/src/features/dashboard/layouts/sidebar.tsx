@@ -114,7 +114,7 @@ export function Sidebar() {
                       <div key={c.id} className="space-y-1">
                         <button
                           className={cn(
-                            "flex w-full items-center justify-between rounded-md px-2 py-1 text-xs",
+                            "flex w-full items-center justify-between rounded-md px-2 py-1 text-sm",
                             isActive ? "bg-muted text-text-primary" : "text-text-muted hover:bg-muted hover:text-text-primary",
                           )}
                           disabled={selectMutation.isPending}
