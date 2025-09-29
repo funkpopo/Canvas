@@ -22,9 +22,11 @@ const typeVariants = {
 export interface EventFeedFilters {
   types?: string[];
   resources?: string[];
+  search?: string;
+  namespace?: string;
 }
 
-export function EventFeed({ types = [], resources = [] }: EventFeedFilters) {
+export function EventFeed({ types = [], resources = [], search = "", namespace = "" }: EventFeedFilters) {
   const { t } = useI18n();
   const { data: events, isLoading, isError } = useQuery({
     queryKey: queryKeys.events,
@@ -37,6 +39,8 @@ export function EventFeed({ types = [], resources = [] }: EventFeedFilters) {
 
     const tset = new Set(types.map((t) => t.toLowerCase()));
     const rset = new Set(resources.map((r) => r.toLowerCase()));
+    const q = search.trim().toLowerCase();
+    const ns = namespace.trim().toLowerCase();
 
     const byType = (e: NonNullable<typeof events>[number]) =>
       tset.size === 0 || (e.type && tset.has(String(e.type).toLowerCase()));
@@ -48,8 +52,28 @@ export function EventFeed({ types = [], resources = [] }: EventFeedFilters) {
       return rset.has(kind) || Array.from(rset).some((r) => io.includes(r));
     };
 
-    return events.filter((e) => byType(e) && byResource(e));
-  }, [events, types, resources]);
+    const bySearch = (e: NonNullable<typeof events>[number]) => {
+      if (!q) return true;
+      const reason = (e.reason ?? "").toLowerCase();
+      const message = (e.message ?? "").toLowerCase();
+      const io = (e.involved_object ?? "").toLowerCase();
+      const type = (e.type ?? "").toLowerCase();
+      return (
+        reason.includes(q) ||
+        message.includes(q) ||
+        io.includes(q) ||
+        type.includes(q)
+      );
+    };
+
+    const byNamespace = (e: NonNullable<typeof events>[number]) => {
+      if (!ns) return true;
+      const nsv = (e.namespace ?? "").toLowerCase();
+      return nsv.includes(ns);
+    };
+
+    return events.filter((e) => byType(e) && byResource(e) && bySearch(e) && byNamespace(e));
+  }, [events, types, resources, search, namespace]);
 
   const recentEvents = filtered.slice(0, 20);
 

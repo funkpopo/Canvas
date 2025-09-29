@@ -311,6 +311,11 @@ const dictEn = {
   "events.resource.pods": "Pods",
   "events.resource.services": "Services",
   "events.resource.deployments": "Deployments",
+  "events.filters.search": "Search",
+  "events.filters.search.placeholder": "Reason/message or resource...",
+  "events.filters.namespace": "Namespace",
+  "events.filters.namespace.placeholder": "e.g. default",
+  "events.filters.clear": "Clear all",
 
   // Theme toggle
   "theme.toggle.aria": "Switch to {mode} theme",
@@ -811,6 +816,11 @@ const dictZh = {
   "events.resource.pods": "Pods",
   "events.resource.services": "Services",
   "events.resource.deployments": "Deployments",
+  "events.filters.search": "搜索",
+  "events.filters.search.placeholder": "原因/消息或资源…",
+  "events.filters.namespace": "命名空间",
+  "events.filters.namespace.placeholder": "例如 default",
+  "events.filters.clear": "清空筛选",
 
   // Theme toggle
   "theme.toggle.aria": "切换为{mode}主题",
