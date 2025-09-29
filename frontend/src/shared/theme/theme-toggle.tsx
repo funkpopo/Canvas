@@ -6,6 +6,7 @@ import { useTheme } from "@/shared/theme/theme-provider";
 import { Button } from "@/shared/ui/button";
 import { badgePresets } from "@/shared/ui/badge";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/shared/i18n/i18n";
 
 interface ThemeToggleProps {
   className?: string;
@@ -13,6 +14,7 @@ interface ThemeToggleProps {
 
 export function ThemeToggle({ className }: ThemeToggleProps) {
   const { isDark, toggleTheme } = useTheme();
+  const { t } = useI18n();
 
   return (
     <Button
@@ -20,7 +22,7 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
       size="sm"
       onClick={toggleTheme}
       className={cn(`gap-2 rounded-full ${badgePresets.tag}`, className)}
-      aria-label={`Switch to ${isDark ? "light" : "dark"} theme`}
+      aria-label={t("theme.toggle.aria", { mode: isDark ? t("appearance.light") : t("appearance.dark") })}
     >
       {isDark ? (
         <SunIcon className="h-3 w-3" aria-hidden />
@@ -28,7 +30,7 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
         <MoonIcon className="h-3 w-3" aria-hidden />
       )}
       <span className={`hidden font-medium ${badgePresets.label} md:inline`}>
-        {isDark ? "Light" : "Dark"}
+        {isDark ? t("appearance.light") : t("appearance.dark")}
       </span>
     </Button>
   );

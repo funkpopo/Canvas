@@ -7,6 +7,7 @@ import { PageHeader } from "@/features/dashboard/layouts/page-header";
 import { Button } from "@/shared/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/ui/card";
 import { StatusBadge } from "@/shared/ui/status-badge";
+import { useI18n } from "@/shared/i18n/i18n";
 import {
   fetchClusterConfig,
   listClusterConfigs,
@@ -15,6 +16,7 @@ import {
 } from "@/lib/api";
 
 export default function ClustersPage() {
+  const { t } = useI18n();
   const router = useRouter();
   const queryClient = useQueryClient();
 
@@ -45,23 +47,21 @@ export default function ClustersPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="Clusters"
-        title="Clusters overview"
-        description="View and manage all saved clusters."
+        eyebrow={t("clusters.eyebrow")}
+        title={t("clusters.title")}
+        description={t("clusters.desc")}
         actions={
           <div className="flex items-center gap-3">
-            <Button onClick={() => router.push("/clusters/manage")}>
-              Add cluster
-            </Button>
+            <Button onClick={() => router.push("/clusters/manage")}>{t("clusters.actions.add")}</Button>
           </div>
         }
       />
 
       <Card className="border-border bg-surface text-text-primary">
         <CardHeader>
-          <CardTitle className="text-text-primary">Saved clusters</CardTitle>
+          <CardTitle className="text-text-primary">{t("clusters.saved.title")}</CardTitle>
           <CardDescription>
-            {isLoading ? "Loading clusters..." : "Manage and open your clusters."}
+            {isLoading ? t("clusters.saved.loading") : t("clusters.saved.help")}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -76,12 +76,10 @@ export default function ClustersPage() {
                   <div>
                     <div className="flex items-center gap-2">
                       <p className="font-medium text-text-primary">{c.name}</p>
-                      {isActive && (
-                        <StatusBadge status="ready" label="Active" size="sm" />
-                      )}
+                      {isActive && (<StatusBadge status="ready" label={t("clusters.badge.active")} size="sm" />)}
                     </div>
                     <p className="text-xs text-text-muted">
-                      {c.api_server ?? (c.kubeconfig_present ? "kubeconfig" : "no endpoint")}
+                      {c.api_server ?? (c.kubeconfig_present ? t("clusters.endpoint.kubeconfig") : t("clusters.endpoint.none"))}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -93,7 +91,7 @@ export default function ClustersPage() {
                         router.push("/");
                       }}
                     >
-                      {selectMutation.isPending ? "Opening..." : "Open"}
+                      {selectMutation.isPending ? t("clusters.btn.opening") : t("clusters.btn.open")}
                     </Button>
                     <Button
                       variant="outline"
@@ -104,14 +102,14 @@ export default function ClustersPage() {
                         router.push("/clusters/manage");
                       }}
                     >
-                      Edit settings
+                      {t("clusters.btn.edit")}
                     </Button>
                   </div>
                 </div>
               );
             })
           ) : (
-            <p className="text-sm text-text-muted">No clusters saved yet. Click "Add cluster" to create one.</p>
+            <p className="text-sm text-text-muted">{t("clusters.empty")}</p>
           )}
         </CardContent>
       </Card>

@@ -9,8 +9,10 @@ import {
 import { badgePresets } from "@/shared/ui/badge";
 import { ScrollArea } from "@/shared/ui/scroll-area";
 import { queryKeys, fetchEvents } from "@/lib/api";
+import { useI18n } from "@/shared/i18n/i18n";
 
 export function ActivityTimeline() {
+  const { t } = useI18n();
   const { data: events, isLoading, isError } = useQuery({
     queryKey: queryKeys.events,
     queryFn: fetchEvents,
@@ -21,23 +23,23 @@ export function ActivityTimeline() {
   return (
     <Card className="relative overflow-hidden border-border bg-surface">
       <CardHeader>
-        <CardTitle className="text-lg text-text-primary">Recent activity</CardTitle>
-        <CardDescription>Latest changes and events across your cluster</CardDescription>
+        <CardTitle className="text-lg text-text-primary">{t("activity.title")}</CardTitle>
+        <CardDescription>{t("activity.desc")}</CardDescription>
       </CardHeader>
       <CardContent>
         <ScrollArea className="max-h-80 md:max-h-96 pr-3">
           <div className="space-y-4">
             {isLoading ? (
               <div className="space-y-3">
-                <p className="text-sm text-text-muted">Loading recent activity...</p>
+                <p className="text-sm text-text-muted">{t("activity.loading")}</p>
               </div>
             ) : isError ? (
               <div className="space-y-3">
-                <p className="text-sm text-text-muted">Failed to load events.</p>
+                <p className="text-sm text-text-muted">{t("activity.error")}</p>
               </div>
             ) : recentEvents.length === 0 ? (
               <div className="space-y-3">
-                <p className="text-sm text-text-muted">No recent activity recorded.</p>
+                <p className="text-sm text-text-muted">{t("activity.empty")}</p>
               </div>
             ) : (
               recentEvents.map((event, index) => (
@@ -47,12 +49,12 @@ export function ActivityTimeline() {
                     <div className="flex items-center justify-between">
                       <p className="text-sm font-medium text-text-primary">{event.reason}</p>
                       <span className={`${badgePresets.label} text-text-muted`}>
-                        {event.timestamp ? new Date(event.timestamp).toLocaleTimeString() : 'Unknown time'}
+                        {event.timestamp ? new Date(event.timestamp).toLocaleTimeString() : t("activity.unknownTime")}
                       </span>
                     </div>
                     <p className="text-xs font-mono text-text-secondary">{event.involved_object}</p>
                     <p className="text-xs text-text-muted">
-                      {event.message} {event.namespace && `in ${event.namespace} namespace`}
+                      {event.message} {event.namespace && t("activity.inNamespace", { ns: event.namespace })}
                     </p>
                   </div>
                 </div>

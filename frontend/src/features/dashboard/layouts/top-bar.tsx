@@ -6,8 +6,10 @@ import Link from "next/link";
 import { ThemeToggle } from "@/shared/theme/theme-toggle";
 import { Badge, badgePresets } from "@/shared/ui/badge";
 import { queryKeys, fetchClusterConfig } from "@/lib/api";
+import { useI18n } from "@/shared/i18n/i18n";
 
 export function TopBar() {
+  const { t } = useI18n();
   const { data: config } = useQuery({
     queryKey: queryKeys.clusterConfig,
     queryFn: fetchClusterConfig,
@@ -17,16 +19,16 @@ export function TopBar() {
     <header className="flex h-16 items-center justify-between border-b border-border bg-surface px-6">
       <div className="flex items-center gap-4">
         <div>
-          <p className={`${badgePresets.label} text-text-muted`}>Active cluster</p>
+          <p className={`${badgePresets.label} text-text-muted`}>{t("topbar.activeCluster")}</p>
           <div className="flex items-center gap-3">
             <p className="text-sm font-medium text-text-primary">
-              {config?.name ?? "No cluster configured"}
+              {config?.name ?? t("topbar.noClusterConfigured")}
             </p>
             <Link
               href="/clusters"
               className="text-xs text-primary hover:underline"
             >
-              Change
+              {t("topbar.change")}
             </Link>
           </div>
         </div>
@@ -36,7 +38,7 @@ export function TopBar() {
             size="sm"
             className={badgePresets.status}
           >
-            Online
+            {t("topbar.online")}
           </Badge>
         )}
       </div>

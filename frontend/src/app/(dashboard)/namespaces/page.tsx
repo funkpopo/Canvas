@@ -13,8 +13,10 @@ import {
 import { Badge, badgePresets } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { fetchNamespaces, queryKeys } from "@/lib/api";
+import { useI18n } from "@/shared/i18n/i18n";
 
 export default function NamespacesPage() {
+  const { t } = useI18n();
   const { data: namespaces, isLoading, isError } = useQuery({
     queryKey: queryKeys.namespaces,
     queryFn: fetchNamespaces,
@@ -27,25 +29,25 @@ export default function NamespacesPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="Namespace management"
-        title="Organize and isolate resources"
-        description="Monitor namespace utilization, enforce policies, and manage access controls across your cluster."
+        eyebrow={t("namespaces.header.eyebrow")}
+        title={t("namespaces.header.title")}
+        description={t("namespaces.header.desc")}
         meta={
           <>
             <div>
-              <p className={`${badgePresets.label} text-text-muted`}>Total</p>
+              <p className={`${badgePresets.label} text-text-muted`}>{t("namespaces.meta.total")}</p>
               <p className="mt-1 text-lg font-semibold text-text-primary">{totalNamespaces}</p>
-              <p className="text-xs text-text-muted">Active namespaces managed.</p>
+              <p className="text-xs text-text-muted">{t("namespaces.meta.total.help")}</p>
             </div>
             <div>
-              <p className={`${badgePresets.label} text-text-muted`}>System</p>
+              <p className={`${badgePresets.label} text-text-muted`}>{t("namespaces.meta.system")}</p>
               <p className="mt-1 text-lg font-semibold text-text-primary">{systemNamespaces}</p>
-              <p className="text-xs text-text-muted">Critical system namespaces.</p>
+              <p className="text-xs text-text-muted">{t("namespaces.meta.system.help")}</p>
             </div>
             <div>
-              <p className={`${badgePresets.label} text-text-muted`}>Status</p>
-              <p className="mt-1 text-lg font-semibold text-text-primary">Ready</p>
-              <p className="text-xs text-text-muted">Namespace discovery status.</p>
+              <p className={`${badgePresets.label} text-text-muted`}>{t("namespaces.meta.status")}</p>
+              <p className="mt-1 text-lg font-semibold text-text-primary">{t("namespaces.meta.status.ready")}</p>
+              <p className="text-xs text-text-muted">{t("namespaces.meta.status.help")}</p>
             </div>
           </>
         }
@@ -55,21 +57,21 @@ export default function NamespacesPage() {
         {isLoading ? (
           <Card>
             <CardContent className="flex items-center justify-center py-8">
-              <p className="text-text-muted">Loading namespaces...</p>
+              <p className="text-text-muted">{t("namespaces.loading")}</p>
             </CardContent>
           </Card>
         ) : isError ? (
           <Card>
             <CardContent className="flex items-center justify-center py-8">
-              <p className="text-text-muted">Failed to load namespaces.</p>
+              <p className="text-text-muted">{t("namespaces.error")}</p>
             </CardContent>
           </Card>
         ) : totalNamespaces === 0 ? (
           <Card>
             <CardContent className="flex items-center justify-center py-8">
               <div className="text-center space-y-2">
-                <p className="text-text-muted">No namespace data available</p>
-                <p className="text-xs text-text-muted">Connect to a cluster to view namespaces</p>
+                <p className="text-text-muted">{t("namespaces.empty.title")}</p>
+                <p className="text-xs text-text-muted">{t("namespaces.empty.desc")}</p>
               </div>
             </CardContent>
           </Card>
@@ -85,21 +87,21 @@ export default function NamespacesPage() {
                         <Badge variant={ns.status === "Active" ? "success-light" : ns.status === "Terminating" ? "warning-light" : "neutral-light"} size="sm" className={badgePresets.status}>
                           {ns.status}
                         </Badge>
-                        <span className="text-xs text-text-muted">{Object.keys(ns.labels || {}).length} labels</span>
+                        <span className="text-xs text-text-muted">{t("namespaces.labels", { count: Object.keys(ns.labels || {}).length })}</span>
                       </CardDescription>
                     </div>
                     <div className="flex items-center gap-2">
                       <Link href={`/namespaces/${encodeURIComponent(ns.name)}`}>
-                        <Button size="sm">Manage</Button>
+                        <Button size="sm">{t("namespaces.manage")}</Button>
                       </Link>
                     </div>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-2">
                   {ns.resource_quota ? (
-                    <div className="text-xs text-text-muted">ResourceQuota set</div>
+                    <div className="text-xs text-text-muted">{t("namespaces.rq.set")}</div>
                   ) : (
-                    <div className="text-xs text-text-muted">No ResourceQuota</div>
+                    <div className="text-xs text-text-muted">{t("namespaces.rq.none")}</div>
                   )}
                 </CardContent>
               </Card>

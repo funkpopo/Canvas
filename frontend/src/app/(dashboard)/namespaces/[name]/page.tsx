@@ -20,9 +20,11 @@ import {
   type PodWithContainersResponse,
 } from "@/lib/api";
 import { SimpleLineChart } from "@/shared/ui/line-chart";
+import { useI18n } from "@/shared/i18n/i18n";
 import { formatBytes, formatMillicores } from "@/lib/utils";
 
 export default function NamespaceDetailPage() {
+  const { t } = useI18n();
   const params = useParams<{ name: string }>();
   const router = useRouter();
   const ns = decodeURIComponent(params.name);
@@ -79,20 +81,20 @@ export default function NamespaceDetailPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="Namespace"
+        eyebrow={t("ns.header.eyebrow")}
         title={ns}
-        description="View and manage workloads in this namespace."
+        description={t("ns.header.desc")}
         actions={
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => router.push("/namespaces")}>Back</Button>
+            <Button variant="outline" onClick={() => router.push("/namespaces")}>{t("ns.header.back")}</Button>
           </div>
         }
         meta={
           <>
             <div>
-              <p className={`${badgePresets.label} text-text-muted`}>Workloads</p>
+              <p className={`${badgePresets.label} text-text-muted`}>{t("ns.meta.workloads")}</p>
               <p className="mt-1 text-lg font-semibold text-text-primary">{filtered.length}</p>
-              <p className="text-xs text-text-muted">Deployments/StatefulSets/CronJobs</p>
+              <p className="text-xs text-text-muted">{t("ns.meta.kinds")}</p>
             </div>
           </>
         }
@@ -101,19 +103,19 @@ export default function NamespaceDetailPage() {
       {isLoading ? (
         <Card>
           <CardContent className="flex items-center justify-center py-8">
-            <p className="text-text-muted">Loading workloads...</p>
+            <p className="text-text-muted">{t("ns.loading")}</p>
           </CardContent>
         </Card>
       ) : isError ? (
         <Card>
           <CardContent className="flex items-center justify-center py-8">
-            <p className="text-text-muted">Failed to load workloads.</p>
+            <p className="text-text-muted">{t("ns.error")}</p>
           </CardContent>
         </Card>
       ) : filtered.length === 0 ? (
         <Card>
           <CardContent className="flex items-center justify-center py-8">
-            <p className="text-text-muted">No workloads found in this namespace.</p>
+            <p className="text-text-muted">{t("ns.empty")}</p>
           </CardContent>
         </Card>
       ) : (
@@ -136,15 +138,15 @@ export default function NamespaceDetailPage() {
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-text-muted">Replicas</span>
+                    <span className="text-text-muted">{t("ns.field.replicas")}</span>
                     <Badge variant="neutral-light" size="sm" className={badgePresets.metric}>
                       {workload.replicas_ready ?? 0}/{workload.replicas_desired ?? 0}
                     </Badge>
                   </div>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-text-muted">Version</span>
+                    <span className="text-text-muted">{t("ns.field.version")}</span>
                     <Badge variant="neutral-light" size="sm" className={badgePresets.metric}>
-                      {workload.version || "N/A"}
+                      {workload.version || t("ns.na")}
                     </Badge>
                   </div>
                 </CardContent>

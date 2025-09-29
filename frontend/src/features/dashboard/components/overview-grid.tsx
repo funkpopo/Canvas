@@ -3,8 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 import { queryKeys, fetchClusterOverview } from "@/lib/api";
 import { ResourceCard } from "@/shared/ui/resource-card";
 import { Badge, badgePresets } from "@/shared/ui/badge";
+import { useI18n } from "@/shared/i18n/i18n";
 
 export function OverviewGrid() {
+  const { t } = useI18n();
   const { data, isLoading, isError } = useQuery({
     queryKey: queryKeys.clusterOverview,
     queryFn: fetchClusterOverview,
@@ -25,46 +27,46 @@ export function OverviewGrid() {
   return (
     <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
       <ResourceCard
-        label="Cluster version"
-        value={isLoading ? "…" : data?.kubernetes_version ?? "unknown"}
-        description={isError ? "无法连接到后端" : data?.cluster_name ?? "未配置"}
+        label={t("overview.clusterVersion")}
+        value={isLoading ? "..." : data?.kubernetes_version ?? t("common.unknown")}
+        description={isError ? t("events.live.error") : data?.cluster_name ?? t("common.unknown")}
         trend={
           <Badge variant="success" size="sm" className={badgePresets.label}>
-            {isLoading ? "加载中" : "Active"}
+            {isLoading ? t("common.loading") : t("overview.clusterVersion.active")}
           </Badge>
         }
       />
       <ResourceCard
-        label="Nodes"
+        label={t("overview.nodes")}
         value={`${readyNodes}/${totalNodes}`}
-        description="Ready / total nodes"
+        description={t("overview.nodes.desc")}
         trend={
           <Badge variant="info-light" size="sm" className={badgePresets.label}>
-            {nodeHealthPercent}% ready
+            {nodeHealthPercent}% {t("status.ready").toLowerCase()}
           </Badge>
         }
       />
       <ResourceCard
-        label="Namespaces"
-        value={isLoading ? "…" : String(data?.namespace_count ?? 0)}
-        description="Namespaces discovered"
+        label={t("overview.namespaces")}
+        value={isLoading ? "..." : String(data?.namespace_count ?? 0)}
+        description={t("overview.namespaces.desc")}
         trend={
           <Badge variant="neutral-light" size="sm" className={badgePresets.label}>
-            {isLoading ? "加载中" : "Synced"}
+            {isLoading ? t("common.loading") : t("common.synced")}
           </Badge>
         }
       />
       <ResourceCard
-        label="Pods"
+        label={t("overview.pods")}
         value={String(totalPods)}
-        description={`${healthyPods} healthy • ${pendingPods} pending • ${failingPods} failing`}
+        description={t("overview.pods.desc", { healthy: podHealthPercent, pending: pendingPercent, failing: failingPercent })}
         trend={
           <div className="flex flex-wrap gap-1">
             <Badge variant="success-light" size="sm" className={badgePresets.metric}>
-              {podHealthPercent}% healthy
+              {podHealthPercent}% {t("status.healthy").toLowerCase()}
             </Badge>
             <Badge variant="warning-light" size="sm" className={badgePresets.metric}>
-              {pendingPercent}% pending
+              {pendingPercent}% {t("status.pending").toLowerCase()}
             </Badge>
             <Badge variant="error-light" size="sm" className={badgePresets.metric}>
               {failingPercent}% failing
@@ -75,5 +77,3 @@ export function OverviewGrid() {
     </section>
   );
 }
-
-

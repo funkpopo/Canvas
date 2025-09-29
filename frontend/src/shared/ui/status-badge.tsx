@@ -1,5 +1,6 @@
 import { Badge, badgePresets } from "@/shared/ui/badge";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/shared/i18n/i18n";
 
 interface StatusBadgeProps {
   status: "healthy" | "warning" | "critical" | "info" | "running" | "pending" | "failed" | "unknown" | "ready" | "not-ready" | "succeeded" | "terminating";
@@ -103,19 +104,23 @@ export function StatusBadge({
 }
 
 // 便捷的预设状态组件
-export function HealthyBadge({ label = "Healthy", ...props }: Omit<StatusBadgeProps, "status">) {
-  return <StatusBadge status="healthy" label={label} {...props} />;
+export function HealthyBadge({ label, ...props }: Omit<StatusBadgeProps, "status">) {
+  const { t } = useI18n();
+  return <StatusBadge status="healthy" label={label ?? t("status.healthy")} {...props} />;
 }
 
-export function RunningBadge({ label = "Running", ...props }: Omit<StatusBadgeProps, "status">) {
-  return <StatusBadge status="running" label={label} {...props} />;
+export function RunningBadge({ label, ...props }: Omit<StatusBadgeProps, "status">) {
+  const { t } = useI18n();
+  return <StatusBadge status="running" label={label ?? t("status.running")} {...props} />;
 }
 
-export function PendingBadge({ label = "Pending", ...props }: Omit<StatusBadgeProps, "status">) {
-  return <StatusBadge status="pending" label={label} {...props} />;
+export function PendingBadge({ label, ...props }: Omit<StatusBadgeProps, "status">) {
+  const { t } = useI18n();
+  return <StatusBadge status="pending" label={label ?? t("status.pending")} {...props} />;
 }
 
-export function FailedBadge({ label = "Failed", ...props }: Omit<StatusBadgeProps, "status">) {
-  return <StatusBadge status="failed" label={label} {...props} />;
+export function FailedBadge({ label, ...props }: Omit<StatusBadgeProps, "status">) {
+  const { t } = useI18n();
+  return <StatusBadge status="failed" label={label ?? t("status.failed")} {...props} />;
 }
 

@@ -7,6 +7,7 @@ import { Button } from "@/shared/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/ui/card";
 import { PageHeader } from "@/features/dashboard/layouts/page-header";
 import { StatusBadge } from "@/shared/ui/status-badge";
+import { useI18n } from "@/shared/i18n/i18n";
 import { badgePresets } from "@/shared/ui/badge";
 import {
   queryKeys,
@@ -20,6 +21,7 @@ const inputStyles =
   "w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-focus focus:bg-surface-raised transition-colors";
 
 export default function ManageClusterPage() {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const [apiServer, setApiServer] = useState("");
   const [bearerToken, setBearerToken] = useState("");
@@ -75,7 +77,7 @@ export default function ManageClusterPage() {
 
   const { clusterStatus, lastUpdated } = useMemo(() => {
     if (!config) {
-      return { clusterStatus: "Not configured", lastUpdated: "Never" };
+      return { clusterStatus: t("cm.status.notConfigured"), lastUpdated: t("cm.status.never") };
     }
 
     const hasKubeconfig = config.kubeconfig_present;
@@ -83,40 +85,40 @@ export default function ManageClusterPage() {
 
     if (hasKubeconfig || hasTokenAndEndpoint) {
       return {
-        clusterStatus: "Connected",
+        clusterStatus: t("cm.status.connected"),
         lastUpdated: new Date().toLocaleTimeString(),
       };
     }
 
-    return { clusterStatus: "Incomplete", lastUpdated: "Never" };
-  }, [config]);
+    return { clusterStatus: t("cm.status.incomplete"), lastUpdated: t("cm.status.never") };
+  }, [config, t]);
 
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="Cluster configuration"
-        title="Add or edit a cluster"
-        description="Configure authentication and connection settings for a cluster."
+        eyebrow={t("cm.header.eyebrow")}
+        title={t("cm.header.title")}
+        description={t("cm.header.desc")}
         meta={
           <>
             <div>
-              <p className={`${badgePresets.label} text-text-muted`}>Connection status</p>
+              <p className={`${badgePresets.label} text-text-muted`}>{t("cm.meta.conn")}</p>
               <p className="mt-1 text-lg font-semibold text-text-primary">{clusterStatus}</p>
-              <p className="text-xs text-text-muted">Last validated: {lastUpdated}</p>
+              <p className="text-xs text-text-muted">{t("cm.meta.lastValidated", { time: lastUpdated })}</p>
             </div>
             <div>
-              <p className={`${badgePresets.label} text-text-muted`}>Auth method</p>
+              <p className={`${badgePresets.label} text-text-muted`}>{t("cm.meta.auth")}</p>
               <p className="mt-1 text-lg font-semibold text-text-primary">
-                {config?.token_present ? "Token" : config?.kubeconfig_present ? "Kubeconfig" : "None"}
+                {config?.token_present ? t("cm.auth.token") : config?.kubeconfig_present ? t("cm.auth.kubeconfig") : t("cm.auth.none")}
               </p>
-              <p className="text-xs text-text-muted">Primary authentication strategy.</p>
+              <p className="text-xs text-text-muted">{t("cm.meta.auth.help")}</p>
             </div>
             <div>
-              <p className={`${badgePresets.label} text-text-muted`}>TLS mode</p>
+              <p className={`${badgePresets.label} text-text-muted`}>{t("cm.meta.tls")}</p>
               <p className="mt-1 text-lg font-semibold text-text-primary">
-                {config?.insecure_skip_tls_verify ? "Insecure" : "Verified"}
+                {config?.insecure_skip_tls_verify ? t("cm.tls.insecure") : t("cm.tls.verified")}
               </p>
-              <p className="text-xs text-text-muted">Certificate verification for the API server.</p>
+              <p className="text-xs text-text-muted">{t("cm.meta.tls.help")}</p>
             </div>
           </>
         }
@@ -124,46 +126,46 @@ export default function ManageClusterPage() {
 
       <Card className="border-border bg-surface text-text-primary">
         <CardHeader>
-          <CardTitle className="text-text-primary">Cluster connection</CardTitle>
-          <CardDescription>Enter details for a new or existing cluster.</CardDescription>
+          <CardTitle className="text-text-primary">{t("cm.header.eyebrow")}</CardTitle>
+          <CardDescription>{t("cm.header.desc")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="grid gap-6 xl:grid-cols-2">
             <div className="space-y-2">
               <label htmlFor="cluster-name" className="block">
-                <span className={`${badgePresets.label} text-text-muted`}>Cluster name</span>
+                <span className={`${badgePresets.label} text-text-muted`}>{t("cm.form.clusterName")}</span>
               </label>
               <input
                 id="cluster-name"
                 value={clusterName}
                 onChange={(e) => setClusterName(e.target.value)}
                 className={inputStyles}
-                placeholder="production-cluster"
+                placeholder={t("cm.form.clusterName")}
               />
             </div>
             <div className="space-y-2">
               <label htmlFor="namespace" className="block">
-                <span className={`${badgePresets.label} text-text-muted`}>Namespace (optional)</span>
+                <span className={`${badgePresets.label} text-text-muted`}>{t("cm.form.namespace")}</span>
               </label>
               <input
                 id="namespace"
                 value={namespace}
                 onChange={(e) => setNamespace(e.target.value)}
                 className={inputStyles}
-                placeholder="default"
+                placeholder={t("cm.form.placeholder.ns")}
               />
             </div>
           </div>
           <div className="space-y-2">
             <label htmlFor="context" className="block">
-              <span className={`${badgePresets.label} text-text-muted`}>Context (optional)</span>
+              <span className={`${badgePresets.label} text-text-muted`}>{t("cm.form.context")}</span>
             </label>
             <input
               id="context"
               value={context}
               onChange={(e) => setContext(e.target.value)}
               className={inputStyles}
-              placeholder="my-cluster-context"
+              placeholder={t("cm.form.placeholder.ctx")}
             />
           </div>
 
@@ -171,36 +173,36 @@ export default function ManageClusterPage() {
             <div className="space-y-6">
               <div id="credentials">
                 <p className={`${badgePresets.label} text-text-muted`}>
-                  Option 1: Connection details
+                  {t("cm.form.opt1")}
                 </p>
                 <div className="mt-4 space-y-4">
                   <div className="space-y-2">
-                    <span className={`${badgePresets.label} text-text-muted`}>API server</span>
+                    <span className={`${badgePresets.label} text-text-muted`}>{t("cm.form.apiServer")}</span>
                     <input
                       value={apiServer}
                       onChange={(e) => setApiServer(e.target.value)}
                       className={inputStyles}
-                      placeholder="https://api.my-cluster.example.com"
+                      placeholder={t("cm.form.placeholder.api")}
                     />
                   </div>
                   <div className="space-y-2">
-                    <span className={`${badgePresets.label} text-text-muted`}>Bearer token</span>
+                    <span className={`${badgePresets.label} text-text-muted`}>{t("cm.form.bearerToken")}</span>
                     <textarea
                       value={bearerToken}
                       onChange={(e) => setBearerToken(e.target.value)}
                       className={inputStyles}
                       rows={3}
-                      placeholder="eyJhbGciOiJSUzI1NiIs..."
+                      placeholder={t("cm.form.placeholder.token")}
                     />
                   </div>
                   <div className="space-y-2">
-                    <span className={`${badgePresets.label} text-text-muted`}>Certificate authority data</span>
+                    <span className={`${badgePresets.label} text-text-muted`}>{t("cm.form.caData")}</span>
                     <textarea
                       value={caCert}
                       onChange={(e) => setCaCert(e.target.value)}
                       className={inputStyles}
                       rows={4}
-                      placeholder="-----BEGIN CERTIFICATE-----"
+                      placeholder={t("cm.form.placeholder.ca")}
                     />
                   </div>
                   <label className="flex items-center gap-3 text-sm text-text-primary">
@@ -210,7 +212,7 @@ export default function ManageClusterPage() {
                       onChange={(e) => setSkipTlsVerify(e.target.checked)}
                       className="h-4 w-4 rounded border-border bg-surface"
                     />
-                    Skip TLS verification (insecure)
+                    {t("cm.form.skipTls")}
                   </label>
                 </div>
               </div>
@@ -218,16 +220,16 @@ export default function ManageClusterPage() {
             <div className="space-y-6">
               <div id="kubeconfig">
                 <p className={`${badgePresets.label} text-text-muted`}>
-                  Option 2: Upload kubeconfig
+                  {t("cm.form.opt2")}
                 </p>
                 <div className="mt-4 space-y-2">
-                  <span className={`${badgePresets.label} text-text-muted`}>Inline kubeconfig</span>
+                  <span className={`${badgePresets.label} text-text-muted`}>{t("cm.form.inlineKubeconfig")}</span>
                   <textarea
                     value={kubeconfig}
                     onChange={(e) => setKubeconfig(e.target.value)}
                     className={inputStyles}
                     rows={12}
-                    placeholder="apiVersion: v1&#10;kind: Config&#10;clusters:&#10;- cluster:&#10;    server: https://..."
+                    placeholder={t("cm.form.placeholder.kube")}
                   />
                 </div>
               </div>
@@ -249,13 +251,13 @@ export default function ManageClusterPage() {
                   queryClient.invalidateQueries({ queryKey: queryKeys.clusterOverview });
                 }}
               >
-                Test connection
+                {t("cm.actions.test")}
               </Button>
               <Button
                 onClick={() => saveMutation.mutate()}
                 disabled={saveMutation.isPending || !clusterName.trim() || (!kubeconfig.trim() && !apiServer.trim())}
               >
-                {saveMutation.isPending ? "Saving..." : "Save configuration"}
+                {saveMutation.isPending ? t("cm.actions.saving") : t("cm.actions.save")}
               </Button>
             </div>
           </div>
@@ -264,4 +266,3 @@ export default function ManageClusterPage() {
     </div>
   );
 }
-

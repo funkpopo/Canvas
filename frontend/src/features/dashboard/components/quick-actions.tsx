@@ -13,11 +13,13 @@ import { Button } from "@/shared/ui/button";
 
 import { StatusBadge } from "@/shared/ui/status-badge";
 import { queryKeys, fetchClusterConfig } from "@/lib/api";
+import { useI18n } from "@/shared/i18n/i18n";
 
 type StatusType = "ready" | "pending";
 
 export function QuickActions() {
   const router = useRouter();
+  const { t } = useI18n();
   const { data: config, isLoading } = useQuery({
     queryKey: queryKeys.clusterConfig,
     queryFn: fetchClusterConfig,
@@ -26,26 +28,26 @@ export function QuickActions() {
   const items = [
     {
       icon: Settings,
-      title: "Cluster connectivity",
-      description: config ? config.api_server ?? "API server configured" : "No cluster connection saved yet",
+      title: t("quick.connectivity.title"),
+      description: config ? (config.api_server ?? t("quick.connectivity.desc.configured")) : t("quick.connectivity.desc.none"),
       status: (config ? "ready" : "pending") as StatusType,
-      action: "Open settings",
+      action: t("quick.connectivity.action"),
       href: "/settings#connectivity",
     },
     {
       icon: ShieldCheck,
-      title: "Credentials", 
-      description: config?.token_present ? "Service account token available" : "Token missing",
+      title: t("quick.creds.title"), 
+      description: config?.token_present ? t("quick.creds.desc.present") : t("quick.creds.desc.missing"),
       status: (config?.token_present ? "ready" : "pending") as StatusType,
-      action: "Review secrets",
+      action: t("quick.creds.action"),
       href: "/settings#credentials",
     },
     {
       icon: FileText,
-      title: "Kubeconfig",
-      description: config?.kubeconfig_present ? "Inline kubeconfig stored" : "Kubeconfig not provided", 
+      title: t("quick.kubeconfig.title"),
+      description: config?.kubeconfig_present ? t("quick.kubeconfig.desc.present") : t("quick.kubeconfig.desc.missing"), 
       status: (config?.kubeconfig_present ? "ready" : "pending") as StatusType,
-      action: "Edit kubeconfig",
+      action: t("quick.kubeconfig.action"),
       href: "/settings#kubeconfig",
     },
   ];
@@ -53,8 +55,8 @@ export function QuickActions() {
   return (
     <Card className="relative overflow-hidden border-border bg-surface">
       <CardHeader>
-        <CardTitle className="text-lg text-text-primary">Quick actions</CardTitle>
-        <CardDescription>Common configuration and management tasks</CardDescription>
+        <CardTitle className="text-lg text-text-primary">{t("quick.title")}</CardTitle>
+        <CardDescription>{t("quick.desc")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {items.map((item, index) => {
@@ -76,7 +78,7 @@ export function QuickActions() {
               <div className="flex items-center gap-2">
                 <StatusBadge 
                   status={item.status === "ready" ? "ready" : "pending"} 
-                  label={item.status === "ready" ? "Ready" : "Pending"}
+                  label={item.status === "ready" ? t("status.ready") : t("status.pending")}
                   size="sm"
                 />
                 <Button

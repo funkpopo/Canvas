@@ -16,85 +16,87 @@ import { Button } from "@/shared/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
 import { StatusBadge } from "@/shared/ui/status-badge";
 import { queryKeys, fetchWorkloads } from "@/lib/api";
+import { useI18n } from "@/shared/i18n/i18n";
 
 export default function WorkloadsPage() {
+  const { t } = useI18n();
   const { data: workloads, isLoading, isError } = useQuery({
     queryKey: queryKeys.workloads,
     queryFn: fetchWorkloads,
   });
 
-  const deployments = workloads?.filter(w => w.kind === "Deployment") ?? [];
-  const statefulsets = workloads?.filter(w => w.kind === "StatefulSet") ?? [];
-  const cronjobs = workloads?.filter(w => w.kind === "CronJob") ?? [];
+  const deployments = workloads?.filter((w) => w.kind === "Deployment") ?? [];
+  const statefulsets = workloads?.filter((w) => w.kind === "StatefulSet") ?? [];
+  const cronjobs = workloads?.filter((w) => w.kind === "CronJob") ?? [];
 
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="Workload catalog"
-        title="Deeper workload intelligence"
-        description="Drill into Kubernetes objects with version history, rollout progress, and SLO alignment."
+        eyebrow={t("workloads.eyebrow")}
+        title={t("workloads.title")}
+        description={t("workloads.desc")}
         actions={
           <Button type="button" className="bg-gradient-to-r from-violet-400 to-fuchsia-500 text-slate-900 hover:from-violet-300 hover:to-fuchsia-400">
-            Create deployment
+            {t("workloads.create")}
           </Button>
         }
         meta={
           <>
             <div>
-              <p className={`${badgePresets.label} text-text-muted`}>Deployments</p>
+              <p className={`${badgePresets.label} text-text-muted`}>{t("workloads.meta.deployments")}</p>
               <p className="mt-1 text-lg font-semibold text-text-primary">{deployments.length}</p>
-              <p className="text-xs text-text-muted">Active deployment workloads.</p>
+              <p className="text-xs text-text-muted">{t("workloads.meta.deployments.desc")}</p>
             </div>
             <div>
-              <p className={`${badgePresets.label} text-text-muted`}>StatefulSets</p>
+              <p className={`${badgePresets.label} text-text-muted`}>{t("workloads.meta.statefulsets")}</p>
               <p className="mt-1 text-lg font-semibold text-text-primary">{statefulsets.length}</p>
-              <p className="text-xs text-text-muted">Stateful application workloads.</p>
+              <p className="text-xs text-text-muted">{t("workloads.meta.statefulsets.desc")}</p>
             </div>
             <div>
-              <p className={`${badgePresets.label} text-text-muted`}>CronJobs</p>
+              <p className={`${badgePresets.label} text-text-muted`}>{t("workloads.meta.cronjobs")}</p>
               <p className="mt-1 text-lg font-semibold text-text-primary">{cronjobs.length}</p>
-              <p className="text-xs text-text-muted">Scheduled job workloads.</p>
+              <p className="text-xs text-text-muted">{t("workloads.meta.cronjobs.desc")}</p>
             </div>
           </>
         }
       >
         <Badge variant="info-light" size="sm" className="border-sky-400/40">
-          GitOps sync & drift detection ready
+          {t("workloads.badge.gitops")}
         </Badge>
       </PageHeader>
 
       <Tabs defaultValue="deployments" className="w-full">
         <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="deployments">Deployments</TabsTrigger>
-          <TabsTrigger value="statefulsets">StatefulSets</TabsTrigger>
-          <TabsTrigger value="cronjobs">CronJobs</TabsTrigger>
+          <TabsTrigger value="deployments">{t("workloads.tab.deployments")}</TabsTrigger>
+          <TabsTrigger value="statefulsets">{t("workloads.tab.statefulsets")}</TabsTrigger>
+          <TabsTrigger value="cronjobs">{t("workloads.tab.cronjobs")}</TabsTrigger>
         </TabsList>
-        
+
         <TabsContent value="deployments" className="space-y-4">
           {isLoading ? (
             <Card>
               <CardContent className="flex items-center justify-center py-8">
-                <p className="text-text-muted">Loading deployments...</p>
+                <p className="text-text-muted">{t("workloads.loading.deployments")}</p>
               </CardContent>
             </Card>
           ) : isError ? (
             <Card>
               <CardContent className="flex items-center justify-center py-8">
-                <p className="text-text-muted">Failed to load workloads. Please check your cluster connection.</p>
+                <p className="text-text-muted">{t("workloads.error.load")}</p>
               </CardContent>
             </Card>
           ) : deployments.length === 0 ? (
             <Card>
               <CardContent className="flex items-center justify-center py-8">
                 <div className="text-center space-y-2">
-                  <p className="text-text-muted">No deployments found</p>
-                  <p className="text-xs text-text-muted">Create a deployment to get started</p>
+                  <p className="text-text-muted">{t("workloads.empty.deployments")}</p>
+                  <p className="text-xs text-text-muted">{t("workloads.empty.deployments.hint")}</p>
                 </div>
               </CardContent>
             </Card>
           ) : (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {deployments.map((workload, index) => (
+              {deployments.map((workload) => (
                 <Link
                   key={`${workload.namespace}-${workload.name}`}
                   href={`/workloads/deployments/${encodeURIComponent(workload.namespace)}/${encodeURIComponent(workload.name)}`}
@@ -109,11 +111,11 @@ export default function WorkloadsPage() {
                           </div>
                           <div>
                             <CardTitle className="text-base text-text-primary">{workload.name}</CardTitle>
-                            <CardDescription>{workload.namespace} namespace</CardDescription>
+                            <CardDescription>{t("workloads.card.namespace", { ns: workload.namespace })}</CardDescription>
                           </div>
                         </div>
-                        <StatusBadge 
-                          status={workload.status === "Healthy" ? "healthy" : "warning"} 
+                        <StatusBadge
+                          status={workload.status === "Healthy" ? "healthy" : "warning"}
                           label={workload.status}
                           size="sm"
                         />
@@ -121,22 +123,16 @@ export default function WorkloadsPage() {
                     </CardHeader>
                     <CardContent className="space-y-3">
                       <div className="flex items-center justify-between text-sm">
-                        <span className="text-text-muted">Replicas</span>
+                        <span className="text-text-muted">{t("workloads.field.replicas")}</span>
                         <Badge variant="neutral-light" size="sm" className={badgePresets.metric}>
                           {workload.replicas_ready ?? 0}/{workload.replicas_desired ?? 0}
                         </Badge>
                       </div>
                       <div className="flex items-center justify-between text-sm">
-                        <span className="text-text-muted">Version</span>
+                        <span className="text-text-muted">{t("workloads.field.version")}</span>
                         <Badge variant="neutral-light" size="sm" className={badgePresets.metric}>
-                          {workload.version || 'N/A'}
+                          {workload.version || "N/A"}
                         </Badge>
-                      </div>
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-text-muted">Updated</span>
-                        <span className="text-xs text-text-muted">
-                          {workload.updated_at ? new Date(workload.updated_at).toLocaleString() : 'Unknown'}
-                        </span>
                       </div>
                     </CardContent>
                   </Card>
@@ -150,15 +146,15 @@ export default function WorkloadsPage() {
           {isLoading ? (
             <Card>
               <CardContent className="flex items-center justify-center py-8">
-                <p className="text-text-muted">Loading StatefulSets...</p>
+                <p className="text-text-muted">{t("common.loading")}</p>
               </CardContent>
             </Card>
           ) : statefulsets.length === 0 ? (
             <Card>
               <CardContent className="flex items-center justify-center py-8">
                 <div className="text-center space-y-2">
-                  <p className="text-text-muted">No StatefulSets found</p>
-                  <p className="text-xs text-text-muted">StatefulSets provide persistent storage for applications</p>
+                  <p className="text-text-muted">{t("workloads.empty.statefulsets")}</p>
+                  <p className="text-xs text-text-muted">{t("workloads.empty.statefulsets.hint")}</p>
                 </div>
               </CardContent>
             </Card>
@@ -174,11 +170,11 @@ export default function WorkloadsPage() {
                         </div>
                         <div>
                           <CardTitle className="text-base text-text-primary">{workload.name}</CardTitle>
-                          <CardDescription>{workload.namespace} namespace</CardDescription>
+                          <CardDescription>{t("workloads.card.namespace", { ns: workload.namespace })}</CardDescription>
                         </div>
                       </div>
-                      <StatusBadge 
-                        status={workload.status === "Healthy" ? "healthy" : "warning"} 
+                      <StatusBadge
+                        status={workload.status === "Healthy" ? "healthy" : "warning"}
                         label={workload.status}
                         size="sm"
                       />
@@ -186,15 +182,15 @@ export default function WorkloadsPage() {
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <div className="flex items-center justify-between text-sm">
-                      <span className="text-text-muted">Replicas</span>
+                      <span className="text-text-muted">{t("workloads.field.replicas")}</span>
                       <Badge variant="neutral-light" size="sm" className={badgePresets.metric}>
                         {workload.replicas_ready ?? 0}/{workload.replicas_desired ?? 0}
                       </Badge>
                     </div>
                     <div className="flex items-center justify-between text-sm">
-                      <span className="text-text-muted">Version</span>
+                      <span className="text-text-muted">{t("workloads.field.version")}</span>
                       <Badge variant="neutral-light" size="sm" className={badgePresets.metric}>
-                        {workload.version || 'N/A'}
+                        {workload.version || "N/A"}
                       </Badge>
                     </div>
                   </CardContent>
@@ -208,15 +204,15 @@ export default function WorkloadsPage() {
           {isLoading ? (
             <Card>
               <CardContent className="flex items-center justify-center py-8">
-                <p className="text-text-muted">Loading CronJobs...</p>
+                <p className="text-text-muted">{t("workloads.loading.cronjobs")}</p>
               </CardContent>
             </Card>
           ) : cronjobs.length === 0 ? (
             <Card>
               <CardContent className="flex items-center justify-center py-8">
                 <div className="text-center space-y-2">
-                  <p className="text-text-muted">No CronJobs found</p>
-                  <p className="text-xs text-text-muted">CronJobs run tasks on a scheduled basis</p>
+                  <p className="text-text-muted">{t("workloads.empty.cronjobs")}</p>
+                  <p className="text-xs text-text-muted">{t("workloads.empty.cronjobs.hint")}</p>
                 </div>
               </CardContent>
             </Card>
@@ -232,11 +228,11 @@ export default function WorkloadsPage() {
                         </div>
                         <div>
                           <CardTitle className="text-base text-text-primary">{workload.name}</CardTitle>
-                          <CardDescription>{workload.namespace} namespace</CardDescription>
+                          <CardDescription>{t("workloads.card.namespace", { ns: workload.namespace })}</CardDescription>
                         </div>
                       </div>
-                      <StatusBadge 
-                        status={workload.status === "Healthy" ? "healthy" : "warning"} 
+                      <StatusBadge
+                        status={workload.status === "Healthy" ? "healthy" : "warning"}
                         label={workload.status}
                         size="sm"
                       />
@@ -244,9 +240,9 @@ export default function WorkloadsPage() {
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <div className="flex items-center justify-between text-sm">
-                      <span className="text-text-muted">Last run</span>
+                      <span className="text-text-muted">{t("workloads.field.lastRun")}</span>
                       <span className="text-xs text-text-muted">
-                        {workload.updated_at ? new Date(workload.updated_at).toLocaleString() : 'Never'}
+                        {workload.updated_at ? new Date(workload.updated_at).toLocaleString() : t("common.never")}
                       </span>
                     </div>
                   </CardContent>
@@ -259,4 +255,3 @@ export default function WorkloadsPage() {
     </div>
   );
 }
-

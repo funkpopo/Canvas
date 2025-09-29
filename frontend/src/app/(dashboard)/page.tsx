@@ -1,6 +1,5 @@
 "use client";
 
-
 import { useQuery } from "@tanstack/react-query";
 
 import { ActivityTimeline } from "@/features/dashboard/components/activity-timeline";
@@ -14,8 +13,10 @@ import { PageHeader } from "@/features/dashboard/layouts/page-header";
 import { Badge, badgePresets } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { fetchClusterOverview, fetchWorkloads, queryKeys } from "@/lib/api";
+import { useI18n } from "@/shared/i18n/i18n";
 
 export default function DashboardPage() {
+  const { t } = useI18n();
   const { data: overview } = useQuery({
     queryKey: queryKeys.clusterOverview,
     queryFn: fetchClusterOverview,
@@ -36,44 +37,40 @@ export default function DashboardPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        title="Kubernetes health & workload intelligence"
-        description="Real-time cluster monitoring designed for application teams and SRE workflows."
+        title={t("dashboard.title")}
+        description={t("dashboard.description")}
         actions={
           <div className="flex items-center gap-3">
-            <Button variant="outline">
-              Configure alerts
-            </Button>
-            <Button>
-              Add integration
-            </Button>
+            <Button variant="outline">{t("dashboard.actions.configureAlerts")}</Button>
+            <Button>{t("dashboard.actions.addIntegration")}</Button>
           </div>
         }
         meta={
           <>
             <div>
-              <p className={`${badgePresets.label} text-text-muted`}>Node readiness</p>
+              <p className={`${badgePresets.label} text-text-muted`}>{t("dashboard.meta.nodeReadiness")}</p>
               <p className="mt-1 text-lg font-semibold text-text-primary">{readyNodes} / {totalNodes}</p>
-              <p className="text-xs text-text-muted">Ready nodes reporting from the control plane.</p>
+              <p className="text-xs text-text-muted">{t("dashboard.meta.nodeReadiness.help")}</p>
             </div>
             <div>
-              <p className={`${badgePresets.label} text-text-muted`}>Namespaces discovered</p>
+              <p className={`${badgePresets.label} text-text-muted`}>{t("dashboard.meta.namespaces")}</p>
               <p className="mt-1 text-lg font-semibold text-text-primary">{namespaceCount}</p>
-              <p className="text-xs text-text-muted">Live tally across the active cluster.</p>
+              <p className="text-xs text-text-muted">{t("dashboard.meta.namespaces.help")}</p>
             </div>
             <div>
-              <p className={`${badgePresets.label} text-text-muted`}>Pod health</p>
+              <p className={`${badgePresets.label} text-text-muted`}>{t("dashboard.meta.podHealth")}</p>
               <p className="mt-1 text-lg font-semibold text-text-primary">{healthyPods} / {totalPods}</p>
-              <p className="text-xs text-text-muted">Healthy pods sampled this minute.</p>
+              <p className="text-xs text-text-muted">{t("dashboard.meta.podHealth.help")}</p>
             </div>
           </>
         }
       >
         <div className="flex flex-wrap items-center gap-3">
           <Badge variant="success-light" size="sm">
-            {healthyWorkloads}/{totalWorkloads} workloads healthy
+            {t("dashboard.badge.workloadsHealthy", { healthy: healthyWorkloads, total: totalWorkloads })}
           </Badge>
           <Badge variant="info-light" size="sm">
-            {overview?.cluster_name ?? "Unknown cluster"}
+            {overview?.cluster_name ?? t("common.unknown")}
           </Badge>
         </div>
       </PageHeader>

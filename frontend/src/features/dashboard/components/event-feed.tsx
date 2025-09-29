@@ -11,6 +11,7 @@ import {
 import { Badge, badgePresets } from "@/shared/ui/badge";
 import { ScrollArea } from "@/shared/ui/scroll-area";
 import { queryKeys, fetchEvents } from "@/lib/api";
+import { useI18n } from "@/shared/i18n/i18n";
 
 const typeVariants = {
   Normal: "info-light" as const,
@@ -24,6 +25,7 @@ export interface EventFeedFilters {
 }
 
 export function EventFeed({ types = [], resources = [] }: EventFeedFilters) {
+  const { t } = useI18n();
   const { data: events, isLoading, isError } = useQuery({
     queryKey: queryKeys.events,
     queryFn: fetchEvents,
@@ -54,17 +56,17 @@ export function EventFeed({ types = [], resources = [] }: EventFeedFilters) {
   return (
     <Card className="relative overflow-hidden border-border bg-surface">
       <CardHeader>
-        <CardTitle className="text-lg text-text-primary">Live events</CardTitle>
-        <CardDescription>Real-time cluster events as they happen</CardDescription>
+        <CardTitle className="text-lg text-text-primary">{t("events.live.title")}</CardTitle>
+        <CardDescription>{t("events.live.desc")}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col">
         <ScrollArea className="pr-4 max-h-[calc(100vh-280px)] md:max-h-[calc(100vh-260px)] lg:max-h-[calc(100vh-240px)]">
           {isLoading ? (
-            <p className="text-sm text-text-muted">Loading events…</p>
+            <p className="text-sm text-text-muted">{t("events.live.loading")}</p>
           ) : isError ? (
-            <p className="text-sm text-text-muted">Unable to load events.</p>
+            <p className="text-sm text-text-muted">{t("events.live.error")}</p>
           ) : recentEvents.length === 0 ? (
-            <p className="text-sm text-text-muted">No recent events reported.</p>
+            <p className="text-sm text-text-muted">{t("events.live.empty")}</p>
           ) : (
             <div className="space-y-4">
               {recentEvents.map((event, index) => (
@@ -90,7 +92,7 @@ export function EventFeed({ types = [], resources = [] }: EventFeedFilters) {
                     </div>
                     <div className="text-right">
                       <p className="text-xs text-text-muted">
-                        {event.timestamp ? new Date(event.timestamp).toLocaleTimeString() : 'Unknown time'}
+                        {event.timestamp ? new Date(event.timestamp).toLocaleTimeString() : t("events.live.unknownTime")}
                       </p>
                       <Badge variant="outline" size="sm" className="mt-1">
                         {event.namespace}

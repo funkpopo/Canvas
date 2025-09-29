@@ -13,20 +13,22 @@ import {
 import { Badge, badgePresets } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { EventFeed } from "@/features/dashboard/components/event-feed";
+import { useI18n } from "@/shared/i18n/i18n";
 
 export default function EventsPage() {
+  const { t } = useI18n();
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   const [selectedResources, setSelectedResources] = useState<string[]>([]);
 
   const typeOptions = [
-    { label: "Warning", value: "Warning", variant: "warning-light" as const },
-    { label: "Error", value: "Error", variant: "error-light" as const },
-    { label: "Normal", value: "Normal", variant: "info-light" as const },
+    { label: t("events.type.warning"), value: "Warning", variant: "warning-light" as const },
+    { label: t("events.type.error"), value: "Error", variant: "error-light" as const },
+    { label: t("events.type.normal"), value: "Normal", variant: "info-light" as const },
   ];
   const resourceOptions = [
-    { label: "Pods", value: "pod" },
-    { label: "Services", value: "service" },
-    { label: "Deployments", value: "deployment" },
+    { label: t("events.resource.pods"), value: "pod" },
+    { label: t("events.resource.services"), value: "service" },
+    { label: t("events.resource.deployments"), value: "deployment" },
   ];
 
   const toggleType = (v: string) => {
@@ -42,37 +44,37 @@ export default function EventsPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="Event stream"
-        title="Observe signals in real time"
-        description="Filter high-volume Kubernetes events into actionable intelligence aligned with your runbooks."
+        eyebrow={t("events.eyebrow")}
+        title={t("events.title")}
+        description={t("events.desc")}
         actions={
           <div className="flex items-center gap-3">
             <Button type="button" variant="outline">
               <Filter className="h-4 w-4" aria-hidden />
-              Advanced filters
+              {t("events.actions.filters")}
             </Button>
             <Button type="button" variant="default">
               <Rss className="h-4 w-4" aria-hidden />
-              Subscribe stream
+              {t("events.actions.subscribe")}
             </Button>
           </div>
         }
         meta={
           <>
             <div>
-              <p className={`${badgePresets.label} text-text-muted`}>Events/min</p>
+              <p className={`${badgePresets.label} text-text-muted`}>{t("events.meta.rate")}</p>
               <p className="mt-1 text-lg font-semibold text-text-primary">142</p>
-              <p className="text-xs text-text-muted">Smoothed over the last 5 minutes.</p>
+              <p className="text-xs text-text-muted">{t("events.meta.rate.help")}</p>
             </div>
             <div>
-              <p className={`${badgePresets.label} text-text-muted`}>Warning events</p>
+              <p className={`${badgePresets.label} text-text-muted`}>{t("events.meta.warning")}</p>
               <p className="mt-1 text-lg font-semibold text-text-primary">23</p>
-              <p className="text-xs text-text-muted">Elevated conditions requiring review.</p>
+              <p className="text-xs text-text-muted">{t("events.meta.warning.help")}</p>
             </div>
             <div>
-              <p className={`${badgePresets.label} text-text-muted`}>Response time</p>
+              <p className={`${badgePresets.label} text-text-muted`}>{t("events.meta.rtt")}</p>
               <p className="mt-1 text-lg font-semibold text-text-primary">1.24s</p>
-              <p className="text-xs text-text-muted">Average event processing delay.</p>
+              <p className="text-xs text-text-muted">{t("events.meta.rtt.help")}</p>
             </div>
           </>
         }
@@ -84,35 +86,35 @@ export default function EventsPage() {
         </div>
         <div>
           <Card>
-            <CardHeader>
-              <CardTitle className="text-lg text-text-primary">Event filters</CardTitle>
-              <CardDescription>Apply filters to reduce noise and focus on critical events.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <p className={`mb-2 ${badgePresets.label} text-text-muted`}>Event types</p>
-                <div className="flex flex-wrap gap-2">
-                  {typeOptions.map((t) => {
-                    const active = selectedTypes.includes(t.value);
+              <CardHeader>
+              <CardTitle className="text-lg text-text-primary">{t("events.filters.title")}</CardTitle>
+              <CardDescription>{t("events.filters.desc")}</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                <p className={`mb-2 ${badgePresets.label} text-text-muted`}>{t("events.filters.types")}</p>
+                  <div className="flex flex-wrap gap-2">
+                  {typeOptions.map((opt) => {
+                    const active = selectedTypes.includes(opt.value);
                     return (
                       <Badge
-                        key={t.value}
-                        variant={t.variant}
+                        key={opt.value}
+                        variant={opt.variant}
                         size="sm"
                         role="button"
                         aria-pressed={active}
-                        onClick={() => toggleType(t.value)}
+                        onClick={() => toggleType(opt.value)}
                         className={`cursor-pointer select-none ${active ? "ring-1 ring-accent" : "opacity-70 hover:opacity-100"}`}
-                        title={`Toggle ${t.label}`}
+                        title={t("events.filters.toggle", { label: opt.label })}
                       >
-                        {t.label}
+                        {opt.label}
                       </Badge>
                     );
                   })}
                 </div>
               </div>
               <div>
-                <p className={`mb-2 ${badgePresets.label} text-text-muted`}>Resources</p>
+                <p className={`mb-2 ${badgePresets.label} text-text-muted`}>{t("events.filters.resources")}</p>
                 <div className="flex flex-wrap gap-2">
                   {resourceOptions.map((r) => {
                     const active = selectedResources.includes(r.value);
@@ -125,7 +127,7 @@ export default function EventsPage() {
                         aria-pressed={active}
                         onClick={() => toggleResource(r.value)}
                         className={`cursor-pointer select-none ${active ? "ring-1 ring-accent" : "opacity-70 hover:opacity-100"}`}
-                        title={`Toggle ${r.label}`}
+                        title={t("events.filters.toggle", { label: r.label })}
                       >
                         {r.label}
                       </Badge>

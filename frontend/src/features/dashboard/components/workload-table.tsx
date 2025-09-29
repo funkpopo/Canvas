@@ -11,8 +11,10 @@ import { Badge, badgePresets } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { StatusBadge } from "@/shared/ui/status-badge";
 import { queryKeys, fetchWorkloads } from "@/lib/api";
+import { useI18n } from "@/shared/i18n/i18n";
 
 export function WorkloadTable() {
+  const { t } = useI18n();
   const { data: workloads, isLoading, isError } = useQuery({
     queryKey: queryKeys.workloads,
     queryFn: fetchWorkloads,
@@ -23,8 +25,8 @@ export function WorkloadTable() {
   return (
     <Card className="relative overflow-hidden border-border bg-surface">
       <CardHeader>
-        <CardTitle className="text-lg text-text-primary">Workload status</CardTitle>
-        <CardDescription>Running deployments, StatefulSets, and DaemonSets</CardDescription>
+        <CardTitle className="text-lg text-text-primary">{t("workloadTable.title")}</CardTitle>
+        <CardDescription>{t("workloadTable.desc")}</CardDescription>
       </CardHeader>
       <CardContent className="overflow-x-auto">
         <Button
@@ -32,37 +34,37 @@ export function WorkloadTable() {
           size="sm"
           className={`mb-4 ${badgePresets.label}`}
         >
-          View all workloads
+          {t("workloadTable.viewAll")}
         </Button>
         <table className="w-full text-sm">
           <thead className={`${badgePresets.label} text-text-muted`}>
             <tr className="border-b border-border">
-              <th className="px-4 py-3 text-left">Name</th>
-              <th className="px-4 py-3 text-left">Namespace</th>
-              <th className="px-4 py-3 text-left">Kind</th>
-              <th className="px-4 py-3 text-left">Version</th>
-              <th className="px-4 py-3 text-left">Status</th>
-              <th className="px-4 py-3 text-left">Replicas</th>
-              <th className="px-4 py-3 text-left">Updated</th>
+              <th className="px-4 py-3 text-left">{t("workloadTable.th.name")}</th>
+              <th className="px-4 py-3 text-left">{t("workloadTable.th.namespace")}</th>
+              <th className="px-4 py-3 text-left">{t("workloadTable.th.kind")}</th>
+              <th className="px-4 py-3 text-left">{t("workloadTable.th.version")}</th>
+              <th className="px-4 py-3 text-left">{t("workloadTable.th.status")}</th>
+              <th className="px-4 py-3 text-left">{t("workloadTable.th.replicas")}</th>
+              <th className="px-4 py-3 text-left">{t("workloadTable.th.updated")}</th>
             </tr>
           </thead>
           <tbody>
             {isLoading ? (
               <tr>
                 <td colSpan={7} className="px-4 py-6 text-center text-sm text-text-muted">
-                  Loading workloads…
+                  {t("workloadTable.loading")}
                 </td>
               </tr>
             ) : isError ? (
               <tr>
                 <td colSpan={7} className="px-4 py-6 text-center text-sm text-text-muted">
-                  Unable to load workloads from the cluster.
+                  {t("workloadTable.error")}
                 </td>
               </tr>
             ) : limitedWorkloads.length === 0 ? (
               <tr>
                 <td colSpan={7} className="px-4 py-6 text-center text-sm text-text-muted">
-                  No workloads found.
+                  {t("workloadTable.empty")}
                 </td>
               </tr>
             ) : (
@@ -73,7 +75,7 @@ export function WorkloadTable() {
                   <td className="whitespace-nowrap px-4 py-3">{workload.kind}</td>
                   <td className="whitespace-nowrap px-4 py-3">
                     <Badge variant="neutral-light" size="sm" className={badgePresets.metric}>
-                      {workload.version || 'N/A'}
+                      {workload.version || t("workloadTable.na")}
                     </Badge>
                   </td>
                   <td className="whitespace-nowrap px-4 py-3">
@@ -89,7 +91,7 @@ export function WorkloadTable() {
                     </Badge>
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-xs text-text-muted">
-                    {workload.updated_at ? new Date(workload.updated_at).toLocaleString() : 'N/A'}
+                    {workload.updated_at ? new Date(workload.updated_at).toLocaleString() : t("workloadTable.na")}
                   </td>
                 </tr>
               ))

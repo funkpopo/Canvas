@@ -7,8 +7,10 @@ import {
   CardTitle,
 } from "@/shared/ui/card";
 import { Badge, badgePresets } from "@/shared/ui/badge";
+import { useI18n } from "@/shared/i18n/i18n";
 
 export default function NodesPage() {
+  const { t } = useI18n();
   // TODO: Replace with actual API call when nodes endpoint is available
   const totalNodes = 0;
   const readyNodes = 0;
@@ -17,25 +19,25 @@ export default function NodesPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="Node management"
-        title="Scale infrastructure dynamically"
-        description="Monitor node pools, track resource utilization, and automate capacity planning across availability zones."
+        eyebrow={t("nodes.eyebrow")}
+        title={t("nodes.title")}
+        description={t("nodes.desc")}
         meta={
           <>
             <div>
-              <p className={`${badgePresets.label} text-text-muted`}>Ready nodes</p>
+              <p className={`${badgePresets.label} text-text-muted`}>{t("nodes.meta.ready")}</p>
               <p className="mt-1 text-lg font-semibold text-text-primary">{readyNodes}</p>
-              <p className="text-xs text-text-muted">Active worker nodes across all pools.</p>
+              <p className="text-xs text-text-muted">{t("nodes.meta.ready.help")}</p>
             </div>
             <div>
-              <p className={`${badgePresets.label} text-text-muted`}>Spot instances</p>
+              <p className={`${badgePresets.label} text-text-muted`}>{t("nodes.meta.spot")}</p>
               <p className="mt-1 text-lg font-semibold text-text-primary">{spotInstances}</p>
-              <p className="text-xs text-text-muted">Cost-optimized capacity for batch workloads.</p>
+              <p className="text-xs text-text-muted">{t("nodes.meta.spot.help")}</p>
             </div>
             <div>
-              <p className={`${badgePresets.label} text-text-muted`}>Total nodes</p>
+              <p className={`${badgePresets.label} text-text-muted`}>{t("nodes.meta.total")}</p>
               <p className="mt-1 text-lg font-semibold text-text-primary">{totalNodes}</p>
-              <p className="text-xs text-text-muted">All nodes in the cluster.</p>
+              <p className="text-xs text-text-muted">{t("nodes.meta.total.help")}</p>
             </div>
           </>
         }
@@ -45,8 +47,8 @@ export default function NodesPage() {
         <Card>
           <CardContent className="flex items-center justify-center py-8">
             <div className="text-center space-y-2">
-              <p className="text-text-muted">No node data available</p>
-              <p className="text-xs text-text-muted">Connect to a cluster to view nodes</p>
+              <p className="text-text-muted">{t("nodes.empty.title")}</p>
+              <p className="text-xs text-text-muted">{t("nodes.empty.desc")}</p>
             </div>
           </CardContent>
         </Card>

@@ -20,8 +20,10 @@ import {
 } from "@/lib/api";
 import { Button } from "@/shared/ui/button";
 import { cn, formatBytes, formatMillicores } from "@/lib/utils";
+import { useI18n } from "@/shared/i18n/i18n";
 
 export function ClusterCapacity() {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const { data: overview, isLoading: isLoadingOverview } = useQuery({
     queryKey: queryKeys.clusterOverview,
@@ -62,25 +64,27 @@ export function ClusterCapacity() {
 
   const metrics = [
     {
-      label: "CPU",
+      label: t("capacity.metric.cpu"),
       icon: Cpu,
       value: cpuPercent,
       usage: capacity?.has_metrics
-        ? `${formatMillicores(capacity?.cpu_used_mcores ?? 0)} of ${formatMillicores(
-            capacity?.cpu_total_mcores ?? 0,
-          )}`
-        : "Install metrics-server to view usage",
+        ? t("common.of", {
+            used: formatMillicores(capacity?.cpu_used_mcores ?? 0),
+            total: formatMillicores(capacity?.cpu_total_mcores ?? 0),
+          })
+        : t("capacity.metric.install"),
       color: "bg-chart-1",
     },
     {
-      label: "Memory",
+      label: t("capacity.metric.memory"),
       icon: MemoryStick,
       value: memPercent,
       usage: capacity?.has_metrics
-        ? `${formatBytes(capacity?.memory_used_bytes ?? 0)} of ${formatBytes(
-            capacity?.memory_total_bytes ?? 0,
-          )}`
-        : "Install metrics-server to view usage",
+        ? t("common.of", {
+            used: formatBytes(capacity?.memory_used_bytes ?? 0),
+            total: formatBytes(capacity?.memory_total_bytes ?? 0),
+          })
+        : t("capacity.metric.install"),
       color: "bg-chart-2",
     },
   ];
@@ -88,13 +92,13 @@ export function ClusterCapacity() {
   return (
     <Card className="relative overflow-hidden border-border bg-surface">
       <CardHeader>
-        <CardTitle className="text-lg text-text-primary">Cluster capacity</CardTitle>
-        <CardDescription>Resource utilization and allocation across nodes</CardDescription>
+        <CardTitle className="text-lg text-text-primary">{t("capacity.title")}</CardTitle>
+        <CardDescription>{t("capacity.desc")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         {isLoadingOverview || isLoadingCapacity ? (
           <div className="space-y-4">
-            <p className="text-sm text-text-muted">Loading capacity metrics...</p>
+            <p className="text-sm text-text-muted">{t("capacity.loading")}</p>
           </div>
         ) : (
           metrics.map((metric) => {
@@ -138,16 +142,16 @@ export function ClusterCapacity() {
                   <Users className="h-4 w-4" aria-hidden />
                 </span>
                 <div>
-                  <p className="text-sm font-medium text-text-primary">Pods</p>
-                  <p className="text-xs text-text-muted">{totalPods} total pods</p>
+                  <p className="text-sm font-medium text-text-primary">{t("capacity.pods")}</p>
+                  <p className="text-xs text-text-muted">{t("capacity.pods.total", { count: totalPods })}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
                 <Badge variant="success-light" size="sm" className={badgePresets.metric}>
-                  {healthyPods} healthy
+                  {t("capacity.pods.healthy", { count: healthyPods })}
                 </Badge>
                 <Badge variant="error-light" size="sm" className={badgePresets.metric}>
-                  {unhealthyPods} unhealthy
+                  {t("capacity.pods.unhealthy", { count: unhealthyPods })}
                 </Badge>
               </div>
             </div>
@@ -163,16 +167,24 @@ export function ClusterCapacity() {
                   <HardDrive className="h-4 w-4" aria-hidden />
                 </span>
                 <div>
-                  <p className="text-sm font-medium text-text-primary">Volumes</p>
-                  <p className="text-xs text-text-muted">PVC/PV across all namespaces</p>
+                  <p className="text-sm font-medium text-text-primary">{t("capacity.volumes")}</p>
+                  <p className="text-xs text-text-muted">{t("capacity.volumes.desc")}</p>
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="neutral-light" size="sm" className={badgePresets.metric}>
-                  PVC {storage.pvc_total} (Bound {storage.pvc_by_status?.["Bound"] ?? 0}, Pending {storage.pvc_by_status?.["Pending"] ?? 0})
+                  {t("capacity.volumes.pvc", {
+                    total: storage.pvc_total,
+                    bound: storage.pvc_by_status?.["Bound"] ?? 0,
+                    pending: storage.pvc_by_status?.["Pending"] ?? 0,
+                  })}
                 </Badge>
                 <Badge variant="info-light" size="sm" className={badgePresets.metric}>
-                  PV {storage.pv_total} (Available {storage.pv_by_phase?.["Available"] ?? 0}, Bound {storage.pv_by_phase?.["Bound"] ?? 0})
+                  {t("capacity.volumes.pv", {
+                    total: storage.pv_total,
+                    available: storage.pv_by_phase?.["Available"] ?? 0,
+                    bound: storage.pv_by_phase?.["Bound"] ?? 0,
+                  })}
                 </Badge>
               </div>
             </div>
@@ -189,10 +201,8 @@ export function ClusterCapacity() {
                 <AlertTriangle className="h-3 w-3" aria-hidden />
               </span>
               <div>
-                <p className="font-medium text-text-primary">metrics-server not detected</p>
-                <p className="text-text-muted">
-                  Install metrics-server to enable live CPU/Memory usage.
-                </p>
+                <p className="font-medium text-text-primary">{t("capacity.ms.missing")}</p>
+                <p className="text-text-muted">{t("capacity.ms.cta")}</p>
                 {metricsStatus?.message && (
                   <p className="mt-1 text-text-muted">{metricsStatus.message}</p>
                 )}
@@ -204,7 +214,7 @@ export function ClusterCapacity() {
                 disabled={installMutation.isPending}
                 onClick={() => installMutation.mutate(true)}
               >
-                {installMutation.isPending ? "Installing..." : "Install metrics-server"}
+                {installMutation.isPending ? t("capacity.ms.installing") : t("capacity.ms.install")}
               </Button>
             </div>
           </div>

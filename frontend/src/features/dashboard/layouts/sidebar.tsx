@@ -6,11 +6,13 @@ import Link from "next/link";
 import { Settings, Zap, Globe, ChevronsLeft, ChevronsRight, Server, FolderTree, Package, Rss } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/shared/i18n/i18n";
 import { badgePresets } from "@/shared/ui/badge";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchClusterConfig, listClusterConfigs, queryKeys, selectActiveClusterByName } from "@/lib/api";
 
 export function Sidebar() {
+  const { t } = useI18n();
   const pathname = usePathname();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -48,12 +50,12 @@ export function Sidebar() {
   // Only keep top-level entries that are not cluster-scoped
   const navItems = useMemo(
     () => [
-      { name: "Clusters", href: "/clusters", icon: Globe },
+      { name: t("sidebar.clusters"), href: "/clusters", icon: Globe },
       // Dashboard removed from sidebar; selecting a cluster navigates to "/"
       // Cluster-scoped sections (Nodes/Namespaces/Workloads/Events) are shown under each Cluster
-      { name: "Settings", href: "/settings", icon: Settings },
+      { name: t("sidebar.settings"), href: "/settings", icon: Settings },
     ],
-    [],
+    [t],
   );
 
   // Helper to determine active state for links (exact or nested paths)
@@ -84,7 +86,7 @@ export function Sidebar() {
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
               <Zap className="h-4 w-4" />
             </div>
-            {!collapsed && <span>Canvas</span>}
+            {!collapsed && <span>{t("sidebar.brand")}</span>}
           </Link>
         </div>
 
@@ -101,7 +103,7 @@ export function Sidebar() {
               )}
             >
               <Globe className="h-4 w-4" />
-              {!collapsed && <span>Clusters</span>}
+              {!collapsed && <span>{t("sidebar.clusters")}</span>}
             </Link>
             {clustersOpen && !collapsed && (
               <div className="mt-1 space-y-1 pl-9">
@@ -135,10 +137,10 @@ export function Sidebar() {
                                   ? "bg-accent text-accent-foreground"
                                   : "text-text-muted hover:bg-muted hover:text-text-primary",
                               )}
-                              title="Nodes"
+                              title={t("sidebar.nodes")}
                             >
                               <Server className="h-4 w-4" />
-                              <span>Nodes</span>
+                              <span>{t("sidebar.nodes")}</span>
                             </Link>
                             <Link
                               href="/namespaces"
@@ -148,10 +150,10 @@ export function Sidebar() {
                                   ? "bg-accent text-accent-foreground"
                                   : "text-text-muted hover:bg-muted hover:text-text-primary",
                               )}
-                              title="Namespaces"
+                              title={t("sidebar.namespaces")}
                             >
                               <FolderTree className="h-4 w-4" />
-                              <span>Namespaces</span>
+                              <span>{t("sidebar.namespaces")}</span>
                             </Link>
                             <Link
                               href="/workloads"
@@ -161,10 +163,10 @@ export function Sidebar() {
                                   ? "bg-accent text-accent-foreground"
                                   : "text-text-muted hover:bg-muted hover:text-text-primary",
                               )}
-                              title="Workloads"
+                              title={t("sidebar.workloads")}
                             >
                               <Package className="h-4 w-4" />
-                              <span>Workloads</span>
+                              <span>{t("sidebar.workloads")}</span>
                             </Link>
                             <Link
                               href="/events"
@@ -174,10 +176,10 @@ export function Sidebar() {
                                   ? "bg-accent text-accent-foreground"
                                   : "text-text-muted hover:bg-muted hover:text-text-primary",
                               )}
-                              title="Events"
+                              title={t("sidebar.events")}
                             >
                               <Rss className="h-4 w-4" />
-                              <span>Events</span>
+                              <span>{t("sidebar.events")}</span>
                             </Link>
                           </div>
                         )}
@@ -186,7 +188,7 @@ export function Sidebar() {
                   })
                 ) : (
                   <Link href="/clusters" className="block rounded-md px-2 py-1 text-xs text-text-muted hover:text-text-primary">
-                    No clusters – add one
+                    {t("sidebar.noClusters")}
                   </Link>
                 )}
               </div>
@@ -194,7 +196,7 @@ export function Sidebar() {
           </div>
 
           {/* Remaining sections (non cluster-scoped) */}
-          {navItems.filter((n) => n.name !== "Clusters").map((item) => {
+          {navItems.filter((n) => n.href !== "/clusters").map((item) => {
             const isActive = isPathActive(item.href);
             return (
               <Link
@@ -215,11 +217,11 @@ export function Sidebar() {
 
         <div className="mt-auto border-t border-border p-2">
           <button
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-label={collapsed ? t("sidebar.aria.expand") : t("sidebar.aria.collapse")}
             className="w-full rounded-md px-3 py-2 text-left text-sm text-text-muted hover:bg-muted hover:text-text-primary flex items-center justify-between"
             onClick={() => setCollapsed((v) => !v)}
           >
-            {!collapsed && <span>Collapse</span>}
+            {!collapsed && <span>{t("sidebar.collapse")}</span>}
             {collapsed ? <ChevronsRight className="h-4 w-4" /> : <ChevronsLeft className="h-4 w-4" />}
           </button>
         </div>

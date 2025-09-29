@@ -12,6 +12,7 @@ import { Button } from "@/shared/ui/button";
 import { SimpleLineChart } from "@/shared/ui/line-chart";
 import { formatBytes, formatMillicores } from "@/lib/utils";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
+import { useI18n } from "@/shared/i18n/i18n";
 import {
   fetchDeploymentPods,
   fetchWorkloads,
@@ -29,6 +30,7 @@ import {
 } from "@/lib/api";
 
 export default function DeploymentDetailPage() {
+  const { t } = useI18n();
   const params = useParams<{ namespace: string; name: string }>();
   const router = useRouter();
   const ns = decodeURIComponent(params.namespace);
@@ -93,11 +95,11 @@ export default function DeploymentDetailPage() {
     mutationFn: () => restartDeployment(ns, name),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.workloads });
-      alert("Deployment restarted");
+      alert(t("alert.deploy.restarted"));
     },
     onError: (e: unknown) => {
       const err = e as { message?: string };
-      alert(err?.message || "Failed to restart");
+      alert(err?.message || t("error.deploy.restart"));
     },
   });
 
@@ -122,11 +124,11 @@ export default function DeploymentDetailPage() {
       qc.invalidateQueries({ queryKey: queryKeys.deploymentPods(ns, name) });
       qc.invalidateQueries({ queryKey: queryKeys.deploymentYaml(ns, name) });
       router.refresh();
-      alert("Replicas updated");
+      alert(t("alert.deploy.replicasUpdated"));
     },
     onError: (e: unknown) => {
       const err = e as { message?: string };
-      alert(err?.message || "Failed to scale");
+      alert(err?.message || t("error.deploy.scale"));
     },
   });
 
@@ -134,12 +136,12 @@ export default function DeploymentDetailPage() {
     mutationFn: () => deleteDeployment(ns, name),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.workloads });
-      alert("Deployment deleted");
+      alert(t("alert.deploy.deleted"));
       router.push("/workloads");
     },
     onError: (e: unknown) => {
       const err = e as { message?: string };
-      alert(err?.message || "Failed to delete");
+      alert(err?.message || t("error.deploy.delete"));
     },
   });
 
@@ -151,10 +153,10 @@ export default function DeploymentDetailPage() {
   useEffect(() => setYaml(yamlContent?.yaml ?? ""), [yamlContent?.yaml]);
   const yamlMut = useMutation({
     mutationFn: () => updateDeploymentYaml(ns, name, yaml),
-    onSuccess: () => alert("YAML applied"),
+    onSuccess: () => alert(t("alert.yaml.applied")),
     onError: (e: unknown) => {
       const err = e as { message?: string };
-      alert(err?.message || "Failed to apply YAML");
+      alert(err?.message || t("error.yaml.apply"));
     },
   });
 
@@ -230,11 +232,11 @@ export default function DeploymentDetailPage() {
       qc.invalidateQueries({ queryKey: queryKeys.deploymentPods(ns, name) });
       qc.invalidateQueries({ queryKey: queryKeys.workloads });
       router.refresh();
-      alert("Deployment updated");
+      alert(t("alert.deploy.updated"));
     },
     onError: (e: unknown) => {
       const err = e as { message?: string };
-      alert(err?.message || "Failed to update deployment");
+      alert(err?.message || t("error.deploy.update"));
     },
   });
 
@@ -243,7 +245,7 @@ export default function DeploymentDetailPage() {
     const containers = extractContainersFromYaml(yaml);
     const idx = containers.findIndex(c => c.name === selectedContainer);
     if (idx < 0) {
-      alert("Container not found in YAML");
+      alert(t("error.cont.notFound"));
       return;
     }
     const next = containers.slice();
@@ -257,10 +259,10 @@ export default function DeploymentDetailPage() {
     if (!selectedContainer) return;
     const containers = extractContainersFromYaml(yaml);
     if (containers.length <= 1) {
-      alert("Cannot delete the only container in a pod template");
+      alert(t("error.cont.onlyOne"));
       return;
     }
-    if (!confirm(`Delete container "${selectedContainer}" from deployment?`)) return;
+    if (!confirm(t("confirm.cont.delete", { name: selectedContainer }))) return;
     const next = containers.filter(c => c.name !== selectedContainer);
     const newYaml = replaceContainersInYaml(yaml, next);
     // Switch selection to first remaining container to keep UI valid
@@ -272,26 +274,26 @@ export default function DeploymentDetailPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="Deployment"
+        eyebrow={t("deploy.header.eyebrow")}
         title={`${name}`}
-        description={`Namespace: ${ns}`}
+        description={t("deploy.header.desc", { ns })}
         actions={
           <div className="flex items-center gap-2">
-            <Link className="underline text-text-muted" href="/workloads">Back to Workloads</Link>
+            <Link className="underline text-text-muted" href="/workloads">{t("deploy.header.back")}</Link>
           </div>
         }
         meta={
           deployment ? (
             <>
               <div>
-                <p className={`${badgePresets.label} text-text-muted`}>Replicas</p>
+                <p className={`${badgePresets.label} text-text-muted`}>{t("deploy.meta.replicas")}</p>
                 <p className="mt-1 text-lg font-semibold text-text-primary">{deployment.replicas_ready ?? 0}/{deployment.replicas_desired ?? 0}</p>
-                <p className="text-xs text-text-muted">Ready/Desired</p>
+                <p className="text-xs text-text-muted">{t("deploy.meta.readyDesired")}</p>
               </div>
               <div>
-                <p className={`${badgePresets.label} text-text-muted`}>Status</p>
+                <p className={`${badgePresets.label} text-text-muted`}>{t("deploy.meta.status")}</p>
                 <p className="mt-1 text-lg font-semibold text-text-primary">{deployment.status}</p>
-                <p className="text-xs text-text-muted">Health</p>
+                <p className="text-xs text-text-muted">{t("deploy.meta.health")}</p>
               </div>
             </>
           ) : null
@@ -301,14 +303,14 @@ export default function DeploymentDetailPage() {
       {/* Management actions */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-text-primary">Manage</CardTitle>
-          <CardDescription>Restart, scale, delete, or edit the YAML spec.</CardDescription>
+          <CardTitle className="text-text-primary">{t("deploy.manage.title")}</CardTitle>
+          <CardDescription>{t("deploy.manage.desc")}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap items-center gap-3">
-          <Button type="button" onClick={() => restartMut.mutate()} disabled={restartMut.isPending}>Restart</Button>
+          <Button type="button" onClick={() => restartMut.mutate()} disabled={restartMut.isPending}>{t("deploy.manage.restart")}</Button>
 
           <div className="flex items-center gap-2">
-            <label className="text-xs text-text-muted">Replicas</label>
+            <label className="text-xs text-text-muted">{t("deploy.meta.replicas")}</label>
             <input
               type="number"
               className="w-24 rounded-md border border-border bg-background px-2 py-1 text-sm text-text-primary"
@@ -317,12 +319,12 @@ export default function DeploymentDetailPage() {
               min={0}
             />
             <Button type="button" variant="outline" onClick={() => typeof replicasInput === "number" && scaleMut.mutate(replicasInput)} disabled={scaleMut.isPending}>
-              Apply
+              {t("deploy.manage.apply")}
             </Button>
           </div>
 
-          <Button type="button" variant="destructive" onClick={() => { if (confirm("Delete this deployment?")) delMut.mutate(); }} disabled={delMut.isPending}>
-            Delete
+          <Button type="button" variant="destructive" onClick={() => { if (confirm(t("deploy.manage.deleteConfirm"))) delMut.mutate(); }} disabled={delMut.isPending}>
+            {t("deploy.manage.delete")}
           </Button>
         </CardContent>
       </Card>
@@ -330,8 +332,8 @@ export default function DeploymentDetailPage() {
       {/* YAML editor */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-text-primary">Edit YAML (spec)</CardTitle>
-          <CardDescription>Only the spec is applied on save.</CardDescription>
+          <CardTitle className="text-text-primary">{t("deploy.yaml.title")}</CardTitle>
+          <CardDescription>{t("deploy.yaml.desc")}</CardDescription>
         </CardHeader>
         <CardContent>
           <textarea
@@ -340,8 +342,8 @@ export default function DeploymentDetailPage() {
             onChange={(e) => setYaml(e.target.value)}
           />
           <div className="mt-2 flex items-center gap-2">
-            <Button type="button" variant="outline" onClick={() => yamlMut.mutate()} disabled={yamlMut.isPending}>Save YAML</Button>
-            <span className="text-xs text-text-muted">Note: Kind must be Deployment. Namespace/Name are fixed.</span>
+            <Button type="button" variant="outline" onClick={() => yamlMut.mutate()} disabled={yamlMut.isPending}>{t("deploy.yaml.save")}</Button>
+            <span className="text-xs text-text-muted">{t("deploy.yaml.note")}</span>
           </div>
         </CardContent>
       </Card>
@@ -351,12 +353,12 @@ export default function DeploymentDetailPage() {
         <CardHeader>
           <div className="flex items-start justify-between gap-4">
             <div>
-              <CardTitle className="text-lg text-text-primary">Container details</CardTitle>
-              <CardDescription>CPU and Memory by container.</CardDescription>
+              <CardTitle className="text-lg text-text-primary">{t("deploy.cont.title")}</CardTitle>
+              <CardDescription>{t("deploy.cont.desc")}</CardDescription>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               {/* Pod select */}
-              <label className="text-xs text-text-muted">Pod</label>
+              <label className="text-xs text-text-muted">{t("deploy.cont.pod")}</label>
               <select
                 className="rounded-md border border-border bg-background px-2 py-1 text-sm text-text-primary"
                 value={selectedPod}
@@ -368,7 +370,7 @@ export default function DeploymentDetailPage() {
               </select>
 
               {/* Container select */}
-              <label className="text-xs text-text-muted">Container</label>
+              <label className="text-xs text-text-muted">{t("deploy.cont.container")}</label>
               <select
                 className="rounded-md border border-border bg-background px-2 py-1 text-sm text-text-primary"
                 value={selectedContainer}
@@ -381,31 +383,31 @@ export default function DeploymentDetailPage() {
 
               {/* Container actions */}
               <Button type="button" variant="outline" onClick={() => setIsEditOpen(v => !v)} disabled={!selectedContainer}>
-                {isEditOpen ? "Close Edit" : "Edit Container"}
+                {isEditOpen ? t("deploy.cont.closeEdit") : t("deploy.cont.edit")}
               </Button>
               <Button type="button" variant="destructive" onClick={handleDeleteContainer} disabled={!selectedContainer}>
-                Delete Container
+                {t("deploy.cont.delete")}
               </Button>
 
               {/* Time window */}
               {metricsStatus?.healthy ? (
                 <>
-                  <label className="text-xs text-text-muted">Range</label>
+                  <label className="text-xs text-text-muted">{t("deploy.cont.range")}</label>
                   <select
                     className="rounded-md border border-border bg-background px-2 py-1 text-sm text-text-primary"
                     value={window}
                     onChange={(e) => setWindow(e.target.value)}
                   >
-                    <option value="10m">Last 10m</option>
-                    <option value="30m">Last 30m</option>
-                    <option value="1h">Last 1h</option>
-                    <option value="3h">Last 3h</option>
-                    <option value="6h">Last 6h</option>
-                    <option value="12h">Last 12h</option>
+                    <option value="10m">{t("deploy.cont.range.10m")}</option>
+                    <option value="30m">{t("deploy.cont.range.30m")}</option>
+                    <option value="1h">{t("deploy.cont.range.1h")}</option>
+                    <option value="3h">{t("deploy.cont.range.3h")}</option>
+                    <option value="6h">{t("deploy.cont.range.6h")}</option>
+                    <option value="12h">{t("deploy.cont.range.12h")}</option>
                   </select>
                 </>
               ) : (
-                <span className="text-xs text-text-muted">Metrics-server unavailable</span>
+                <span className="text-xs text-text-muted">{t("deploy.cont.metricsUnavailable")}</span>
               )}
             </div>
           </div>
@@ -413,47 +415,47 @@ export default function DeploymentDetailPage() {
         <CardContent className="space-y-8">
           {isEditOpen && selectedContainer && (
             <div className="rounded-md border border-border bg-background p-3">
-              <div className="mb-2 text-sm font-medium text-text-primary">Edit container: {selectedContainer}</div>
+              <div className="mb-2 text-sm font-medium text-text-primary">{t("deploy.cont.editing", { name: selectedContainer })}</div>
               <div className="flex items-center gap-2">
-                <label className="text-xs text-text-muted w-20">Image</label>
+                <label className="text-xs text-text-muted w-20">{t("deploy.cont.image")}</label>
                 <input
                   className="flex-1 rounded-md border border-border bg-surface px-2 py-1 text-sm text-text-primary"
-                  placeholder="e.g. nginx:1.27"
+                  placeholder={t("deploy.cont.image.placeholder")}
                   value={editImage}
                   onChange={(e) => setEditImage(e.target.value)}
                 />
                 <Button type="button" variant="outline" onClick={handleSaveContainerEdit} disabled={!editImage.trim()}>
-                  Save
+                  {t("deploy.cont.save")}
                 </Button>
               </div>
-              <div className="mt-1 text-xs text-text-muted">Only image field is supported here. Use YAML editor below for advanced edits.</div>
+              <div className="mt-1 text-xs text-text-muted">{t("deploy.cont.editHint")}</div>
             </div>
           )}
           {!series || !selectedContainer ? (
-            <div className="py-8 text-center text-sm text-text-muted">Select a container to view metrics.</div>
+            <div className="py-8 text-center text-sm text-text-muted">{t("deploy.cont.selectPrompt")}</div>
           ) : series.points.length === 0 ? (
-            <div className="py-4 text-sm text-text-muted">No metrics for container: {selectedContainer}</div>
+            <div className="py-4 text-sm text-text-muted">{t("deploy.cont.noMetrics", { name: selectedContainer })}</div>
           ) : (
             <div className="space-y-4">
               <div className="flex items-center gap-2">
                 <Badge variant="neutral-light" size="sm" className={badgePresets.metric}>{selectedContainer}</Badge>
               </div>
               <div>
-                <div className={`${badgePresets.label} mb-2 text-text-muted`}>CPU usage</div>
+                <div className={`${badgePresets.label} mb-2 text-text-muted`}>{t("deploy.chart.cpu")}</div>
                 <SimpleLineChart
                   data={(series.points ?? []).map((p) => ({ ts: p.ts, value: p.cpu_mcores }))}
                   stroke="#3b82f6"
-                  yLabel={`CPU (${formatMillicores(series.points[series.points.length - 1]?.cpu_mcores ?? 0)})`}
+                  yLabel={t("deploy.chart.cpuY", { value: formatMillicores(series.points[series.points.length - 1]?.cpu_mcores ?? 0) })}
                   formatY={(v) => formatMillicores(v)}
                   height={180}
                 />
               </div>
               <div>
-                <div className={`${badgePresets.label} mb-2 text-text-muted`}>Memory usage</div>
+                <div className={`${badgePresets.label} mb-2 text-text-muted`}>{t("deploy.chart.mem")}</div>
                 <SimpleLineChart
                   data={(series.points ?? []).map((p) => ({ ts: p.ts, value: p.memory_bytes }))}
                   stroke="#10b981"
-                  yLabel={`Memory (${formatBytes(series.points[series.points.length - 1]?.memory_bytes ?? 0)})`}
+                  yLabel={t("deploy.chart.memY", { value: formatBytes(series.points[series.points.length - 1]?.memory_bytes ?? 0) })}
                   formatY={(v) => formatBytes(v)}
                   height={180}
                 />
