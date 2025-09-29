@@ -8,6 +8,8 @@ from app.schemas.kubernetes import (
     MetricsServerStatus,
     ContainerMetricPoint,
     ContainerMetricSeries,
+    NodeMetricPoint,
+    NodeMetricSeries,
 )
 from app.services.kube_client import KubernetesService
 
@@ -57,6 +59,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import get_session
 from app.models.container_metric import ContainerMetric
+from app.models.node_metric import NodeMetric
 
 
 _WINDOW_DEFAULT = "10m"
@@ -101,5 +104,41 @@ async def container_series(
         namespace=namespace,
         pod=pod,
         container=container,
+        points=points,
+    )
+
+
+@router.get(
+    "/node",
+    response_model=NodeMetricSeries,
+    summary="Node CPU/Memory usage time-series",
+)
+async def node_series(
+    name: str = Query(..., description="Node name"),
+    window: str = Query(_WINDOW_DEFAULT, description="Time window: 10m,30m,1h,3h,6h,12h"),
+    session: AsyncSession = Depends(get_session),
+    service: KubernetesService = Depends(get_kubernetes_service),
+) -> NodeMetricSeries:
+    status = await service.get_metrics_server_status()
+    minutes = _WINDOWS_ALLOWED.get(window, _WINDOWS_ALLOWED[_WINDOW_DEFAULT])
+    now = datetime.now(tz=timezone.utc)
+    since = now - timedelta(minutes=minutes)
+
+    stmt = (
+        select(NodeMetric)
+        .where(
+            NodeMetric.node == name,
+            NodeMetric.ts >= since,
+        )
+        .order_by(NodeMetric.ts.asc())
+    )
+    rows = (await session.execute(stmt)).scalars().all()
+    points = [
+        NodeMetricPoint(ts=row.ts, cpu_mcores=row.cpu_mcores, memory_bytes=row.memory_bytes)
+        for row in rows
+    ]
+    return NodeMetricSeries(
+        has_metrics=bool(status.installed and status.healthy),
+        node=name,
         points=points,
     )

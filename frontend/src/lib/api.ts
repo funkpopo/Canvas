@@ -10,6 +10,12 @@ export const queryKeys = {
   clusterCapacity: ["cluster", "capacity"] as const,
   clusterStorage: ["cluster", "storage"] as const,
   nodes: ["cluster", "nodes"] as const,
+  nodeDetail: (name: string) => ["nodes", name, "detail"] as const,
+  nodeEvents: (name: string) => ["nodes", name, "events"] as const,
+  nodePods: (name: string) => ["nodes", name, "pods"] as const,
+  nodeYaml: (name: string) => ["nodes", name, "yaml"] as const,
+  nodeMetrics: (name: string) => ["nodes", name, "metrics"] as const,
+  nodeSeries: (name: string, window: string) => ["metrics", "node", name, window] as const,
   namespaces: ["namespaces", "list"] as const,
   podsInNamespace: (ns: string) => ["namespaces", ns, "pods"] as const,
   containerSeries: (ns: string, pod: string, container: string, window: string) => [
@@ -67,6 +73,58 @@ export interface NodeSummaryResponse {
   cpu_usage?: number | null;
   memory_usage?: number | null;
   age?: string | null;
+}
+
+export interface NodeAddressResponse { type: string; address: string }
+export interface NodeTaintResponse { key: string; value?: string | null; effect: string }
+export interface NodeInfoResponse {
+  os_image?: string | null;
+  kernel_version?: string | null;
+  kubelet_version?: string | null;
+  kube_proxy_version?: string | null;
+  container_runtime_version?: string | null;
+  operating_system?: string | null;
+  architecture?: string | null;
+}
+export interface NodeCapacityResponse {
+  cpu_mcores?: number | null;
+  memory_bytes?: number | null;
+  pods?: number | null;
+  ephemeral_storage_bytes?: number | null;
+}
+
+export interface NodeDetailResponse {
+  name: string;
+  schedulable: boolean;
+  created_at?: string | null;
+  uptime_seconds?: number | null;
+  status: "Ready" | "NotReady" | "Unknown";
+  conditions: Array<Record<string, unknown>>;
+  labels: Record<string, string>;
+  taints: NodeTaintResponse[];
+  addresses: NodeAddressResponse[];
+  node_info: NodeInfoResponse;
+  allocatable: NodeCapacityResponse;
+  capacity: NodeCapacityResponse;
+  images: string[];
+}
+
+export interface NodePodSummaryResponse {
+  namespace: string;
+  name: string;
+  phase: string;
+  restarts: number;
+  containers: string[];
+}
+
+export interface NodeMetricsResponse {
+  has_metrics: boolean;
+  cpu_mcores_total?: number | null;
+  cpu_mcores_used?: number | null;
+  cpu_percent?: number | null;
+  memory_bytes_total?: number | null;
+  memory_bytes_used?: number | null;
+  memory_percent?: number | null;
 }
 
 export type WorkloadStatus = "Healthy" | "Degraded" | "Warning" | "Unknown";
@@ -202,6 +260,57 @@ export function fetchNodes(): Promise<NodeSummaryResponse[]> {
   return request<NodeSummaryResponse[]>("/nodes/");
 }
 
+export function fetchNodeDetail(name: string): Promise<NodeDetailResponse> {
+  const nm = encodeURIComponent(name);
+  return request<NodeDetailResponse>(`/nodes/${nm}`);
+}
+
+export function fetchNodeEvents(name: string): Promise<EventMessageResponse[]> {
+  const nm = encodeURIComponent(name);
+  return request<EventMessageResponse[]>(`/nodes/${nm}/events`);
+}
+
+export function fetchNodePods(name: string): Promise<NodePodSummaryResponse[]> {
+  const nm = encodeURIComponent(name);
+  return request<NodePodSummaryResponse[]>(`/nodes/${nm}/pods`);
+}
+
+export function fetchNodeMetrics(name: string): Promise<NodeMetricsResponse> {
+  const nm = encodeURIComponent(name);
+  return request<NodeMetricsResponse>(`/nodes/${nm}/metrics`);
+}
+
+export function fetchNodeYaml(name: string): Promise<YamlContentResponse> {
+  const nm = encodeURIComponent(name);
+  return request<YamlContentResponse>(`/nodes/${nm}/yaml`);
+}
+
+export function updateNodeYaml(name: string, yaml: string): Promise<OperationResultResponse> {
+  const nm = encodeURIComponent(name);
+  return request<OperationResultResponse>(`/nodes/${nm}/yaml`, { method: "PUT", body: JSON.stringify({ yaml }) });
+}
+
+export function setNodeSchedulable(name: string, schedulable: boolean): Promise<OperationResultResponse> {
+  const nm = encodeURIComponent(name);
+  const params = new URLSearchParams({ schedulable: String(Boolean(schedulable)) });
+  return request<OperationResultResponse>(`/nodes/${nm}/schedulable?${params.toString()}`, { method: "POST" });
+}
+
+export function drainNode(name: string): Promise<OperationResultResponse> {
+  const nm = encodeURIComponent(name);
+  return request<OperationResultResponse>(`/nodes/${nm}/drain`, { method: "POST" });
+}
+
+export function patchNodeLabels(name: string, labels: Record<string, string>): Promise<OperationResultResponse> {
+  const nm = encodeURIComponent(name);
+  return request<OperationResultResponse>(`/nodes/${nm}/labels`, { method: "PATCH", body: JSON.stringify(labels) });
+}
+
+export function deleteNodeByName(name: string): Promise<OperationResultResponse> {
+  const nm = encodeURIComponent(name);
+  return request<OperationResultResponse>(`/nodes/${nm}`, { method: "DELETE" });
+}
+
 export interface NamespaceSummaryResponse {
   name: string;
   status: "Active" | "Terminating" | "Unknown";
@@ -300,4 +409,12 @@ export function fetchContainerSeries(
     window,
   });
   return request<ContainerMetricSeriesResponse>(`/metrics/container?${params.toString()}`);
+}
+
+export interface NodeMetricPointResponse { ts: string; cpu_mcores: number; memory_bytes: number }
+export interface NodeMetricSeriesResponse { has_metrics: boolean; node: string; points: NodeMetricPointResponse[] }
+
+export function fetchNodeSeries(name: string, window: string): Promise<NodeMetricSeriesResponse> {
+  const params = new URLSearchParams({ name, window });
+  return request<NodeMetricSeriesResponse>(`/metrics/node?${params.toString()}`);
 }

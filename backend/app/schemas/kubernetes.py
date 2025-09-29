@@ -28,6 +28,68 @@ class NodeSummary(BaseModel):
     age: str | None = None
 
 
+class NodeAddress(BaseModel):
+    type: str
+    address: str
+
+
+class NodeTaint(BaseModel):
+    key: str
+    value: str | None = None
+    effect: str
+
+
+class NodeInfo(BaseModel):
+    os_image: str | None = None
+    kernel_version: str | None = None
+    kubelet_version: str | None = None
+    kube_proxy_version: str | None = None
+    container_runtime_version: str | None = None
+    operating_system: str | None = None
+    architecture: str | None = None
+
+
+class NodeCapacity(BaseModel):
+    cpu_mcores: int | None = None
+    memory_bytes: int | None = None
+    pods: int | None = None
+    ephemeral_storage_bytes: int | None = None
+
+
+class NodeDetail(BaseModel):
+    name: str
+    schedulable: bool
+    created_at: datetime | None = None
+    uptime_seconds: int | None = None
+    status: Literal["Ready", "NotReady", "Unknown"]
+    conditions: list[dict]
+    labels: dict[str, str] = Field(default_factory=dict)
+    taints: list[NodeTaint] = Field(default_factory=list)
+    addresses: list[NodeAddress] = Field(default_factory=list)
+    node_info: NodeInfo
+    allocatable: NodeCapacity
+    capacity: NodeCapacity
+    images: list[str] = Field(default_factory=list)
+
+
+class NodePodSummary(BaseModel):
+    namespace: str
+    name: str
+    phase: str
+    restarts: int
+    containers: list[str]
+
+
+class NodeMetrics(BaseModel):
+    has_metrics: bool = False
+    cpu_mcores_total: int | None = None
+    cpu_mcores_used: int | None = None
+    cpu_percent: float | None = None
+    memory_bytes_total: int | None = None
+    memory_bytes_used: int | None = None
+    memory_percent: float | None = None
+
+
 class NamespaceSummary(BaseModel):
     name: str
     status: Literal["Active", "Terminating", "Unknown"]
@@ -101,6 +163,18 @@ class ContainerMetricSeries(BaseModel):
     pod: str
     container: str
     points: list[ContainerMetricPoint]
+
+
+class NodeMetricPoint(BaseModel):
+    ts: datetime
+    cpu_mcores: int
+    memory_bytes: int
+
+
+class NodeMetricSeries(BaseModel):
+    has_metrics: bool = False
+    node: str
+    points: list[NodeMetricPoint]
 
 
 class OperationResult(BaseModel):

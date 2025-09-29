@@ -20,6 +20,13 @@ from app.schemas.kubernetes import (
     EventMessage,
     NamespaceSummary,
     NodeSummary,
+    NodeDetail,
+    NodeTaint,
+    NodeAddress,
+    NodeInfo,
+    NodeCapacity,
+    NodePodSummary,
+    NodeMetrics,
     MetricsServerStatus,
     ClusterCapacityMetrics,
     WorkloadSummary,
@@ -157,6 +164,401 @@ class KubernetesService:
                 return []
 
         return await self._cached("nodes", _fetch)
+
+    async def get_node_detail(self, name: str) -> NodeDetail:
+        await self._rate_limiter.acquire()
+        try:
+            core_v1, _ = await self._ensure_clients()
+
+            def _load() -> NodeDetail:
+                node = core_v1.read_node(name=name)
+                md = node.metadata or None
+                spec = node.spec or None
+                status = node.status or None
+
+                labels = (md.labels or {}) if md else {}
+                schedulable = not bool(getattr(spec, "unschedulable", False)) if spec else True
+                created = getattr(md, "creation_timestamp", None)
+                created_at = created if created else None
+                uptime = None
+                if created_at:
+                    try:
+                        uptime = int((datetime.now(tz=timezone.utc) - created_at).total_seconds())
+                    except Exception:
+                        uptime = None
+
+                conds = []
+                ready_status = "Unknown"
+                for c in (getattr(status, "conditions", None) or []):
+                    d = {
+                        "type": getattr(c, "type", None),
+                        "status": getattr(c, "status", None),
+                        "last_transition_time": getattr(c, "last_transition_time", None),
+                        "reason": getattr(c, "reason", None),
+                        "message": getattr(c, "message", None),
+                    }
+                    conds.append(d)
+                    if d["type"] == "Ready":
+                        ready_status = "Ready" if d["status"] == "True" else "NotReady"
+
+                taints: list[NodeTaint] = []
+                for t in (getattr(spec, "taints", None) or []):
+                    taints.append(
+                        NodeTaint(
+                            key=getattr(t, "key", ""),
+                            value=getattr(t, "value", None),
+                            effect=getattr(t, "effect", ""),
+                        )
+                    )
+
+                addresses: list[NodeAddress] = []
+                for a in (getattr(status, "addresses", None) or []):
+                    addresses.append(NodeAddress(type=getattr(a, "type", ""), address=getattr(a, "address", "")))
+
+                ni = getattr(status, "node_info", None)
+                info = NodeInfo(
+                    os_image=getattr(ni, "os_image", None),
+                    kernel_version=getattr(ni, "kernel_version", None),
+                    kubelet_version=getattr(ni, "kubelet_version", None),
+                    kube_proxy_version=getattr(ni, "kube_proxy_version", None),
+                    container_runtime_version=getattr(ni, "container_runtime_version", None),
+                    operating_system=getattr(ni, "operating_system", None),
+                    architecture=getattr(ni, "architecture", None),
+                )
+
+                alloc = getattr(status, "allocatable", None) or {}
+                cap = getattr(status, "capacity", None) or {}
+
+                alloc_cap = NodeCapacity(
+                    cpu_mcores=self._parse_cpu_to_mcores(alloc.get("cpu")),
+                    memory_bytes=self._parse_memory_to_bytes(alloc.get("memory")),
+                    pods=int(alloc.get("pods", 0)) if str(alloc.get("pods", "")).isdigit() else None,
+                    ephemeral_storage_bytes=self._parse_memory_to_bytes(alloc.get("ephemeral-storage")),
+                )
+                cap_cap = NodeCapacity(
+                    cpu_mcores=self._parse_cpu_to_mcores(cap.get("cpu")),
+                    memory_bytes=self._parse_memory_to_bytes(cap.get("memory")),
+                    pods=int(cap.get("pods", 0)) if str(cap.get("pods", "")).isdigit() else None,
+                    ephemeral_storage_bytes=self._parse_memory_to_bytes(cap.get("ephemeral-storage")),
+                )
+
+                images: list[str] = []
+                for im in (getattr(status, "images", None) or []):
+                    # Aggregate names (first name typically has full repo:tag)
+                    names = getattr(im, "names", None) or []
+                    if names:
+                        images.append(str(names[0]))
+
+                return NodeDetail(
+                    name=str(getattr(md, "name", name)),
+                    schedulable=schedulable,
+                    created_at=created_at,
+                    uptime_seconds=uptime,
+                    status=ready_status,  # type: ignore[arg-type]
+                    conditions=conds,
+                    labels=labels,
+                    taints=taints,
+                    addresses=addresses,
+                    node_info=info,
+                    allocatable=alloc_cap,
+                    capacity=cap_cap,
+                    images=images,
+                )
+
+            return await asyncio.to_thread(_load)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.get_node_detail_error", error=str(exc))
+            # best-effort minimal response
+            return NodeDetail(
+                name=name,
+                schedulable=True,
+                created_at=None,
+                uptime_seconds=None,
+                status="Unknown",
+                conditions=[],
+                labels={},
+                taints=[],
+                addresses=[],
+                node_info=NodeInfo(),
+                allocatable=NodeCapacity(),
+                capacity=NodeCapacity(),
+                images=[],
+            )
+
+    async def list_node_events(self, name: str) -> list[EventMessage]:
+        await self._rate_limiter.acquire()
+        try:
+            core_v1, _ = await self._ensure_clients()
+
+            def _collect() -> list[EventMessage]:
+                try:
+                    events = core_v1.list_event_for_all_namespaces(
+                        field_selector=f"involvedObject.kind=Node,involvedObject.name={name}", limit=100
+                    ).items
+                except Exception:
+                    events = []
+                results: list[EventMessage] = []
+                for e in events:
+                    involved_ref = f"Node/{name}"
+                    ts = getattr(e, "last_timestamp", None) or getattr(e, "event_time", None) or datetime.now(tz=timezone.utc)
+                    results.append(
+                        EventMessage(
+                            type=getattr(e, "type", None) or "Normal",
+                            reason=getattr(e, "reason", None) or "",
+                            message=getattr(e, "message", None) or "",
+                            involved_object=involved_ref,
+                            namespace=(e.metadata.namespace if getattr(e, "metadata", None) else None),
+                            timestamp=ts,
+                        )
+                    )
+                results.sort(key=lambda x: x.timestamp, reverse=True)
+                return results
+
+            return await asyncio.to_thread(_collect)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.node_events_error", error=str(exc))
+            return []
+
+    async def list_pods_on_node(self, name: str) -> list[NodePodSummary]:
+        await self._rate_limiter.acquire()
+        try:
+            core_v1, _ = await self._ensure_clients()
+
+            def _collect() -> list[NodePodSummary]:
+                pods = core_v1.list_pod_for_all_namespaces(field_selector=f"spec.nodeName={name}", limit=1000).items
+                items: list[NodePodSummary] = []
+                for pod in pods:
+                    meta = pod.metadata
+                    st = pod.status
+                    ns = meta.namespace if meta else "default"
+                    nm = meta.name if meta else ""
+                    phase = getattr(st, "phase", None) or "Unknown"
+                    restarts = 0
+                    try:
+                        for cs in getattr(st, "container_statuses", None) or []:
+                            restarts += int(getattr(cs, "restart_count", 0))
+                    except Exception:
+                        restarts = 0
+                    containers: list[str] = []
+                    try:
+                        for c in (pod.spec.containers or []):  # type: ignore[attr-defined]
+                            containers.append(c.name)
+                    except Exception:
+                        pass
+                    items.append(NodePodSummary(namespace=ns, name=nm, phase=str(phase), restarts=restarts, containers=containers))
+                return items
+
+            return await asyncio.to_thread(_collect)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.list_pods_on_node_error", error=str(exc))
+            return []
+
+    async def get_node_metrics(self, name: str) -> NodeMetrics:
+        await self._rate_limiter.acquire()
+        try:
+            core_v1, _ = await self._ensure_clients()
+
+            def _alloc() -> tuple[int | None, int | None]:
+                node = core_v1.read_node(name=name)
+                alloc = node.status.allocatable or {}
+                return self._parse_cpu_to_mcores(alloc.get("cpu")) or None, self._parse_memory_to_bytes(alloc.get("memory")) or None
+
+            total_cpu_m, total_mem_b = await asyncio.to_thread(_alloc)
+
+            used_cpu_m: int | None = None
+            used_mem_b: int | None = None
+            has_metrics = False
+
+            try:
+                co = client.CustomObjectsApi(self._api_client)
+
+                def _read() -> tuple[int | None, int | None, bool]:
+                    try:
+                        data = co.list_cluster_custom_object(group="metrics.k8s.io", version="v1beta1", plural="nodes")
+                        for it in (data.get("items", []) if isinstance(data, dict) else []):
+                            meta = it.get("metadata", {}) if isinstance(it, dict) else {}
+                            if str(meta.get("name")) == name:
+                                usage = it.get("usage", {}) if isinstance(it, dict) else {}
+                                cpu_m = self._parse_cpu_to_mcores(usage.get("cpu"))
+                                mem_b = self._parse_memory_to_bytes(usage.get("memory"))
+                                return int(cpu_m), int(mem_b), True
+                        return None, None, False
+                    except Exception:
+                        return None, None, False
+
+                used_cpu_m, used_mem_b, has_metrics = await asyncio.to_thread(_read)
+            except Exception:
+                has_metrics = False
+
+            cpu_pct = None
+            mem_pct = None
+            if has_metrics and total_cpu_m and used_cpu_m is not None and total_cpu_m > 0:
+                cpu_pct = max(0.0, min(100.0, (used_cpu_m / total_cpu_m) * 100.0))
+            if has_metrics and total_mem_b and used_mem_b is not None and total_mem_b > 0:
+                mem_pct = max(0.0, min(100.0, (used_mem_b / total_mem_b) * 100.0))
+
+            return NodeMetrics(
+                has_metrics=has_metrics,
+                cpu_mcores_total=total_cpu_m,
+                cpu_mcores_used=used_cpu_m,
+                cpu_percent=cpu_pct,
+                memory_bytes_total=total_mem_b,
+                memory_bytes_used=used_mem_b,
+                memory_percent=mem_pct,
+            )
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.node_metrics_error", error=str(exc))
+            return NodeMetrics(has_metrics=False)
+
+    async def set_node_schedulable(self, name: str, schedulable: bool) -> tuple[bool, str | None]:
+        await self._rate_limiter.acquire()
+        try:
+            core_v1, _ = await self._ensure_clients()
+
+            def _do() -> None:
+                body = {"spec": {"unschedulable": (not bool(schedulable))}}
+                core_v1.patch_node(name=name, body=body)
+
+            await asyncio.to_thread(_do)
+            return True, None
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.set_node_schedulable_error", error=str(exc))
+            return False, str(exc)
+
+    async def drain_node(self, name: str) -> tuple[bool, str | None]:
+        await self._rate_limiter.acquire()
+        try:
+            core_v1, _ = await self._ensure_clients()
+
+            def _do() -> None:
+                # Cordon
+                core_v1.patch_node(name=name, body={"spec": {"unschedulable": True}})
+
+                pods = core_v1.list_pod_for_all_namespaces(field_selector=f"spec.nodeName={name}", limit=2000).items
+
+                def _is_daemonset_owned(p) -> bool:
+                    try:
+                        for o in (p.metadata.owner_references or []):
+                            if getattr(o, "kind", None) == "DaemonSet":
+                                return True
+                    except Exception:
+                        return False
+                    return False
+
+                def _is_mirror_pod(p) -> bool:
+                    try:
+                        anns = p.metadata.annotations or {}
+                        return "kubernetes.io/config.mirror" in anns
+                    except Exception:
+                        return False
+
+                # Evict all except DaemonSet/mirror pods
+                from kubernetes.client import V1ObjectMeta
+                from kubernetes.client import V1Eviction  # type: ignore[attr-defined]
+                from kubernetes.client import PolicyV1Api
+
+                pol = PolicyV1Api(core_v1.api_client)
+                for p in pods:
+                    if _is_daemonset_owned(p) or _is_mirror_pod(p):
+                        continue
+                    nm = p.metadata.name
+                    ns = p.metadata.namespace
+                    try:
+                        body = {
+                            "apiVersion": "policy/v1",
+                            "kind": "Eviction",
+                            "metadata": {"name": nm, "namespace": ns},
+                        }
+                        pol.create_namespaced_pod_eviction(name=nm, namespace=ns, body=body)  # type: ignore[arg-type]
+                    except Exception:
+                        # Fallback delete with grace period
+                        try:
+                            core_v1.delete_namespaced_pod(name=nm, namespace=ns, grace_period_seconds=30)
+                        except Exception:
+                            # ignore
+                            pass
+
+            await asyncio.to_thread(_do)
+            return True, None
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.drain_node_error", error=str(exc))
+            return False, str(exc)
+
+    async def get_node_yaml(self, name: str) -> str | None:
+        await self._rate_limiter.acquire()
+        try:
+            core_v1, _ = await self._ensure_clients()
+
+            def _do() -> str:
+                node = core_v1.read_node(name=name)
+                api_client = self._api_client or ApiClient()
+                data = api_client.sanitize_for_serialization(node)
+                md = data.get("metadata", {}) if isinstance(data, dict) else {}
+                if isinstance(md, dict) and "managedFields" in md:
+                    md.pop("managedFields", None)
+                return yaml.safe_dump(data, sort_keys=False)
+
+            return await asyncio.to_thread(_do)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.get_node_yaml_error", error=str(exc))
+            return None
+
+    async def apply_node_yaml(self, name: str, yaml_text: str) -> tuple[bool, str | None]:
+        await self._rate_limiter.acquire()
+        try:
+            core_v1, _ = await self._ensure_clients()
+
+            def _do() -> None:
+                try:
+                    obj = yaml.safe_load(yaml_text) or {}
+                except Exception as exc:  # noqa: BLE001
+                    raise RuntimeError(f"Invalid YAML: {exc}")
+                if not isinstance(obj, dict):
+                    raise RuntimeError("YAML must be a mapping")
+                kind = obj.get("kind")
+                meta = obj.get("metadata", {}) if isinstance(obj, dict) else {}
+                nm = meta.get("name") if isinstance(meta, dict) else None
+                if kind and str(kind) != "Node":
+                    raise RuntimeError("YAML kind must be Node")
+                if nm and str(nm) != name:
+                    raise RuntimeError("YAML metadata.name must match path name")
+                # Patch node
+                core_v1.patch_node(name=name, body=obj)
+
+            await asyncio.to_thread(_do)
+            return True, None
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.apply_node_yaml_error", error=str(exc))
+            return False, str(exc)
+
+    async def patch_node_labels(self, name: str, labels: dict[str, str]) -> tuple[bool, str | None]:
+        await self._rate_limiter.acquire()
+        try:
+            core_v1, _ = await self._ensure_clients()
+
+            def _do() -> None:
+                body = {"metadata": {"labels": labels}}
+                core_v1.patch_node(name=name, body=body)
+
+            await asyncio.to_thread(_do)
+            return True, None
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.patch_node_labels_error", error=str(exc))
+            return False, str(exc)
+
+    async def delete_node(self, name: str) -> tuple[bool, str | None]:
+        await self._rate_limiter.acquire()
+        try:
+            core_v1, _ = await self._ensure_clients()
+
+            def _do() -> None:
+                core_v1.delete_node(name=name)
+
+            await asyncio.to_thread(_do)
+            return True, None
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.delete_node_error", error=str(exc))
+            return False, str(exc)
 
     async def list_namespaces(self) -> list[NamespaceSummary]:
         async def _fetch() -> list[NamespaceSummary]:
@@ -727,6 +1129,40 @@ class KubernetesService:
             return await asyncio.to_thread(_collect)
         except Exception as exc:  # pragma: no cover
             logger.warning("kubernetes.collect_container_metrics_error", error=str(exc))
+            return []
+
+    async def collect_node_metrics_once(self) -> list[tuple[datetime, str, int, int]]:
+        """Collect a single snapshot of node usage across the cluster.
+
+        Returns a list of tuples: (ts, node, cpu_mcores, memory_bytes)
+        """
+        await self._rate_limiter.acquire()
+        try:
+            await self._ensure_clients()
+            co = client.CustomObjectsApi(self._api_client)
+
+            def _collect() -> list[tuple[datetime, str, int, int]]:
+                now = datetime.now(tz=timezone.utc)
+                try:
+                    data = co.list_cluster_custom_object(
+                        group="metrics.k8s.io", version="v1beta1", plural="nodes"
+                    )
+                    items = data.get("items", []) if isinstance(data, dict) else []
+                except Exception:
+                    items = []
+                results: list[tuple[datetime, str, int, int]] = []
+                for it in items:
+                    meta = it.get("metadata", {}) if isinstance(it, dict) else {}
+                    node = str(meta.get("name") or "")
+                    usage = it.get("usage", {}) if isinstance(it, dict) else {}
+                    cpu_m = self._parse_cpu_to_mcores(usage.get("cpu"))
+                    mem_b = self._parse_memory_to_bytes(usage.get("memory"))
+                    results.append((now, node, int(cpu_m), int(mem_b)))
+                return results
+
+            return await asyncio.to_thread(_collect)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.collect_node_metrics_error", error=str(exc))
             return []
 
     # ---------------------------

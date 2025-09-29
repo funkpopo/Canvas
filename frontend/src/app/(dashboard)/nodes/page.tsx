@@ -170,6 +170,44 @@ export default function NodesPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Nodes list */}
+      <Card className="relative overflow-hidden">
+        <CardHeader>
+          <CardTitle className="text-base text-text-primary">{t("nodes.list.title")}</CardTitle>
+          <CardDescription>{t("nodes.list.desc")}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <p className="text-sm text-text-muted">{t("common.loading")}</p>
+          ) : isError ? (
+            <p className="text-sm text-text-muted">{t("workloads.error.load")}</p>
+          ) : !nodes || nodes.length === 0 ? (
+            <div className="text-sm text-text-muted">{t("nodes.empty.desc")}</div>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {nodes.map((n) => (
+                <a key={n.name} href={`/nodes/${encodeURIComponent(n.name)}`} className="block rounded-md border border-border bg-surface p-3 hover:border-accent/60 transition">
+                  <div className="flex items-center justify-between">
+                    <div className="font-medium text-text-primary truncate" title={n.name}>{n.name}</div>
+                    <StatusBadge status={n.status === "Ready" ? "ready" : n.status === "NotReady" ? "not-ready" : "unknown"} label={n.status} size="sm" />
+                  </div>
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-text-muted">
+                    {(n.roles || []).map((r) => (
+                      <Badge key={r} variant="neutral-light" size="sm" className={badgePresets.metric}>{r}</Badge>
+                    ))}
+                  </div>
+                  <div className="mt-2 flex items-center gap-3 text-xs text-text-muted">
+                    <span>CPU {n.cpu_allocatable}</span>
+                    <span>•</span>
+                    <span>Mem {n.memory_allocatable}</span>
+                  </div>
+                </a>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

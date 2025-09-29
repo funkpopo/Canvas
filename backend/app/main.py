@@ -54,6 +54,33 @@ async def lifespan(app: FastAPI):
         except Exception:
             # Best effort; avoid crashing the scheduler
             pass
+    # Periodically collect node-level metrics if metrics-server is present
+    async def _collect_and_store_node_metrics() -> None:
+        try:
+            status = await service.get_metrics_server_status()
+            if not (status.installed and status.healthy):
+                return
+            rows = await service.collect_node_metrics_once()
+            if not rows:
+                return
+            session_factory = get_session_factory()
+            from app.models.node_metric import NodeMetric
+            async with session_factory() as session:
+                session.add_all(
+                    [
+                        NodeMetric(
+                            ts=ts,
+                            node=node,
+                            cpu_mcores=cpu,
+                            memory_bytes=mem,
+                        )
+                        for ts, node, cpu, mem in rows
+                    ]
+                )
+                await session.commit()
+        except Exception:
+            # Best effort
+            pass
     cache_warm_task = PeriodicTask(
         interval_seconds=max(settings.cache_ttl_seconds, 30),
         action=service.get_cluster_overview,
@@ -67,6 +94,12 @@ async def lifespan(app: FastAPI):
         name="container_metrics_collect",
     )
     metrics_collect_task.start()
+    node_metrics_collect_task = PeriodicTask(
+        interval_seconds=60,
+        action=_collect_and_store_node_metrics,
+        name="node_metrics_collect",
+    )
+    node_metrics_collect_task.start()
     asyncio.create_task(service.list_workloads())
 
     try:
@@ -74,6 +107,7 @@ async def lifespan(app: FastAPI):
     finally:
         await cache_warm_task.stop()
         await metrics_collect_task.stop()
+        await node_metrics_collect_task.stop()
         logger.info("application.shutdown")
 
 
