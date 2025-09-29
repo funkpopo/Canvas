@@ -26,6 +26,7 @@ class NodeSummary(BaseModel):
     cpu_usage: float | None = None
     memory_usage: float | None = None
     age: str | None = None
+    schedulable: bool | None = None
 
 
 class NodeAddress(BaseModel):

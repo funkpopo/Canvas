@@ -90,6 +90,8 @@ export interface NodeSummaryResponse {
   cpu_usage?: number | null;
   memory_usage?: number | null;
   age?: string | null;
+  // Optional: backend may include schedulable flag for list view badges
+  schedulable?: boolean;
 }
 
 export interface NodeAddressResponse { type: string; address: string }

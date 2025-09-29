@@ -14,6 +14,7 @@ import { StatusBadge } from "@/shared/ui/status-badge";
 import { useI18n } from "@/shared/i18n/i18n";
 import { Modal } from "@/shared/ui/modal";
 import { cn, formatBytes, formatMillicores } from "@/lib/utils";
+import { ScrollArea } from "@/shared/ui/scroll-area";
 import {
   queryKeys,
   fetchNodeDetail,
@@ -422,13 +423,17 @@ export default function NodeDetailPage() {
             <CardTitle className="text-text-primary">{t("node.images.title")}</CardTitle>
             <CardDescription>{t("node.images.desc")}</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-2">
+          <CardContent>
             {(detail?.images ?? []).length === 0 ? (
               <div className="text-sm text-text-muted">{t("node.images.none")}</div>
             ) : (
-              (detail?.images ?? []).slice(0, 20).map((img, idx) => (
-                <div key={idx} className="truncate text-sm text-text-primary" title={img}>{img}</div>
-              ))
+              <ScrollArea className="max-h-80 md:max-h-96 pr-3">
+                <div className="space-y-2">
+                  {(detail?.images ?? []).map((img, idx) => (
+                    <div key={idx} className="truncate text-sm text-text-primary" title={img}>{img}</div>
+                  ))}
+                </div>
+              </ScrollArea>
             )}
           </CardContent>
         </Card>

@@ -197,6 +197,15 @@ export default function NodesPage() {
                     />
                   </div>
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-text-muted">
+                    {typeof n.schedulable === "boolean" ? (
+                      <Badge
+                        variant={n.schedulable ? "success-light" : "error-light"}
+                        size="sm"
+                        className={badgePresets.metric}
+                      >
+                        {n.schedulable ? t("node.schedulable") : t("node.unschedulable")}
+                      </Badge>
+                    ) : null}
                     {(n.roles || []).map((r) => (
                       <Badge key={r} variant="neutral-light" size="sm" className={badgePresets.metric}>{r}</Badge>
                     ))}

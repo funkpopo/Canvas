@@ -135,6 +135,8 @@ class KubernetesService:
                     summaries: list[NodeSummary] = []
                     for node in nodes:
                         labels = node.metadata.labels or {}
+                        spec = getattr(node, "spec", None)
+                        schedulable = not bool(getattr(spec, "unschedulable", False)) if spec else True
                         labelled_roles = [
                             label.replace("node-role.kubernetes.io/", "")
                             for label in labels
@@ -165,6 +167,7 @@ class KubernetesService:
                                 cpu_usage=None,
                                 memory_usage=None,
                                 age=None,
+                                schedulable=schedulable,
                             )
                         )
                     return summaries
