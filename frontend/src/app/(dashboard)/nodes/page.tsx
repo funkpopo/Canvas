@@ -190,7 +190,11 @@ export default function NodesPage() {
                 <a key={n.name} href={`/nodes/${encodeURIComponent(n.name)}`} className="block rounded-md border border-border bg-surface p-3 hover:border-accent/60 transition">
                   <div className="flex items-center justify-between">
                     <div className="font-medium text-text-primary truncate" title={n.name}>{n.name}</div>
-                    <StatusBadge status={n.status === "Ready" ? "ready" : n.status === "NotReady" ? "not-ready" : "unknown"} label={n.status} size="sm" />
+                    <StatusBadge
+                      status={n.status === "Ready" ? "ready" : n.status === "NotReady" ? "not-ready" : "unknown"}
+                      label={n.status === "Ready" ? t("status.ready") : n.status === "NotReady" ? t("status.notReady") : t("common.unknown")}
+                      size="sm"
+                    />
                   </div>
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-text-muted">
                     {(n.roles || []).map((r) => (
@@ -198,9 +202,9 @@ export default function NodesPage() {
                     ))}
                   </div>
                   <div className="mt-2 flex items-center gap-3 text-xs text-text-muted">
-                    <span>CPU {n.cpu_allocatable}</span>
+                    <span>{t("capacity.metric.cpu")} {n.cpu_allocatable}</span>
                     <span>•</span>
-                    <span>Mem {n.memory_allocatable}</span>
+                    <span>{t("capacity.metric.memory")} {n.memory_allocatable}</span>
                   </div>
                 </a>
               ))}

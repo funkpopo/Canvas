@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 
 type Point = { ts: string | Date; value: number };
 
@@ -17,7 +17,21 @@ export function SimpleLineChart({
   yLabel?: string;
   formatY?: (v: number) => string;
 }) {
-  const width = 600; // logical width for viewBox; scales to 100% width
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const [measuredWidth, setMeasuredWidth] = useState<number>(600);
+
+  useEffect(() => {
+    const el = wrapperRef.current;
+    if (!el) return;
+    const obs = new ResizeObserver((entries) => {
+      const w = entries[0].contentRect.width;
+      if (w && Math.abs(w - measuredWidth) > 1) setMeasuredWidth(w);
+    });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [measuredWidth]);
+
+  const width = Math.max(280, Math.round(measuredWidth));
   const margin = { top: 10, right: 12, bottom: 20, left: 36 };
   const innerW = width - margin.left - margin.right;
   const innerH = height - margin.top - margin.bottom;
@@ -43,7 +57,10 @@ export function SimpleLineChart({
     .join(" ");
 
   const yTicks = 4;
-  const xTicks = 4;
+  const xTicks = useMemo(() => {
+    // 1 tick roughly per ~160px, capped reasonably
+    return Math.max(3, Math.min(8, Math.round(width / 160)));
+  }, [width]);
   const yTickVals = Array.from({ length: yTicks + 1 }, (_, i) => yMin + ((yMax - yMin) * i) / yTicks);
   const xTickVals = Array.from({ length: xTicks + 1 }, (_, i) => xMin + ((xMax - xMin) * i) / xTicks);
 
@@ -53,7 +70,8 @@ export function SimpleLineChart({
   const fmtX = (ms: number) => new Date(ms).toLocaleTimeString();
 
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} role="img" style={{ width: "100%", height }}>
+    <div ref={wrapperRef} style={{ width: "100%" }}>
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" style={{ width: "100%", height }}>
       <rect x={0} y={0} width={width} height={height} fill="none" />
       {/* Gridlines */}
       {yTickVals.map((v, i) => (
@@ -117,6 +135,6 @@ export function SimpleLineChart({
       {/* Line */}
       <path d={path} fill="none" stroke={stroke} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
     </svg>
+    </div>
   );
 }
-

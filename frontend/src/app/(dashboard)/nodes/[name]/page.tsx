@@ -12,6 +12,7 @@ import { Button } from "@/shared/ui/button";
 import { SimpleLineChart } from "@/shared/ui/line-chart";
 import { StatusBadge } from "@/shared/ui/status-badge";
 import { useI18n } from "@/shared/i18n/i18n";
+import { Modal } from "@/shared/ui/modal";
 import { cn, formatBytes, formatMillicores } from "@/lib/utils";
 import {
   queryKeys,
@@ -25,6 +26,7 @@ import {
   setNodeSchedulable,
   drainNode,
   patchNodeLabels,
+  patchNodeTaints,
   deleteNodeByName,
   type EventMessageResponse,
   type NodeDetailResponse,
@@ -74,7 +76,6 @@ export default function NodeDetailPage() {
     refetchInterval: refetchMs,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
-    keepPreviousData: true,
     enabled: metrics?.has_metrics !== false,
   });
   const { data: pods } = useQuery<NodePodSummaryResponse[]>({ queryKey: queryKeys.nodePods(name), queryFn: () => fetchNodePods(name) });
@@ -139,6 +140,36 @@ export default function NodeDetailPage() {
     onError: (e: unknown) => alert((e as { message?: string })?.message || t("node.error.labels.patch")),
   });
 
+  // Taints editing
+  type Taint = { key: string; value?: string | null; effect: string };
+  const [taints, setTaints] = useState<Taint[]>([]);
+  useEffect(() => {
+    setTaints((detail?.taints ?? []).map((t) => ({ key: t.key, value: t.value ?? "", effect: t.effect })));
+  }, [detail?.taints]);
+  const taintsMut = useMutation({
+    mutationFn: () => {
+      // basic validation
+      for (const tnt of taints) {
+        if (!tnt.key.trim()) {
+          alert(t("node.error.taints.invalid"));
+          return Promise.reject(new Error("invalid taint key"));
+        }
+      }
+      const payload = taints.map((t) => ({ key: t.key.trim(), value: t.value ? String(t.value) : null, effect: t.effect }));
+      return patchNodeTaints(name, payload as any);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.nodeDetail(name) });
+      alert(t("node.alert.taintsPatched"));
+    },
+    onError: (e: unknown) => alert((e as { message?: string })?.message || t("node.error.taints.patch")),
+  });
+
+  // Modals
+  const [yamlOpen, setYamlOpen] = useState(false);
+  const [labelsOpen, setLabelsOpen] = useState(false);
+  const [taintsOpen, setTaintsOpen] = useState(false);
+
   const readyStatus = detail?.status === "Ready" ? "ready" : detail?.status === "NotReady" ? "not-ready" : "unknown";
 
   return (
@@ -159,7 +190,13 @@ export default function NodeDetailPage() {
             <>
               <div>
                 <p className={`${badgePresets.label} text-text-muted`}>{t("node.meta.status")}</p>
-                <div className="mt-1"><StatusBadge status={readyStatus as any} label={detail.status} size="sm" /></div>
+                <div className="mt-1">
+                  <StatusBadge
+                    status={readyStatus as any}
+                    label={detail.status === "Ready" ? t("status.ready") : detail.status === "NotReady" ? t("status.notReady") : t("common.unknown")}
+                    size="sm"
+                  />
+                </div>
                 <p className="text-xs text-text-muted">{t("node.meta.health")}</p>
               </div>
               <div>
@@ -189,6 +226,12 @@ export default function NodeDetailPage() {
           </Button>
           <Button type="button" variant="outline" onClick={() => drainMut.mutate()} disabled={drainMut.isPending}>{t("node.manage.drain")}</Button>
           <Button type="button" variant="destructive" onClick={() => { if (confirm(t("node.manage.deleteConfirm"))) deleteMut.mutate(); }} disabled={deleteMut.isPending}>{t("node.manage.delete")}</Button>
+
+          {/* Edit actions open modals */}
+          <div className="w-px h-6 bg-border mx-2" />
+          <Button type="button" variant="outline" onClick={() => setYamlOpen(true)}>{t("node.yaml.edit")}</Button>
+          <Button type="button" variant="outline" onClick={() => setLabelsOpen(true)}>{t("node.labels.edit")}</Button>
+          <Button type="button" variant="outline" onClick={() => setTaintsOpen(true)}>{t("node.taints.edit")}</Button>
         </CardContent>
       </Card>
 
@@ -224,7 +267,7 @@ export default function NodeDetailPage() {
               </div>
 
               <div className="space-y-4">
-                <div className={`${badgePresets.label} text-text-muted`}>CPU</div>
+                <div className={`${badgePresets.label} text-text-muted`}>{t("deploy.chart.cpu")}</div>
                 <SimpleLineChart
                   data={(series.points ?? []).map((p) => ({ ts: p.ts, value: p.cpu_mcores }))}
                   stroke="#3b82f6"
@@ -249,32 +292,97 @@ export default function NodeDetailPage() {
         </CardContent>
       </Card>
 
-      {/* YAML & Labels */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-text-primary">{t("node.yaml.title")}</CardTitle>
-          <CardDescription>{t("node.yaml.desc")}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <textarea className="w-full min-h-[220px] rounded-md border border-border bg-background p-2 font-mono text-xs text-text-primary" value={yaml} onChange={(e) => setYaml(e.target.value)} />
-          <div className="mt-2 flex items-center gap-2">
-            <Button type="button" variant="outline" onClick={() => yamlMut.mutate()} disabled={yamlMut.isPending}>{t("deploy.yaml.save")}</Button>
+      {/* Modals for editing to avoid accidental changes */}
+      <Modal
+        open={yamlOpen}
+        onClose={() => setYamlOpen(false)}
+        title={t("node.yaml.title")}
+        description={t("node.yaml.desc")}
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setYamlOpen(false)}>{t("actions.cancel")}</Button>
+            <Button onClick={() => yamlMut.mutate()} disabled={yamlMut.isPending}>{t("deploy.yaml.save")}</Button>
           </div>
-        </CardContent>
-      </Card>
+        }
+      >
+        <textarea className="w-full min-h-[400px] rounded-md border border-border bg-background p-2 font-mono text-xs text-text-primary" value={yaml} onChange={(e) => setYaml(e.target.value)} />
+      </Modal>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-text-primary">{t("node.labels.title")}</CardTitle>
-          <CardDescription>{t("node.labels.desc")}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <textarea className="w-full min-h-[140px] rounded-md border border-border bg-background p-2 font-mono text-xs text-text-primary" value={labelsText} onChange={(e) => setLabelsText(e.target.value)} />
-          <div className="mt-2 flex items-center gap-2">
-            <Button type="button" variant="outline" onClick={() => labelsMut.mutate()} disabled={labelsMut.isPending}>{t("node.labels.apply")}</Button>
+      <Modal
+        open={labelsOpen}
+        onClose={() => setLabelsOpen(false)}
+        title={t("node.labels.title")}
+        description={t("node.labels.desc")}
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setLabelsOpen(false)}>{t("actions.cancel")}</Button>
+            <Button onClick={() => labelsMut.mutate()} disabled={labelsMut.isPending}>{t("node.labels.apply")}</Button>
           </div>
-        </CardContent>
-      </Card>
+        }
+      >
+        <textarea className="w-full min-h-[260px] rounded-md border border-border bg-background p-2 font-mono text-xs text-text-primary" value={labelsText} onChange={(e) => setLabelsText(e.target.value)} />
+      </Modal>
+
+      <Modal
+        open={taintsOpen}
+        onClose={() => setTaintsOpen(false)}
+        title={t("node.taints.edit")}
+        description={t("node.taints.editDesc")}
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setTaintsOpen(false)}>{t("actions.cancel")}</Button>
+            <Button onClick={() => taintsMut.mutate()} disabled={taintsMut.isPending}>{t("node.taints.apply")}</Button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          {taints.length === 0 ? (
+            <div className="text-xs text-text-muted">{t("node.taints.none")}</div>
+          ) : null}
+          {taints.map((tnt, idx) => (
+            <div key={idx} className="grid grid-cols-12 items-center gap-2">
+              <input
+                className="col-span-4 rounded-md border border-border bg-background px-2 py-1 text-sm text-text-primary"
+                placeholder="key"
+                value={tnt.key}
+                onChange={(e) => setTaints((arr) => arr.map((x, i) => i === idx ? { ...x, key: e.target.value } : x))}
+              />
+              <input
+                className="col-span-4 rounded-md border border-border bg-background px-2 py-1 text-sm text-text-primary"
+                placeholder="value"
+                value={tnt.value ?? ""}
+                onChange={(e) => setTaints((arr) => arr.map((x, i) => i === idx ? { ...x, value: e.target.value } : x))}
+              />
+              <select
+                className="col-span-3 rounded-md border border-border bg-background px-2 py-1 text-sm text-text-primary"
+                value={tnt.effect}
+                onChange={(e) => setTaints((arr) => arr.map((x, i) => i === idx ? { ...x, effect: e.target.value } : x))}
+              >
+                <option value="NoSchedule">NoSchedule</option>
+                <option value="PreferNoSchedule">PreferNoSchedule</option>
+                <option value="NoExecute">NoExecute</option>
+              </select>
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={() => setTaints((arr) => arr.filter((_, i) => i !== idx))}
+                className="col-span-1"
+              >
+                ✕
+              </Button>
+            </div>
+          ))}
+          <div>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setTaints((arr) => [...arr, { key: "", value: "", effect: "NoSchedule" }])}
+            >
+              + {t("node.taints.add")}
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Taints + OS/Runtime + Images */}
       <div className="grid gap-6 md:grid-cols-3">

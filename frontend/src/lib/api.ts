@@ -306,6 +306,11 @@ export function patchNodeLabels(name: string, labels: Record<string, string>): P
   return request<OperationResultResponse>(`/nodes/${nm}/labels`, { method: "PATCH", body: JSON.stringify(labels) });
 }
 
+export function patchNodeTaints(name: string, taints: NodeTaintResponse[]): Promise<OperationResultResponse> {
+  const nm = encodeURIComponent(name);
+  return request<OperationResultResponse>(`/nodes/${nm}/taints`, { method: "PATCH", body: JSON.stringify(taints) });
+}
+
 export function deleteNodeByName(name: string): Promise<OperationResultResponse> {
   const nm = encodeURIComponent(name);
   return request<OperationResultResponse>(`/nodes/${nm}`, { method: "DELETE" });
