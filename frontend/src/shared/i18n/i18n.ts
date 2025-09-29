@@ -75,7 +75,7 @@ const dictEn = {
   "overview.namespaces": "Namespaces",
   "overview.namespaces.desc": "Namespaces discovered",
   "overview.pods": "Pods",
-  "overview.pods.desc": "{healthy}% healthy • {pending}% pending • {failing}% failing",
+  "overview.pods.desc": "{healthy} healthy • {pending} pending • {failing} failing",
 
   // Quick actions
   "quick.title": "Quick actions",
@@ -529,7 +529,7 @@ const dictZh = {
   "overview.namespaces": "命名空间",
   "overview.namespaces.desc": "已发现的命名空间",
   "overview.pods": "Pods",
-  "overview.pods.desc": "健康 {healthy}% • 等待 {pending}% • 失败 {failing}%",
+  "overview.pods.desc": "健康 {healthy} • 等待 {pending} • 失败 {failing}",
 
   // Quick actions
   "quick.title": "快捷操作",

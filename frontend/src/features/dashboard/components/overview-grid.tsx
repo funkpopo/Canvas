@@ -59,17 +59,17 @@ export function OverviewGrid() {
       <ResourceCard
         label={t("overview.pods")}
         value={String(totalPods)}
-        description={t("overview.pods.desc", { healthy: podHealthPercent, pending: pendingPercent, failing: failingPercent })}
+        description={t("overview.pods.desc", { healthy: healthyPods, pending: pendingPods, failing: failingPods })}
         trend={
           <div className="flex flex-wrap gap-1">
             <Badge variant="success-light" size="sm" className={badgePresets.metric}>
-              {podHealthPercent}% {t("status.healthy").toLowerCase()}
+              {healthyPods} {t("status.healthy").toLowerCase()}
             </Badge>
             <Badge variant="warning-light" size="sm" className={badgePresets.metric}>
-              {pendingPercent}% {t("status.pending").toLowerCase()}
+              {pendingPods} {t("status.pending").toLowerCase()}
             </Badge>
             <Badge variant="error-light" size="sm" className={badgePresets.metric}>
-              {failingPercent}% failing
+              {failingPods} {t("status.failed").toLowerCase()}
             </Badge>
           </div>
         }
