@@ -97,7 +97,9 @@ export function Sidebar() {
               href="/clusters"
               className={cn(
                 "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                isPathActive("/clusters") || onClusterScopedPage
+                // Only highlight when actually on /clusters; do not
+                // treat cluster-scoped pages as active for this item.
+                isPathActive("/clusters")
                   ? "bg-accent text-accent-foreground"
                   : "text-text-muted hover:bg-muted hover:text-text-primary",
               )}
@@ -114,7 +116,8 @@ export function Sidebar() {
                       <div key={c.id} className="space-y-1">
                         <button
                           className={cn(
-                            "flex w-full items-center justify-between rounded-md px-2 py-1 text-sm",
+                            // Increase cluster name font size for better readability
+                            "flex w-full items-center justify-between rounded-md px-2 py-1 text-base",
                             isActive ? "bg-muted text-text-primary" : "text-text-muted hover:bg-muted hover:text-text-primary",
                           )}
                           disabled={selectMutation.isPending}
