@@ -39,13 +39,20 @@ export default function PodDetailPage() {
   const [selectedContainer, setSelectedContainer] = useState<string>("");
   const [window, setWindow] = useState<string>("10m");
 
+  // Derive container name list for this pod
+  const containersForPod = useMemo(() => (pod?.containers ?? []).map((c) => c.name), [pod]);
+
+  // Initialize/validate selected container when pod/containers change
   useEffect(() => {
     if (!pod) return;
-    if (!selectedContainer) {
-      const first = pod.containers[0]?.name || "";
-      setSelectedContainer(first);
+    if (containersForPod.length === 0) {
+      setSelectedContainer("");
+      return;
     }
-  }, [pod, selectedContainer]);
+    if (!selectedContainer || !containersForPod.includes(selectedContainer)) {
+      setSelectedContainer(containersForPod[0] ?? "");
+    }
+  }, [pod, containersForPod, selectedContainer]);
 
   const { data: series } = useQuery<ContainerMetricSeriesResponse>({
     queryKey: queryKeys.containerSeries(ns, name, selectedContainer, window),
@@ -126,15 +133,6 @@ export default function PodDetailPage() {
                   <CardDescription>{t("deploy.cont.desc")}</CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
-                  <select
-                    value={selectedContainer}
-                    onChange={(e) => setSelectedContainer(e.target.value)}
-                    className="rounded-md border border-border bg-surface px-2 py-1 text-sm"
-                  >
-                    {(pod.containers ?? []).map((c) => (
-                      <option key={c.name} value={c.name}>{c.name}</option>
-                    ))}
-                  </select>
                   <select value={window} onChange={(e) => setWindow(e.target.value)} className="rounded-md border border-border bg-surface px-2 py-1 text-sm">
                     <option value="10m">{t("deploy.cont.range.10m")}</option>
                     <option value="30m">{t("deploy.cont.range.30m")}</option>
@@ -147,6 +145,23 @@ export default function PodDetailPage() {
               </div>
             </CardHeader>
             <CardContent>
+              {/* Container chips */}
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                {containersForPod.map((c) => {
+                  const sel = selectedContainer === c;
+                  return (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setSelectedContainer(c)}
+                      className={`${sel ? "bg-emerald-500/10 text-emerald-600" : "bg-background text-text-primary"} border border-border rounded px-2 py-1 text-xs`}
+                    >
+                      {c}
+                    </button>
+                  );
+                })}
+              </div>
+
               {!metricsStatus?.installed || !metricsStatus?.healthy ? (
                 <div className="text-sm text-text-muted">{t("deploy.cont.metricsUnavailable")}</div>
               ) : !selectedContainer ? (
@@ -155,30 +170,26 @@ export default function PodDetailPage() {
                 <div className="text-sm text-text-muted">{t("deploy.cont.noMetrics", { name: selectedContainer })}</div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <SimpleLineChart
-                    title={t("deploy.chart.cpu")}
-                    yLabel={t("deploy.chart.cpuY", { value: "m" })}
-                    series={[
-                      {
-                        id: "cpu",
-                        color: "#16a34a",
-                        values: series.points.map((p) => ({ x: new Date(p.ts).getTime(), y: p.cpu_mcores })),
-                        formatY: (v) => formatMillicores(v as number),
-                      },
-                    ]}
-                  />
-                  <SimpleLineChart
-                    title={t("deploy.chart.mem")}
-                    yLabel={t("deploy.chart.memY", { value: "bytes" })}
-                    series={[
-                      {
-                        id: "mem",
-                        color: "#3b82f6",
-                        values: series.points.map((p) => ({ x: new Date(p.ts).getTime(), y: p.memory_bytes })),
-                        formatY: (v) => formatBytes(v as number),
-                      },
-                    ]}
-                  />
+                  <div>
+                    <div className={`${badgePresets.label} mb-2 text-text-muted`}>{t("deploy.chart.cpu")}</div>
+                    <SimpleLineChart
+                      data={(series.points ?? []).map((p) => ({ ts: p.ts, value: p.cpu_mcores }))}
+                      stroke="#3b82f6"
+                      yLabel={t("deploy.chart.cpuY", { value: formatMillicores(series.points[series.points.length - 1]?.cpu_mcores ?? 0) })}
+                      formatY={(v) => formatMillicores(v)}
+                      height={180}
+                    />
+                  </div>
+                  <div>
+                    <div className={`${badgePresets.label} mb-2 text-text-muted`}>{t("deploy.chart.mem")}</div>
+                    <SimpleLineChart
+                      data={(series.points ?? []).map((p) => ({ ts: p.ts, value: p.memory_bytes }))}
+                      stroke="#10b981"
+                      yLabel={t("deploy.chart.memY", { value: formatBytes(series.points[series.points.length - 1]?.memory_bytes ?? 0) })}
+                      formatY={(v) => formatBytes(v)}
+                      height={180}
+                    />
+                  </div>
                 </div>
               )}
             </CardContent>
@@ -188,4 +199,3 @@ export default function PodDetailPage() {
     </div>
   );
 }
-

@@ -524,6 +524,24 @@ export function fetchPodDetail(ns: string, name: string): Promise<PodDetailRespo
   return request<PodDetailResponse>(`/pods/${en}/${nm}`);
 }
 
+// Delete a Pod. By default, do not specify gracePeriodSeconds.
+// To force delete, pass gracePeriodSeconds = 0.
+export function deletePod(
+  ns: string,
+  name: string,
+  options?: { gracePeriodSeconds?: number | null }
+): Promise<OperationResultResponse> {
+  const en = encodeURIComponent(ns);
+  const nm = encodeURIComponent(name);
+  const params = new URLSearchParams();
+  if (options && options.gracePeriodSeconds != null) {
+    params.set("grace_period_seconds", String(options.gracePeriodSeconds));
+  }
+  const qs = params.toString();
+  const suffix = qs ? `?${qs}` : "";
+  return request<OperationResultResponse>(`/pods/${en}/${nm}${suffix}`, { method: "DELETE" });
+}
+
 // Services
 export interface ServicePortResponse {
   name?: string | null;

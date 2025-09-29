@@ -70,6 +70,8 @@ export default function DeploymentDetailPage() {
   const [selectedPod, setSelectedPod] = useState<string>("");
   const [selectedContainer, setSelectedContainer] = useState<string>("");
   const [window, setWindow] = useState<string>("10m");
+  const [multiSelect, setMultiSelect] = useState<boolean>(false);
+  const [selectedForDelete, setSelectedForDelete] = useState<string[]>([]);
 
   // Initialize selections when pods load
   useEffect(() => {
@@ -91,12 +93,42 @@ export default function DeploymentDetailPage() {
   useEffect(() => {
     if (containersForSelectedPod.length === 0) {
       setSelectedContainer("");
+      setSelectedForDelete([]);
       return;
     }
     if (!selectedContainer || !containersForSelectedPod.includes(selectedContainer)) {
       setSelectedContainer(containersForSelectedPod[0]);
     }
   }, [containersForSelectedPod, selectedContainer]);
+
+  function toggleSelectedForDelete(c: string) {
+    setSelectedForDelete((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
+  }
+
+  function handleDeleteContainers(targets: string[]) {
+    const containers = extractContainersFromYaml(yaml);
+    const uniqueTargets = Array.from(new Set(targets));
+    const next = containers.filter((c) => !uniqueTargets.includes(c.name));
+    if (containers.length <= 1 || next.length < 1) {
+      alert(t("error.cont.onlyOne"));
+      return;
+    }
+    const names = uniqueTargets.join(", ");
+    if (!confirm(t("confirm.cont.deleteMany", { names }))) return;
+    const newYaml = replaceContainersInYaml(yaml, next);
+    updateDeploymentYaml(ns, name, newYaml)
+      .then(() => {
+        setYaml(newYaml);
+        setSelectedForDelete([]);
+        setMultiSelect(false);
+        qc.invalidateQueries({ queryKey: queryKeys.deploymentYaml(ns, name) });
+        qc.invalidateQueries({ queryKey: queryKeys.deploymentPods(ns, name) });
+        qc.invalidateQueries({ queryKey: queryKeys.workloads });
+        router.refresh();
+        alert(t("alert.deploy.updated"));
+      })
+      .catch((e: any) => alert(e?.message || t("error.deploy.update")));
+  }
 
   // Container metrics for selected container
   const containerQueryEnabled = Boolean(selectedPod && selectedContainer);
@@ -638,12 +670,15 @@ export default function DeploymentDetailPage() {
                   <div className="flex flex-wrap items-center gap-2">
                     {containersForSelectedPod.map((c) => {
                       const sel = selectedContainer === c;
+                      const picked = selectedForDelete.includes(c);
+                      const baseCls = `${sel ? "bg-emerald-500/10 text-emerald-600" : "bg-background text-text-primary"} border border-border rounded px-2 py-1 text-xs`;
+                      const multiCls = picked ? "ring-2 ring-emerald-500/70" : "";
                       return (
                         <button
                           key={c}
                           type="button"
-                          onClick={() => setSelectedContainer(c)}
-                          className={`${sel ? "bg-emerald-500/10 text-emerald-600" : "bg-background text-text-primary"} border border-border rounded px-2 py-1 text-xs`}
+                          onClick={() => (multiSelect ? toggleSelectedForDelete(c) : setSelectedContainer(c))}
+                          className={`${baseCls} ${multiSelect ? "relative" : ""} ${multiCls}`}
                         >
                           {c}
                         </button>
@@ -651,8 +686,18 @@ export default function DeploymentDetailPage() {
                     })}
                   </div>
                   <div className="flex items-center gap-2">
-                    <Button type="button" variant="outline" onClick={() => selectedContainer && openEditFor(selectedContainer)} disabled={!selectedContainer}>{t("deploy.cont.edit")}</Button>
-                    <Button type="button" variant="destructive" onClick={() => selectedContainer && handleDeleteContainer(selectedContainer)} disabled={!selectedContainer}>{t("deploy.cont.delete")}</Button>
+                    {!multiSelect ? (
+                      <>
+                        <Button type="button" variant="outline" onClick={() => selectedContainer && openEditFor(selectedContainer)} disabled={!selectedContainer}>{t("deploy.cont.edit")}</Button>
+                        <Button type="button" variant="destructive" onClick={() => selectedContainer && handleDeleteContainer(selectedContainer)} disabled={!selectedContainer}>{t("deploy.cont.delete")}</Button>
+                        <Button type="button" variant="outline" onClick={() => { setMultiSelect(true); setSelectedForDelete([]); }}>{t("deploy.cont.multiSelect")}</Button>
+                      </>
+                    ) : (
+                      <>
+                        <Button type="button" variant="destructive" onClick={() => handleDeleteContainers(selectedForDelete)} disabled={selectedForDelete.length === 0}>{t("deploy.cont.deleteSelected")}</Button>
+                        <Button type="button" variant="outline" onClick={() => { setMultiSelect(false); setSelectedForDelete([]); }}>{t("deploy.cont.cancelSelect")}</Button>
+                      </>
+                    )}
                   </div>
                 </div>
 
