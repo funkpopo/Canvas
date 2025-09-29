@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, useQueries } from "@tanstack/react-query";
 
 import { PageHeader } from "@/features/dashboard/layouts/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/ui/card";
@@ -17,6 +17,7 @@ import { useI18n } from "@/shared/i18n/i18n";
 import {
   fetchDeploymentPods,
   fetchWorkloads,
+  fetchPodDetail,
   fetchContainerSeries,
   fetchMetricsStatus,
   fetchDeploymentYaml,
@@ -32,6 +33,7 @@ import {
   queryKeys,
   type ContainerMetricSeriesResponse,
   type PodWithContainersResponse,
+  type PodDetailResponse,
   type WorkloadSummaryResponse,
   type DeploymentStrategyResponse,
   type AutoscalingConfigResponse,
@@ -45,8 +47,14 @@ export default function DeploymentDetailPage() {
   const name = decodeURIComponent(params.name);
   const qc = useQueryClient();
 
-  // Fetch workload summary to show replicas/status info
-  const { data: workloads } = useQuery({ queryKey: queryKeys.workloads, queryFn: fetchWorkloads });
+  // Refresh workloads more aggressively right after scaling
+  const [watchReplicasUntil, setWatchReplicasUntil] = useState<number | null>(null);
+  const workloadsQuery = useQuery({
+    queryKey: queryKeys.workloads,
+    queryFn: fetchWorkloads,
+    refetchInterval: () => (watchReplicasUntil && Date.now() < watchReplicasUntil ? 1500 : false),
+  });
+  const workloads = workloadsQuery.data;
   const deployment: WorkloadSummaryResponse | undefined = useMemo(
     () => (workloads ?? []).find((w) => w.kind === "Deployment" && w.namespace === ns && w.name === name),
     [workloads, ns, name]
@@ -79,7 +87,7 @@ export default function DeploymentDetailPage() {
     return p?.containers ?? [];
   }, [pods, selectedPod]);
 
-  // Ensure selectedContainer is valid/defaults to first
+  // Default/validate selectedContainer when containers change
   useEffect(() => {
     if (containersForSelectedPod.length === 0) {
       setSelectedContainer("");
@@ -90,6 +98,7 @@ export default function DeploymentDetailPage() {
     }
   }, [containersForSelectedPod, selectedContainer]);
 
+  // Container metrics for selected container
   const containerQueryEnabled = Boolean(selectedPod && selectedContainer);
   const { data: series } = useQuery<ContainerMetricSeriesResponse>({
     queryKey: queryKeys.containerSeries(ns, selectedPod, selectedContainer, window),
@@ -97,6 +106,33 @@ export default function DeploymentDetailPage() {
     enabled: containerQueryEnabled,
     staleTime: 10_000,
   });
+
+  // Pod detail for container readiness state
+  const { data: podDetail } = useQuery({
+    queryKey: queryKeys.podDetail(ns, selectedPod || "__none__"),
+    queryFn: () => fetchPodDetail(ns, selectedPod),
+    enabled: Boolean(selectedPod),
+  });
+
+  // Pod details for readiness coloring on the left list
+  const podDetailsQueries = useQueries({
+    queries: (pods ?? []).map((p) => ({
+      queryKey: queryKeys.podDetail(ns, p.name),
+      queryFn: () => fetchPodDetail(ns, p.name),
+      enabled: Boolean(pods && pods.length > 0),
+      staleTime: 10_000,
+    })),
+  });
+  const podReadiness = useMemo(() => {
+    const map: Record<string, { ready: number; total: number }> = {};
+    (pods ?? []).forEach((p, idx) => {
+      const d = podDetailsQueries[idx]?.data as (PodDetailResponse | undefined);
+      const total = d?.containers?.length ?? (p.containers?.length ?? 0);
+      const ready = d?.containers?.filter((c: any) => c.ready)?.length ?? 0;
+      map[p.name] = { ready, total };
+    });
+    return map;
+  }, [pods, podDetailsQueries]);
 
   // Actions: restart, scale, delete, yaml
   const restartMut = useMutation({
@@ -128,17 +164,26 @@ export default function DeploymentDetailPage() {
         );
       });
       setReplicasInput(replicas);
+      setWatchReplicasUntil(Date.now() + 20_000);
       qc.invalidateQueries({ queryKey: queryKeys.workloads });
       qc.invalidateQueries({ queryKey: queryKeys.deploymentPods(ns, name) });
       qc.invalidateQueries({ queryKey: queryKeys.deploymentYaml(ns, name) });
       router.refresh();
-      alert(t("alert.deploy.replicasUpdated"));
     },
-    onError: (e: unknown) => {
-      const err = e as { message?: string };
-      alert(err?.message || t("error.deploy.scale"));
+    onError: (_e: unknown) => {
+      // Suppress browser alerts for replica changes per requirements
     },
   });
+
+  // Stop extra polling once ready matches desired
+  useEffect(() => {
+    if (!watchReplicasUntil) return;
+    if (!workloads) return;
+    const d = (workloads ?? []).find((w) => w.kind === "Deployment" && w.namespace === ns && w.name === name);
+    if (d && d.replicas_ready != null && d.replicas_desired != null && d.replicas_ready === d.replicas_desired) {
+      setWatchReplicasUntil(null);
+    }
+  }, [workloads, watchReplicasUntil, ns, name]);
 
   const delMut = useMutation({
     mutationFn: () => deleteDeployment(ns, name),
@@ -167,6 +212,7 @@ export default function DeploymentDetailPage() {
       alert(err?.message || t("error.yaml.apply"));
     },
   });
+  const [isYamlOpen, setIsYamlOpen] = useState(false);
 
   // Container edit/delete via YAML helpers
   type K8sContainer = {
@@ -218,22 +264,22 @@ export default function DeploymentDetailPage() {
     return extractContainersFromYaml(y).find(c => c.name === cname);
   }
 
-  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editOpenFor, setEditOpenFor] = useState<string | null>(null);
   const [editImage, setEditImage] = useState("");
 
-  useEffect(() => {
-    if (!isEditOpen || !selectedContainer) return;
+  function openEditFor(containerName: string) {
     try {
       const obj = parseYaml(yaml) as K8sDeployment;
-      const c = obj?.spec?.template?.spec?.containers?.find(x => x.name === selectedContainer);
+      const c = obj?.spec?.template?.spec?.containers?.find((x) => x.name === containerName);
       setEditImage(c?.image ?? "");
     } catch {
       setEditImage("");
     }
-  }, [isEditOpen, selectedContainer, yaml]);
+    setEditOpenFor(containerName);
+  }
 
   const updateImageMut = useMutation({
-    mutationFn: (img: string) => updateDeploymentImage(ns, name, { container: selectedContainer, image: img }),
+    mutationFn: (img: string) => updateDeploymentImage(ns, name, { container: editOpenFor || "", image: img }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.deploymentYaml(ns, name) });
       qc.invalidateQueries({ queryKey: queryKeys.deploymentPods(ns, name) });
@@ -248,15 +294,15 @@ export default function DeploymentDetailPage() {
   });
 
   function handleSaveContainerEdit() {
-    if (!selectedContainer) return;
+    if (!editOpenFor) return;
     const containers = extractContainersFromYaml(yaml);
-    const idx = containers.findIndex(c => c.name === selectedContainer);
+    const idx = containers.findIndex((c) => c.name === editOpenFor);
     if (idx < 0) {
       alert(t("error.cont.notFound"));
       return;
     }
     updateImageMut.mutate(editImage.trim());
-    setIsEditOpen(false);
+    setEditOpenFor(null);
   }
 
   // Strategy & autoscaling editor
@@ -323,20 +369,15 @@ export default function DeploymentDetailPage() {
     },
   });
 
-  function handleDeleteContainer() {
-    if (!selectedContainer) return;
+  function handleDeleteContainer(target: string) {
     const containers = extractContainersFromYaml(yaml);
     if (containers.length <= 1) {
       alert(t("error.cont.onlyOne"));
       return;
     }
-    if (!confirm(t("confirm.cont.delete", { name: selectedContainer }))) return;
-    const next = containers.filter(c => c.name !== selectedContainer);
+    if (!confirm(t("confirm.cont.delete", { name: target }))) return;
+    const next = containers.filter((c) => c.name !== target);
     const newYaml = replaceContainersInYaml(yaml, next);
-    // Switch selection to first remaining container to keep UI valid
-    const nextName = next[0]?.name ?? "";
-    setSelectedContainer(nextName);
-    // Use YAML update for structural change (removing a container)
     updateDeploymentYaml(ns, name, newYaml)
       .then(() => {
         setYaml(newYaml);
@@ -348,6 +389,15 @@ export default function DeploymentDetailPage() {
       })
       .catch((e: any) => alert(e?.message || t("error.deploy.update")));
   }
+
+  // Derived status to reduce perceived delay after scaling
+  const displayStatus = useMemo(() => {
+    if (!deployment) return "";
+    const ready = deployment.replicas_ready ?? 0;
+    const desired = deployment.replicas_desired ?? 0;
+    if (scaleMut.isPending || ready !== desired) return t("status.pending");
+    return deployment.status;
+  }, [deployment, scaleMut.isPending, t]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -370,7 +420,7 @@ export default function DeploymentDetailPage() {
               </div>
               <div>
                 <p className={`${badgePresets.label} text-text-muted`}>{t("deploy.meta.status")}</p>
-                <p className="mt-1 text-lg font-semibold text-text-primary">{deployment.status}</p>
+                <p className="mt-1 text-lg font-semibold text-text-primary">{displayStatus}</p>
                 <p className="text-xs text-text-muted">{t("deploy.meta.health")}</p>
               </div>
             </>
@@ -386,6 +436,8 @@ export default function DeploymentDetailPage() {
         </CardHeader>
         <CardContent className="flex flex-wrap items-center gap-3">
           <Button type="button" onClick={() => restartMut.mutate()} disabled={restartMut.isPending}>{t("deploy.manage.restart")}</Button>
+
+          <Button type="button" variant="outline" onClick={() => setIsYamlOpen(true)}>{t("deploy.yaml.edit")}</Button>
 
           <Button type="button" variant="outline" onClick={() => setIsStrategyOpen(true)}>{t("deploy.strategy.edit")}</Button>
 
@@ -484,24 +536,26 @@ export default function DeploymentDetailPage() {
         </div>
       </Modal>
 
-      {/* YAML editor */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-text-primary">{t("deploy.yaml.title")}</CardTitle>
-          <CardDescription>{t("deploy.yaml.desc")}</CardDescription>
-        </CardHeader>
-        <CardContent>
+      {/* YAML editor modal */}
+      <Modal
+        open={isYamlOpen}
+        onClose={() => setIsYamlOpen(false)}
+        title={t("deploy.yaml.title")}
+        description={t("deploy.yaml.desc")}
+      >
+        <div className="space-y-2">
           <textarea
-            className="w-full min-h-[220px] rounded-md border border-border bg-background p-2 font-mono text-xs text-text-primary"
+            className="w-full min-h-[240px] rounded-md border border-border bg-background p-2 font-mono text-xs text-text-primary"
             value={yaml}
             onChange={(e) => setYaml(e.target.value)}
           />
-          <div className="mt-2 flex items-center gap-2">
-            <Button type="button" variant="outline" onClick={() => yamlMut.mutate()} disabled={yamlMut.isPending}>{t("deploy.yaml.save")}</Button>
-            <span className="text-xs text-text-muted">{t("deploy.yaml.note")}</span>
+          <div className="flex items-center justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setIsYamlOpen(false)}>{t("actions.cancel")}</Button>
+            <Button type="button" onClick={() => yamlMut.mutate()} disabled={yamlMut.isPending}>{t("deploy.yaml.save")}</Button>
           </div>
-        </CardContent>
-      </Card>
+          <div className="text-xs text-text-muted">{t("deploy.yaml.note")}</div>
+        </div>
+      </Modal>
 
       {/* Container details */}
       <Card className="relative overflow-hidden border-border bg-surface">
@@ -512,37 +566,7 @@ export default function DeploymentDetailPage() {
               <CardDescription>{t("deploy.cont.desc")}</CardDescription>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              {/* Pod select */}
-              <label className="text-xs text-text-muted">{t("deploy.cont.pod")}</label>
-              <select
-                className="rounded-md border border-border bg-background px-2 py-1 text-sm text-text-primary"
-                value={selectedPod}
-                onChange={(e) => setSelectedPod(e.target.value)}
-              >
-                {(pods ?? []).map((p) => (
-                  <option key={p.name} value={p.name}>{p.name}</option>
-                ))}
-              </select>
-
-              {/* Container select */}
-              <label className="text-xs text-text-muted">{t("deploy.cont.container")}</label>
-              <select
-                className="rounded-md border border-border bg-background px-2 py-1 text-sm text-text-primary"
-                value={selectedContainer}
-                onChange={(e) => setSelectedContainer(e.target.value)}
-              >
-                {containersForSelectedPod.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
-
-              {/* Container actions */}
-              <Button type="button" variant="outline" onClick={() => setIsEditOpen(v => !v)} disabled={!selectedContainer}>
-                {isEditOpen ? t("deploy.cont.closeEdit") : t("deploy.cont.edit")}
-              </Button>
-              <Button type="button" variant="destructive" onClick={handleDeleteContainer} disabled={!selectedContainer}>
-                {t("deploy.cont.delete")}
-              </Button>
+              {/* Pod list moved to left column; dropdown removed */}
 
               {/* Time window */}
               {metricsStatus?.healthy ? (
@@ -567,53 +591,121 @@ export default function DeploymentDetailPage() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="space-y-8">
-          {isEditOpen && selectedContainer && (
-            <div className="rounded-md border border-border bg-background p-3">
-              <div className="mb-2 text-sm font-medium text-text-primary">{t("deploy.cont.editing", { name: selectedContainer })}</div>
-              <div className="flex items-center gap-2">
-                <label className="text-xs text-text-muted w-20">{t("deploy.cont.image")}</label>
-                <input
-                  className="flex-1 rounded-md border border-border bg-surface px-2 py-1 text-sm text-text-primary"
-                  placeholder={t("deploy.cont.image.placeholder")}
-                  value={editImage}
-                  onChange={(e) => setEditImage(e.target.value)}
-                />
-                <Button type="button" variant="outline" onClick={handleSaveContainerEdit} disabled={!editImage.trim()}>
-                  {t("deploy.cont.save")}
-                </Button>
-              </div>
-              <div className="mt-1 text-xs text-text-muted">{t("deploy.cont.editHint")}</div>
-            </div>
-          )}
-          {!series || !selectedContainer ? (
+        <CardContent>
+          {!pods || (pods?.length ?? 0) === 0 ? (
             <div className="py-8 text-center text-sm text-text-muted">{t("deploy.cont.selectPrompt")}</div>
-          ) : series.points.length === 0 ? (
-            <div className="py-4 text-sm text-text-muted">{t("deploy.cont.noMetrics", { name: selectedContainer })}</div>
           ) : (
-            <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <Badge variant="neutral-light" size="sm" className={badgePresets.metric}>{selectedContainer}</Badge>
+            <div className="md:flex md:gap-6">
+              {/* Left: pod list with scroll */}
+              <div className="md:w-80 max-h-[60vh] overflow-y-auto pr-2 space-y-2">
+                {(pods ?? []).map((p) => {
+                  const rr = podReadiness[p.name] ?? { ready: 0, total: 0 };
+                  const allReady = rr.total > 0 && rr.ready === rr.total;
+                  const anyNotReady = rr.total > 0 && rr.ready < rr.total;
+                  const selected = selectedPod === p.name;
+                  const colorCls = allReady
+                    ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600"
+                    : anyNotReady
+                      ? "bg-rose-500/10 border-rose-500/20 text-rose-600"
+                      : "bg-background text-text-primary";
+                  const selCls = selected ? "ring-1 ring-emerald-500/30" : "";
+                  return (
+                    <button
+                      key={p.name}
+                      type="button"
+                      onClick={() => setSelectedPod(p.name)}
+                      className={`w-full rounded-md border px-3 py-2 text-left text-sm transition ${colorCls} ${selCls}`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="flex-1 break-all whitespace-normal">{p.name}</span>
+                        {allReady ? (
+                          <span className="text-xs">{t("status.ready")}</span>
+                        ) : anyNotReady ? (
+                          <span className="text-xs">{t("status.notReady")}</span>
+                        ) : (
+                          <span className="text-xs">{t("common.unknown")}</span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
-              <div>
-                <div className={`${badgePresets.label} mb-2 text-text-muted`}>{t("deploy.chart.cpu")}</div>
-                <SimpleLineChart
-                  data={(series.points ?? []).map((p) => ({ ts: p.ts, value: p.cpu_mcores }))}
-                  stroke="#3b82f6"
-                  yLabel={t("deploy.chart.cpuY", { value: formatMillicores(series.points[series.points.length - 1]?.cpu_mcores ?? 0) })}
-                  formatY={(v) => formatMillicores(v)}
-                  height={180}
-                />
-              </div>
-              <div>
-                <div className={`${badgePresets.label} mb-2 text-text-muted`}>{t("deploy.chart.mem")}</div>
-                <SimpleLineChart
-                  data={(series.points ?? []).map((p) => ({ ts: p.ts, value: p.memory_bytes }))}
-                  stroke="#10b981"
-                  yLabel={t("deploy.chart.memY", { value: formatBytes(series.points[series.points.length - 1]?.memory_bytes ?? 0) })}
-                  formatY={(v) => formatBytes(v)}
-                  height={180}
-                />
+
+              {/* Right: selected container details */}
+              <div className="flex-1 mt-6 md:mt-0">
+                {/* Container chips for selected pod */}
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {containersForSelectedPod.map((c) => {
+                      const sel = selectedContainer === c;
+                      return (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => setSelectedContainer(c)}
+                          className={`${sel ? "bg-emerald-500/10 text-emerald-600" : "bg-background text-text-primary"} border border-border rounded px-2 py-1 text-xs`}
+                        >
+                          {c}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button type="button" variant="outline" onClick={() => selectedContainer && openEditFor(selectedContainer)} disabled={!selectedContainer}>{t("deploy.cont.edit")}</Button>
+                    <Button type="button" variant="destructive" onClick={() => selectedContainer && handleDeleteContainer(selectedContainer)} disabled={!selectedContainer}>{t("deploy.cont.delete")}</Button>
+                  </div>
+                </div>
+
+                {editOpenFor === selectedContainer && (
+                  <div className="mt-3 rounded-md border border-border bg-background p-3">
+                    <div className="mb-2 text-sm font-medium text-text-primary">{t("deploy.cont.editing", { name: selectedContainer })}</div>
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs text-text-muted w-20">{t("deploy.cont.image")}</label>
+                      <input
+                        className="flex-1 rounded-md border border-border bg-surface px-2 py-1 text-sm text-text-primary"
+                        placeholder={t("deploy.cont.image.placeholder")}
+                        value={editImage}
+                        onChange={(e) => setEditImage(e.target.value)}
+                      />
+                      <Button type="button" variant="outline" onClick={handleSaveContainerEdit} disabled={!editImage.trim()}>
+                        {t("deploy.cont.save")}
+                      </Button>
+                      <Button type="button" variant="outline" onClick={() => setEditOpenFor(null)}>
+                        {t("deploy.cont.closeEdit")}
+                      </Button>
+                    </div>
+                    <div className="mt-1 text-xs text-text-muted">{t("deploy.cont.editHint")}</div>
+                  </div>
+                )}
+
+                {!series || !selectedContainer ? (
+                  <div className="py-8 text-center text-sm text-text-muted">{t("deploy.cont.selectPrompt")}</div>
+                ) : series.points.length === 0 ? (
+                  <div className="py-4 text-sm text-text-muted">{t("deploy.cont.noMetrics", { name: selectedContainer })}</div>
+                ) : (
+                  <div className="mt-4 grid gap-6 md:grid-cols-2">
+                    <div>
+                      <div className={`${badgePresets.label} mb-2 text-text-muted`}>{t("deploy.chart.cpu")}</div>
+                      <SimpleLineChart
+                        data={(series.points ?? []).map((p) => ({ ts: p.ts, value: p.cpu_mcores }))}
+                        stroke="#3b82f6"
+                        yLabel={t("deploy.chart.cpuY", { value: formatMillicores(series.points[series.points.length - 1]?.cpu_mcores ?? 0) })}
+                        formatY={(v) => formatMillicores(v)}
+                        height={180}
+                      />
+                    </div>
+                    <div>
+                      <div className={`${badgePresets.label} mb-2 text-text-muted`}>{t("deploy.chart.mem")}</div>
+                      <SimpleLineChart
+                        data={(series.points ?? []).map((p) => ({ ts: p.ts, value: p.memory_bytes }))}
+                        stroke="#10b981"
+                        yLabel={t("deploy.chart.memY", { value: formatBytes(series.points[series.points.length - 1]?.memory_bytes ?? 0) })}
+                        formatY={(v) => formatBytes(v)}
+                        height={180}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
