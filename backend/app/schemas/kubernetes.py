@@ -204,6 +204,18 @@ class StorageClassCreate(BaseModel):
     volume_binding_mode: str | None = None
     allow_volume_expansion: bool | None = None
     parameters: dict[str, str] = Field(default_factory=dict)
+    # Extended fields for advanced provisioning
+    sc_type: Literal["Generic", "NFS"] = "Generic"
+    namespace: str | None = None
+    # NFS-specific fields
+    nfs_server: str | None = None
+    nfs_path: str | None = None
+    nfs_capacity: str | None = None
+    # StorageClass mountOptions
+    mount_options: list[str] = Field(default_factory=list)
+    # Image source for NFS client provisioner
+    image_source: Literal["public", "private"] | None = None
+    private_image: str | None = None
 
 
 class PersistentVolumeClaimSummary(BaseModel):

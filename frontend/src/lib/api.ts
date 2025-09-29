@@ -277,6 +277,18 @@ export interface StorageClassCreatePayload {
   volume_binding_mode?: string | null;
   allow_volume_expansion?: boolean | null;
   parameters?: Record<string, string>;
+  // Extended fields for advanced provisioning
+  sc_type?: "Generic" | "NFS";
+  namespace?: string | null;
+  // NFS specific
+  nfs_server?: string | null;
+  nfs_path?: string | null;
+  nfs_capacity?: string | null;
+  // StorageClass mount options
+  mount_options?: string[];
+  // Image selection for NFS client provisioner
+  image_source?: "public" | "private" | null;
+  private_image?: string | null;
 }
 
 export function fetchStorageClasses(): Promise<StorageClassSummaryResponse[]> {

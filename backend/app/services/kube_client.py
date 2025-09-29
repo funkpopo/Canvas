@@ -707,8 +707,16 @@ class KubernetesService:
             return []
 
     async def create_storage_class(self, spec: StorageClassCreate) -> tuple[bool, str | None]:
+        """Create a StorageClass. If sc_type == NFS, also install an NFS client provisioner in the selected namespace.
+
+        - Supports mount_options on the StorageClass
+        - For NFS type, accepts nfs_server, nfs_path, image_source/private_image, and optional nfs_capacity (stored as parameter)
+        """
         await self._rate_limiter.acquire()
         try:
+            if getattr(spec, "sc_type", "Generic") == "NFS":
+                return await self._create_nfs_storage_class(spec)
+
             await self._ensure_clients()
             storage_v1 = client.StorageV1Api(self._api_client)
 
@@ -720,6 +728,7 @@ class KubernetesService:
                     volume_binding_mode=spec.volume_binding_mode,
                     allow_volume_expansion=spec.allow_volume_expansion,
                     parameters=spec.parameters or {},
+                    mount_options=(spec.mount_options or None),
                 )
                 storage_v1.create_storage_class(body=body)
 
@@ -727,6 +736,144 @@ class KubernetesService:
             return True, None
         except Exception as exc:  # pragma: no cover
             logger.warning("kubernetes.create_storage_class_error", error=str(exc))
+            return False, str(exc)
+
+    async def _create_nfs_storage_class(self, spec: StorageClassCreate) -> tuple[bool, str | None]:
+        """Install NFS client provisioner and create the StorageClass.
+
+        This uses a minimal manifest for the eipwork/nfs-client-provisioner image, installing:
+          - SA/Role/RoleBinding/ClusterRole/ClusterRoleBinding
+          - Deployment in the target namespace
+          - StorageClass with the generated or provided provisioner name
+        """
+        await self._ensure_clients()
+
+        from kubernetes.utils import create_from_yaml
+        import tempfile
+
+        ns = spec.namespace or "default"
+        image = (
+            spec.private_image.strip() if (spec.image_source == "private" and spec.private_image) else "eipwork/nfs-client-provisioner:latest"
+        )
+        prov_name = spec.provisioner or f"{ns}.nfs-client-provisioner"
+
+        # Merge parameters and append optional declared capacity for visibility
+        params = dict(spec.parameters or {})
+        if getattr(spec, "nfs_capacity", None):
+            params.setdefault("nfs.capacity", str(spec.nfs_capacity))
+        # Always disable archive to avoid surprise, can be changed later by editing SC
+        params.setdefault("archiveOnDelete", "false")
+
+        # Build manifest docs
+        docs: list[dict] = [
+            {
+                "apiVersion": "v1",
+                "kind": "ServiceAccount",
+                "metadata": {"name": "nfs-client-provisioner", "namespace": ns},
+            },
+            {
+                "apiVersion": "rbac.authorization.k8s.io/v1",
+                "kind": "ClusterRole",
+                "metadata": {"name": "nfs-client-provisioner-runner"},
+                "rules": [
+                    {"apiGroups": [""], "resources": ["persistentvolumes"], "verbs": ["get", "list", "watch", "create", "delete"]},
+                    {"apiGroups": [""], "resources": ["persistentvolumeclaims"], "verbs": ["get", "list", "watch", "update"]},
+                    {"apiGroups": ["storage.k8s.io"], "resources": ["storageclasses"], "verbs": ["get", "list", "watch"]},
+                    {"apiGroups": [""], "resources": ["events"], "verbs": ["list", "watch", "create", "update", "patch"]},
+                    {"apiGroups": ["storage.k8s.io"], "resources": ["volumeattachments"], "verbs": ["get", "list", "watch"]},
+                ],
+            },
+            {
+                "apiVersion": "rbac.authorization.k8s.io/v1",
+                "kind": "ClusterRoleBinding",
+                "metadata": {"name": "run-nfs-client-provisioner"},
+                "subjects": [
+                    {"kind": "ServiceAccount", "name": "nfs-client-provisioner", "namespace": ns}
+                ],
+                "roleRef": {"kind": "ClusterRole", "name": "nfs-client-provisioner-runner", "apiGroup": "rbac.authorization.k8s.io"},
+            },
+            {
+                "apiVersion": "rbac.authorization.k8s.io/v1",
+                "kind": "Role",
+                "metadata": {"name": "leader-locking-nfs-client-provisioner", "namespace": ns},
+                "rules": [
+                    {"apiGroups": [""], "resources": ["endpoints"], "verbs": ["get", "list", "watch", "create", "update", "patch"]}
+                ],
+            },
+            {
+                "apiVersion": "rbac.authorization.k8s.io/v1",
+                "kind": "RoleBinding",
+                "metadata": {"name": "leader-locking-nfs-client-provisioner", "namespace": ns},
+                "subjects": [
+                    {"kind": "ServiceAccount", "name": "nfs-client-provisioner", "namespace": ns}
+                ],
+                "roleRef": {"kind": "Role", "name": "leader-locking-nfs-client-provisioner", "apiGroup": "rbac.authorization.k8s.io"},
+            },
+            {
+                "apiVersion": "apps/v1",
+                "kind": "Deployment",
+                "metadata": {"name": "nfs-client-provisioner", "namespace": ns},
+                "spec": {
+                    "replicas": 1,
+                    "strategy": {"type": "Recreate"},
+                    "selector": {"matchLabels": {"app": "nfs-client-provisioner"}},
+                    "template": {
+                        "metadata": {"labels": {"app": "nfs-client-provisioner"}},
+                        "spec": {
+                            "serviceAccountName": "nfs-client-provisioner",
+                            "containers": [
+                                {
+                                    "name": "nfs-client-provisioner",
+                                    "image": image,
+                                    "imagePullPolicy": "IfNotPresent",
+                                    "env": [
+                                        {"name": "PROVISIONER_NAME", "value": prov_name},
+                                        {"name": "NFS_SERVER", "value": spec.nfs_server or ""},
+                                        {"name": "NFS_PATH", "value": spec.nfs_path or ""},
+                                    ],
+                                    "volumeMounts": [
+                                        {"name": "nfs-client-root", "mountPath": "/persistentvolumes"}
+                                    ],
+                                }
+                            ],
+                            "volumes": [
+                                {
+                                    "name": "nfs-client-root",
+                                    "nfs": {"server": spec.nfs_server or "", "path": spec.nfs_path or ""},
+                                }
+                            ],
+                        },
+                    },
+                },
+            },
+            {
+                "apiVersion": "storage.k8s.io/v1",
+                "kind": "StorageClass",
+                "metadata": {"name": spec.name},
+                "provisioner": prov_name,
+                "parameters": params,
+                **({"reclaimPolicy": spec.reclaim_policy} if spec.reclaim_policy else {}),
+                **({"volumeBindingMode": spec.volume_binding_mode} if spec.volume_binding_mode else {}),
+                **({"allowVolumeExpansion": bool(spec.allow_volume_expansion)} if spec.allow_volume_expansion is not None else {}),
+                **({"mountOptions": list(spec.mount_options)} if (getattr(spec, "mount_options", None)) else {}),
+            },
+        ]
+
+        def _apply() -> None:
+            with tempfile.NamedTemporaryFile("w+", suffix=".yaml", delete=True) as tf:
+                yaml.safe_dump_all(docs, tf)
+                tf.flush()
+                try:
+                    create_from_yaml(self._api_client, tf.name, verbose=False)
+                except Exception:
+                    # Some resources might already exist; proceed best-effort
+                    pass
+
+        try:
+            await asyncio.to_thread(_apply)
+            return True, None
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.create_nfs_storage_class_error", error=str(exc))
             return False, str(exc)
 
     async def delete_storage_class(self, name: str) -> tuple[bool, str | None]:

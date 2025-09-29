@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { PageHeader } from "@/features/dashboard/layouts/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/ui/card";
@@ -13,6 +13,7 @@ import {
   downloadVolumePath,
   fetchPvcs,
   fetchStorageClasses,
+  fetchNamespaces,
   fetchVolumeList,
   queryKeys,
   readVolumeFile,
@@ -30,6 +31,30 @@ function CreateStorageClassForm({ onSubmit, onCancel }: { onSubmit: (p: StorageC
   const [name, setName] = useState("");
   const [prov, setProv] = useState("");
   const [allowExp, setAllowExp] = useState(true);
+  const [ns, setNs] = useState<string>("");
+  const [scType, setScType] = useState<"Generic" | "NFS">("Generic");
+  const [reclaim, setReclaim] = useState<string>("Delete");
+  const [binding, setBinding] = useState<string>("Immediate");
+  const [mountOpt, setMountOpt] = useState<string>("");
+  const [imageSource, setImageSource] = useState<"public" | "private">("public");
+  const [privateImage, setPrivateImage] = useState<string>("");
+  const [nfsServer, setNfsServer] = useState<string>("");
+  const [nfsPath, setNfsPath] = useState<string>("");
+  const [nfsCapacity, setNfsCapacity] = useState<string>("");
+
+  const { data: namespaces } = useQuery({ queryKey: queryKeys.namespaces, queryFn: fetchNamespaces });
+
+  useEffect(() => {
+    if (!ns && namespaces && namespaces.length > 0) {
+      const def = namespaces.find((n) => n.name === "default")?.name || namespaces[0].name;
+      setNs(def);
+    }
+  }, [namespaces, ns]);
+
+  const computedProv = useMemo(() => {
+    if (scType === "NFS") return `${ns || "default"}.nfs-client-provisioner`;
+    return prov;
+  }, [scType, ns, prov]);
   return (
     <div className="space-y-3">
       <div>
@@ -37,8 +62,84 @@ function CreateStorageClassForm({ onSubmit, onCancel }: { onSubmit: (p: StorageC
         <input value={name} onChange={(e) => setName(e.target.value)} className="w-full rounded-md border border-border bg-surface px-2 py-1 text-sm" placeholder="fast-sc" />
       </div>
       <div>
-        <label className="block text-sm text-text-muted mb-1">{t("storage.sc.provisioner")}</label>
-        <input value={prov} onChange={(e) => setProv(e.target.value)} className="w-full rounded-md border border-border bg-surface px-2 py-1 text-sm" placeholder="kubernetes.io/no-provisioner" />
+        <label className="block text-sm text-text-muted mb-1">{t("storage.sc.namespace")}</label>
+        <select value={ns} onChange={(e) => setNs(e.target.value)} className="w-full rounded-md border border-border bg-surface px-2 py-1 text-sm">
+          {(namespaces ?? []).map((n) => (
+            <option key={n.name} value={n.name}>{n.name}</option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className="block text-sm text-text-muted mb-1">{t("storage.sc.type")}</label>
+        <select value={scType} onChange={(e) => setScType(e.target.value as any)} className="w-full rounded-md border border-border bg-surface px-2 py-1 text-sm">
+          <option value="Generic">{t("storage.sc.type.generic")}</option>
+          <option value="NFS">{t("storage.sc.type.nfs")}</option>
+        </select>
+      </div>
+      {scType === "Generic" ? (
+        <div>
+          <label className="block text-sm text-text-muted mb-1">{t("storage.sc.provisioner")}</label>
+          <input value={prov} onChange={(e) => setProv(e.target.value)} className="w-full rounded-md border border-border bg-surface px-2 py-1 text-sm" placeholder="kubernetes.io/no-provisioner" />
+        </div>
+      ) : (
+        <div>
+          <label className="block text-sm text-text-muted mb-1">{t("storage.sc.provisioner")}</label>
+          <input value={computedProv} readOnly className="w-full rounded-md border border-border bg-muted px-2 py-1 text-sm" />
+        </div>
+      )}
+
+      {scType === "NFS" && (
+        <>
+          <div>
+            <label className="block text-sm text-text-muted mb-1">{t("storage.sc.imageSource")}</label>
+            <select value={imageSource} onChange={(e) => setImageSource(e.target.value as any)} className="w-full rounded-md border border-border bg-surface px-2 py-1 text-sm">
+              <option value="public">{t("storage.sc.image.publicLabel")}</option>
+              <option value="private">{t("storage.sc.image.privateLabel")}</option>
+            </select>
+            <div className="text-xs text-text-muted mt-1">
+              {imageSource === "public" ? "eipwork/nfs-client-provisioner:latest" : t("storage.sc.image.privateHint")}
+            </div>
+          </div>
+          {imageSource === "private" && (
+            <div>
+              <label className="block text-sm text-text-muted mb-1">{t("storage.sc.privateImage")}</label>
+              <input value={privateImage} onChange={(e) => setPrivateImage(e.target.value)} className="w-full rounded-md border border-border bg-surface px-2 py-1 text-sm" placeholder="registry.example.com/nfs-client-provisioner:tag" />
+            </div>
+          )}
+          <div>
+            <label className="block text-sm text-text-muted mb-1">{t("storage.sc.nfs.server")}</label>
+            <input value={nfsServer} onChange={(e) => setNfsServer(e.target.value)} className="w-full rounded-md border border-border bg-surface px-2 py-1 text-sm" placeholder="10.0.0.10" />
+          </div>
+          <div>
+            <label className="block text-sm text-text-muted mb-1">{t("storage.sc.nfs.path")}</label>
+            <input value={nfsPath} onChange={(e) => setNfsPath(e.target.value)} className="w-full rounded-md border border-border bg-surface px-2 py-1 text-sm" placeholder="/export/k8s" />
+          </div>
+          <div>
+            <label className="block text-sm text-text-muted mb-1">{t("storage.sc.nfs.capacity")}</label>
+            <input value={nfsCapacity} onChange={(e) => setNfsCapacity(e.target.value)} className="w-full rounded-md border border-border bg-surface px-2 py-1 text-sm" placeholder="e.g. 100Gi" />
+          </div>
+          <div>
+            <label className="block text-sm text-text-muted mb-1">{t("storage.sc.mountOptions")}</label>
+            <input value={mountOpt} onChange={(e) => setMountOpt(e.target.value)} className="w-full rounded-md border border-border bg-surface px-2 py-1 text-sm" placeholder="nolock,vers=4.1" />
+          </div>
+        </>
+      )}
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-sm text-text-muted mb-1">{t("storage.sc.reclaim")}</label>
+          <select value={reclaim} onChange={(e) => setReclaim(e.target.value)} className="w-full rounded-md border border-border bg-surface px-2 py-1 text-sm">
+            <option value="Delete">Delete</option>
+            <option value="Retain">Retain</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm text-text-muted mb-1">{t("storage.sc.binding")}</label>
+          <select value={binding} onChange={(e) => setBinding(e.target.value)} className="w-full rounded-md border border-border bg-surface px-2 py-1 text-sm">
+            <option value="Immediate">Immediate</option>
+            <option value="WaitForFirstConsumer">WaitForFirstConsumer</option>
+          </select>
+        </div>
       </div>
       <label className="inline-flex items-center gap-2 text-sm">
         <input type="checkbox" checked={allowExp} onChange={(e) => setAllowExp(e.target.checked)} />
@@ -48,8 +149,28 @@ function CreateStorageClassForm({ onSubmit, onCancel }: { onSubmit: (p: StorageC
         <button className="rounded-md border border-border px-3 py-1 text-sm" onClick={onCancel}>{t("actions.cancel")}</button>
         <button
           className="rounded-md bg-primary text-primary-foreground px-3 py-1 text-sm"
-          onClick={() => onSubmit({ name, provisioner: prov, allow_volume_expansion: allowExp })}
-          disabled={!name || !prov}
+          onClick={() => {
+            const base = {
+              name,
+              provisioner: computedProv,
+              allow_volume_expansion: allowExp,
+              reclaim_policy: reclaim || null,
+              volume_binding_mode: binding || null,
+              parameters: {},
+              sc_type: scType,
+              namespace: ns,
+              mount_options: (mountOpt || "").split(",").map((s) => s.trim()).filter(Boolean),
+            } as StorageClassCreatePayload;
+            if (scType === "NFS") {
+              base.nfs_server = nfsServer;
+              base.nfs_path = nfsPath;
+              base.nfs_capacity = nfsCapacity || null;
+              base.image_source = imageSource;
+              base.private_image = imageSource === "private" ? privateImage : null;
+            }
+            onSubmit(base);
+          }}
+          disabled={!name || (scType === "Generic" ? !prov : !(ns && nfsServer && nfsPath))}
         >
           {t("storage.sc.create")}
         </button>
@@ -350,4 +471,3 @@ export default function StoragePage() {
     </div>
   );
 }
-
