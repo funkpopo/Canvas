@@ -1,7 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.dependencies import get_kubernetes_service
-from app.schemas.kubernetes import PodWithContainers, OperationResult, YamlContent
+from app.schemas.kubernetes import (
+    PodWithContainers,
+    OperationResult,
+    YamlContent,
+    DeploymentImageUpdate,
+    DeploymentStrategy,
+    AutoscalingConfig,
+)
 from app.services.kube_client import KubernetesService
 
 
@@ -110,3 +117,94 @@ async def update_deployment_yaml(
         raise HTTPException(status_code=400, detail=msg or "Failed to apply YAML")
     return OperationResult(ok=True, message=None)
 
+
+@router.post(
+    "/{namespace}/{name}/image",
+    response_model=OperationResult,
+    summary="Update a specific container image in the deployment",
+)
+async def update_deployment_image(
+    namespace: str,
+    name: str,
+    payload: DeploymentImageUpdate,
+    service: KubernetesService = Depends(get_kubernetes_service),
+) -> OperationResult:
+    ok, msg = await service.update_deployment_image(namespace, name, payload.container, payload.image)
+    if not ok:
+        raise HTTPException(status_code=400, detail=msg or "Failed to update image")
+    return OperationResult(ok=True, message=None)
+
+
+@router.get(
+    "/{namespace}/{name}/strategy",
+    response_model=DeploymentStrategy,
+    summary="Get deployment update strategy",
+)
+async def get_deployment_strategy(
+    namespace: str,
+    name: str,
+    service: KubernetesService = Depends(get_kubernetes_service),
+) -> DeploymentStrategy:
+    data = await service.get_deployment_strategy(namespace, name)
+    return DeploymentStrategy(**data)
+
+
+@router.put(
+    "/{namespace}/{name}/strategy",
+    response_model=OperationResult,
+    summary="Update deployment update strategy",
+)
+async def put_deployment_strategy(
+    namespace: str,
+    name: str,
+    payload: DeploymentStrategy,
+    service: KubernetesService = Depends(get_kubernetes_service),
+) -> OperationResult:
+    ok, msg = await service.update_deployment_strategy(
+        namespace,
+        name,
+        payload.strategy_type,
+        payload.max_unavailable,
+        payload.max_surge,
+    )
+    if not ok:
+        raise HTTPException(status_code=400, detail=msg or "Failed to update strategy")
+    return OperationResult(ok=True, message=None)
+
+
+@router.get(
+    "/{namespace}/{name}/autoscaling",
+    response_model=AutoscalingConfig,
+    summary="Get autoscaling (HPA) config for the deployment",
+)
+async def get_deployment_autoscaling(
+    namespace: str,
+    name: str,
+    service: KubernetesService = Depends(get_kubernetes_service),
+) -> AutoscalingConfig:
+    data = await service.get_deployment_autoscaling(namespace, name)
+    return AutoscalingConfig(**data)
+
+
+@router.put(
+    "/{namespace}/{name}/autoscaling",
+    response_model=OperationResult,
+    summary="Enable/disable or update autoscaling (HPA) for the deployment",
+)
+async def put_deployment_autoscaling(
+    namespace: str,
+    name: str,
+    payload: AutoscalingConfig,
+    service: KubernetesService = Depends(get_kubernetes_service),
+) -> OperationResult:
+    ok, msg = await service.update_deployment_autoscaling(
+        namespace,
+        name,
+        payload.enabled,
+        payload.min_replicas,
+        payload.max_replicas,
+        payload.target_cpu_utilization,
+    )
+    if not ok:
+        raise HTTPException(status_code=400, detail=msg or "Failed to update autoscaling")
+    return OperationResult(ok=True, message=None)

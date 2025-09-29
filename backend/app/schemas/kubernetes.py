@@ -97,6 +97,11 @@ class NamespaceSummary(BaseModel):
     labels: dict[str, str] = Field(default_factory=dict)
 
 
+class NamespaceCreate(BaseModel):
+    name: str
+    labels: dict[str, str] | None = None
+
+
 class WorkloadSummary(BaseModel):
     name: str
     namespace: str
@@ -217,6 +222,25 @@ class OperationResult(BaseModel):
 
 class YamlContent(BaseModel):
     yaml: str
+
+
+# Deployment updates
+class DeploymentImageUpdate(BaseModel):
+    container: str
+    image: str
+
+
+class DeploymentStrategy(BaseModel):
+    strategy_type: Literal["RollingUpdate", "Recreate"] = "RollingUpdate"
+    max_unavailable: str | int | None = None
+    max_surge: str | int | None = None
+
+
+class AutoscalingConfig(BaseModel):
+    enabled: bool = False
+    min_replicas: int | None = None
+    max_replicas: int | None = None
+    target_cpu_utilization: int | None = None
 
 
 # Storage management

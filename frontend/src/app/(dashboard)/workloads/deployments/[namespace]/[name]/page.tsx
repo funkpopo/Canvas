@@ -9,6 +9,7 @@ import { PageHeader } from "@/features/dashboard/layouts/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/ui/card";
 import { Badge, badgePresets } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
+import { Modal } from "@/shared/ui/modal";
 import { SimpleLineChart } from "@/shared/ui/line-chart";
 import { formatBytes, formatMillicores } from "@/lib/utils";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
@@ -20,6 +21,11 @@ import {
   fetchMetricsStatus,
   fetchDeploymentYaml,
   updateDeploymentYaml,
+  updateDeploymentImage,
+  fetchDeploymentStrategy,
+  updateDeploymentStrategy,
+  fetchDeploymentAutoscaling,
+  updateDeploymentAutoscaling,
   restartDeployment,
   scaleDeployment,
   deleteDeployment,
@@ -27,6 +33,8 @@ import {
   type ContainerMetricSeriesResponse,
   type PodWithContainersResponse,
   type WorkloadSummaryResponse,
+  type DeploymentStrategyResponse,
+  type AutoscalingConfigResponse,
 } from "@/lib/api";
 
 export default function DeploymentDetailPage() {
@@ -224,10 +232,9 @@ export default function DeploymentDetailPage() {
     }
   }, [isEditOpen, selectedContainer, yaml]);
 
-  const applyYamlMut = useMutation({
-    mutationFn: (newYaml: string) => updateDeploymentYaml(ns, name, newYaml),
-    onSuccess: (_res, newYaml) => {
-      setYaml(newYaml);
+  const updateImageMut = useMutation({
+    mutationFn: (img: string) => updateDeploymentImage(ns, name, { container: selectedContainer, image: img }),
+    onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.deploymentYaml(ns, name) });
       qc.invalidateQueries({ queryKey: queryKeys.deploymentPods(ns, name) });
       qc.invalidateQueries({ queryKey: queryKeys.workloads });
@@ -248,12 +255,73 @@ export default function DeploymentDetailPage() {
       alert(t("error.cont.notFound"));
       return;
     }
-    const next = containers.slice();
-    next[idx] = { ...next[idx], image: editImage };
-    const newYaml = replaceContainersInYaml(yaml, next);
-    applyYamlMut.mutate(newYaml);
+    updateImageMut.mutate(editImage.trim());
     setIsEditOpen(false);
   }
+
+  // Strategy & autoscaling editor
+  const [isStrategyOpen, setIsStrategyOpen] = useState(false);
+  const { data: strategy } = useQuery<DeploymentStrategyResponse>({
+    queryKey: queryKeys.strategy(ns, name),
+    queryFn: () => fetchDeploymentStrategy(ns, name),
+    enabled: isStrategyOpen,
+  });
+  const { data: hpa } = useQuery<AutoscalingConfigResponse>({
+    queryKey: queryKeys.hpa(ns, name),
+    queryFn: () => fetchDeploymentAutoscaling(ns, name),
+    enabled: isStrategyOpen,
+  });
+  const [sType, setSType] = useState<"RollingUpdate" | "Recreate">("RollingUpdate");
+  const [maxUnavailable, setMaxUnavailable] = useState<string | number | "">("");
+  const [maxSurge, setMaxSurge] = useState<string | number | "">("");
+  const [autoEnabled, setAutoEnabled] = useState(false);
+  const [minReplicas, setMinReplicas] = useState<number | "">("");
+  const [maxReplicas, setMaxReplicas] = useState<number | "">("");
+  const [targetCpu, setTargetCpu] = useState<number | "">("");
+
+  useEffect(() => {
+    if (strategy) {
+      setSType(strategy.strategy_type);
+      setMaxUnavailable(strategy.max_unavailable ?? "");
+      setMaxSurge(strategy.max_surge ?? "");
+    }
+  }, [strategy]);
+  useEffect(() => {
+    if (hpa) {
+      setAutoEnabled(Boolean(hpa.enabled));
+      setMinReplicas(hpa.min_replicas ?? "");
+      setMaxReplicas(hpa.max_replicas ?? "");
+      setTargetCpu(hpa.target_cpu_utilization ?? "");
+    }
+  }, [hpa]);
+
+  const saveStrategyMut = useMutation({
+    mutationFn: async () => {
+      // Save strategy then autoscaling
+      await updateDeploymentStrategy(ns, name, {
+        strategy_type: sType,
+        max_unavailable: sType === "RollingUpdate" ? (maxUnavailable === "" ? null : maxUnavailable) : null,
+        max_surge: sType === "RollingUpdate" ? (maxSurge === "" ? null : maxSurge) : null,
+      });
+      await updateDeploymentAutoscaling(ns, name, {
+        enabled: autoEnabled,
+        min_replicas: autoEnabled ? (minReplicas === "" ? 1 : Number(minReplicas)) : null,
+        max_replicas: autoEnabled ? (maxReplicas === "" ? 3 : Number(maxReplicas)) : null,
+        target_cpu_utilization: autoEnabled ? (targetCpu === "" ? 80 : Number(targetCpu)) : null,
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.strategy(ns, name) });
+      qc.invalidateQueries({ queryKey: queryKeys.hpa(ns, name) });
+      qc.invalidateQueries({ queryKey: queryKeys.workloads });
+      setIsStrategyOpen(false);
+      alert(t("alert.deploy.strategyUpdated"));
+    },
+    onError: (e: unknown) => {
+      const err = e as { message?: string };
+      alert(err?.message || t("error.deploy.strategyUpdate"));
+    },
+  });
 
   function handleDeleteContainer() {
     if (!selectedContainer) return;
@@ -268,7 +336,17 @@ export default function DeploymentDetailPage() {
     // Switch selection to first remaining container to keep UI valid
     const nextName = next[0]?.name ?? "";
     setSelectedContainer(nextName);
-    applyYamlMut.mutate(newYaml);
+    // Use YAML update for structural change (removing a container)
+    updateDeploymentYaml(ns, name, newYaml)
+      .then(() => {
+        setYaml(newYaml);
+        qc.invalidateQueries({ queryKey: queryKeys.deploymentYaml(ns, name) });
+        qc.invalidateQueries({ queryKey: queryKeys.deploymentPods(ns, name) });
+        qc.invalidateQueries({ queryKey: queryKeys.workloads });
+        router.refresh();
+        alert(t("alert.deploy.updated"));
+      })
+      .catch((e: any) => alert(e?.message || t("error.deploy.update")));
   }
 
   return (
@@ -309,17 +387,40 @@ export default function DeploymentDetailPage() {
         <CardContent className="flex flex-wrap items-center gap-3">
           <Button type="button" onClick={() => restartMut.mutate()} disabled={restartMut.isPending}>{t("deploy.manage.restart")}</Button>
 
+          <Button type="button" variant="outline" onClick={() => setIsStrategyOpen(true)}>{t("deploy.strategy.edit")}</Button>
+
           <div className="flex items-center gap-2">
             <label className="text-xs text-text-muted">{t("deploy.meta.replicas")}</label>
-            <input
-              type="number"
-              className="w-24 rounded-md border border-border bg-background px-2 py-1 text-sm text-text-primary"
-              value={replicasInput === "" ? "" : replicasInput}
-              onChange={(e) => setReplicasInput(e.target.value === "" ? "" : Number(e.target.value))}
-              min={0}
-            />
-            <Button type="button" variant="outline" onClick={() => typeof replicasInput === "number" && scaleMut.mutate(replicasInput)} disabled={scaleMut.isPending}>
-              {t("deploy.manage.apply")}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={scaleMut.isPending || (typeof replicasInput === "number" && replicasInput <= 0)}
+              onClick={() => {
+                const prev = typeof replicasInput === "number" ? replicasInput : 0;
+                const next = Math.max(0, prev - 1);
+                setReplicasInput(next);
+                scaleMut.mutate(next, { onError: () => setReplicasInput(prev) });
+              }}
+            >
+              -
+            </Button>
+            <Badge variant="neutral-light" size="sm" className={badgePresets.metric}>
+              {replicasInput === "" ? 0 : replicasInput}
+            </Badge>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={scaleMut.isPending}
+              onClick={() => {
+                const prev = typeof replicasInput === "number" ? replicasInput : 0;
+                const next = prev + 1;
+                setReplicasInput(next);
+                scaleMut.mutate(next, { onError: () => setReplicasInput(prev) });
+              }}
+            >
+              +
             </Button>
           </div>
 
@@ -328,6 +429,60 @@ export default function DeploymentDetailPage() {
           </Button>
         </CardContent>
       </Card>
+
+      <Modal
+        open={isStrategyOpen}
+        onClose={() => setIsStrategyOpen(false)}
+        title={t("deploy.strategy.edit")}
+        description={t("deploy.header.desc", { ns })}
+      >
+        <div className="grid gap-3 md:grid-cols-2">
+          <div className="space-y-2">
+            <label className="text-xs text-text-muted">{t("deploy.strategy.type")}</label>
+            <select className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm text-text-primary" value={sType} onChange={(e) => setSType(e.target.value as any)}>
+              <option value="RollingUpdate">{t("deploy.strategy.rolling")}</option>
+              <option value="Recreate">{t("deploy.strategy.recreate")}</option>
+            </select>
+          </div>
+          {sType === "RollingUpdate" && (
+            <>
+              <div className="space-y-2">
+                <label className="text-xs text-text-muted">{t("deploy.strategy.maxUnavailable")}</label>
+                <input className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm text-text-primary" value={maxUnavailable as any} onChange={(e) => setMaxUnavailable(e.target.value)} placeholder="25% or 1" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs text-text-muted">{t("deploy.strategy.maxSurge")}</label>
+                <input className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm text-text-primary" value={maxSurge as any} onChange={(e) => setMaxSurge(e.target.value)} placeholder="25% or 1" />
+              </div>
+            </>
+          )}
+        </div>
+        <div className="mt-4 border-t border-border pt-4">
+          <div className="mb-2 text-sm font-medium text-text-primary">{t("deploy.autoscaling.title")}</div>
+          <div className="flex items-center gap-2">
+            <input id="hpa_toggle" type="checkbox" checked={autoEnabled} onChange={(e) => setAutoEnabled(e.target.checked)} />
+            <label htmlFor="hpa_toggle" className="text-sm text-text-primary">{t("deploy.autoscaling.enable")}</label>
+          </div>
+          <div className="mt-3 grid gap-3 md:grid-cols-3">
+            <div className="space-y-1">
+              <label className="text-xs text-text-muted">{t("deploy.autoscaling.min")}</label>
+              <input type="number" min={1} className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm text-text-primary" value={minReplicas as any} onChange={(e) => setMinReplicas(e.target.value === "" ? "" : Number(e.target.value))} disabled={!autoEnabled} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-text-muted">{t("deploy.autoscaling.max")}</label>
+              <input type="number" min={1} className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm text-text-primary" value={maxReplicas as any} onChange={(e) => setMaxReplicas(e.target.value === "" ? "" : Number(e.target.value))} disabled={!autoEnabled} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-text-muted">{t("deploy.autoscaling.cpu")}</label>
+              <input type="number" min={1} max={100} className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm text-text-primary" value={targetCpu as any} onChange={(e) => setTargetCpu(e.target.value === "" ? "" : Number(e.target.value))} disabled={!autoEnabled} />
+            </div>
+          </div>
+          <div className="mt-4 flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setIsStrategyOpen(false)}>{t("actions.cancel")}</Button>
+            <Button type="button" onClick={() => saveStrategyMut.mutate()}>{t("deploy.strategy.save")}</Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* YAML editor */}
       <Card>

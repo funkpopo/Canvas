@@ -596,6 +596,38 @@ class KubernetesService:
 
         return await self._cached("namespaces", _fetch)
 
+    async def create_namespace(self, name: str, labels: dict[str, str] | None = None) -> tuple[bool, str | None]:
+        await self._rate_limiter.acquire()
+        try:
+            core_v1, _ = await self._ensure_clients()
+
+            def _do() -> None:
+                body = {"metadata": {"name": name, "labels": labels or {}}}
+                core_v1.create_namespace(body=body)  # type: ignore[arg-type]
+
+            await asyncio.to_thread(_do)
+            # Bust cache for namespaces
+            await self._set_cached("namespaces", None)
+            return True, None
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.create_namespace_error", error=str(exc))
+            return False, str(exc)
+
+    async def delete_namespace(self, name: str) -> tuple[bool, str | None]:
+        await self._rate_limiter.acquire()
+        try:
+            core_v1, _ = await self._ensure_clients()
+
+            def _do() -> None:
+                core_v1.delete_namespace(name=name)
+
+            await asyncio.to_thread(_do)
+            await self._set_cached("namespaces", None)
+            return True, None
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.delete_namespace_error", error=str(exc))
+            return False, str(exc)
+
     async def list_workloads(self) -> list[WorkloadSummary]:
         async def _fetch() -> list[WorkloadSummary]:
             await self._rate_limiter.acquire()
@@ -1144,6 +1176,16 @@ class KubernetesService:
             self._cache[key] = result
 
         return result
+
+    async def _set_cached(self, key: str, value: Any | None) -> None:
+        async with self._cache_lock:
+            if value is None:
+                try:
+                    del self._cache[key]
+                except KeyError:
+                    pass
+            else:
+                self._cache[key] = value
 
     async def _ensure_clients(self) -> tuple[client.CoreV1Api, client.AppsV1Api]:
         if self._core_v1 and self._apps_v1:
@@ -1791,6 +1833,193 @@ class KubernetesService:
             return True, None
         except Exception as exc:  # pragma: no cover
             logger.warning("kubernetes.restart_deployment_error", error=str(exc))
+            return False, str(exc)
+
+    async def update_deployment_image(self, namespace: str, name: str, container: str, image: str) -> tuple[bool, str | None]:
+        await self._rate_limiter.acquire()
+        try:
+            _, apps_v1 = await self._ensure_clients()
+
+            def _patch() -> None:
+                dep = apps_v1.read_namespaced_deployment(name=name, namespace=namespace)
+                # Build updated containers list
+                containers = list(dep.spec.template.spec.containers or [])  # type: ignore[union-attr]
+                found = False
+                for c in containers:
+                    if getattr(c, "name", None) == container:
+                        c.image = image
+                        found = True
+                        break
+                if not found:
+                    raise RuntimeError(f"Container {container} not found in deployment")
+                body = {
+                    "spec": {
+                        "template": {
+                            "spec": {"containers": [{"name": c.name, "image": c.image} for c in containers]}
+                        }
+                    }
+                }
+                apps_v1.patch_namespaced_deployment(name=name, namespace=namespace, body=body)
+
+            await asyncio.to_thread(_patch)
+            return True, None
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.update_deployment_image_error", error=str(exc))
+            return False, str(exc)
+
+    async def get_deployment_strategy(self, namespace: str, name: str) -> dict:
+        await self._rate_limiter.acquire()
+        try:
+            _, apps_v1 = await self._ensure_clients()
+
+            def _get() -> dict:
+                dep = apps_v1.read_namespaced_deployment(name=name, namespace=namespace)
+                st = getattr(dep.spec, "strategy", None)
+                if not st:
+                    return {"strategy_type": "RollingUpdate", "max_unavailable": None, "max_surge": None}
+                st_type = getattr(st, "type", None) or "RollingUpdate"
+                ru = getattr(st, "rolling_update", None)
+                max_unavail = getattr(ru, "max_unavailable", None) if ru else None
+                max_surge = getattr(ru, "max_surge", None) if ru else None
+                # Values may be IntOrString objects; convert to raw
+                def _val(v):
+                    try:
+                        return v if isinstance(v, (str, int)) else (v.value if hasattr(v, "value") else None)
+                    except Exception:
+                        return None
+                return {
+                    "strategy_type": str(st_type),
+                    "max_unavailable": _val(max_unavail),
+                    "max_surge": _val(max_surge),
+                }
+
+            return await asyncio.to_thread(_get)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.get_deployment_strategy_error", error=str(exc))
+            return {"strategy_type": "RollingUpdate", "max_unavailable": None, "max_surge": None}
+
+    async def update_deployment_strategy(self, namespace: str, name: str, strategy_type: str, max_unavailable: str | int | None, max_surge: str | int | None) -> tuple[bool, str | None]:
+        await self._rate_limiter.acquire()
+        try:
+            _, apps_v1 = await self._ensure_clients()
+
+            def _patch() -> None:
+                body: dict = {"spec": {"strategy": {"type": strategy_type}}}
+                if strategy_type == "RollingUpdate":
+                    ru: dict[str, str | int] = {}
+                    if max_unavailable is not None:
+                        ru["maxUnavailable"] = max_unavailable
+                    if max_surge is not None:
+                        ru["maxSurge"] = max_surge
+                    body["spec"]["strategy"]["rollingUpdate"] = ru
+                apps_v1.patch_namespaced_deployment(name=name, namespace=namespace, body=body)
+
+            await asyncio.to_thread(_patch)
+            return True, None
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.update_deployment_strategy_error", error=str(exc))
+            return False, str(exc)
+
+    async def get_deployment_autoscaling(self, namespace: str, name: str) -> dict:
+        await self._rate_limiter.acquire()
+        try:
+            _, _apps = await self._ensure_clients()
+            autoscaling_v2 = client.AutoscalingV2Api(self._api_client)
+
+            def _get() -> dict:
+                try:
+                    hpas = autoscaling_v2.list_namespaced_horizontal_pod_autoscaler(namespace=namespace).items
+                except Exception:
+                    hpas = []
+                for h in hpas:
+                    spec = getattr(h, "spec", None)
+                    if not spec:
+                        continue
+                    target = getattr(spec, "scale_target_ref", None)
+                    if target and getattr(target, "kind", None) == "Deployment" and getattr(target, "name", None) == name:
+                        min_r = getattr(spec, "min_replicas", None)
+                        max_r = getattr(spec, "max_replicas", None)
+                        cpu = None
+                        try:
+                            for m in getattr(spec, "metrics", []) or []:
+                                if getattr(m, "type", None) == "Resource" and getattr(m.resource, "name", None) == "cpu":
+                                    tgt = getattr(m.resource, "target", None)
+                                    if tgt and getattr(tgt, "type", None) == "Utilization":
+                                        cpu = getattr(tgt, "average_utilization", None)
+                        except Exception:
+                            pass
+                        return {
+                            "enabled": True,
+                            "min_replicas": min_r,
+                            "max_replicas": max_r,
+                            "target_cpu_utilization": cpu,
+                        }
+                return {"enabled": False, "min_replicas": None, "max_replicas": None, "target_cpu_utilization": None}
+
+            return await asyncio.to_thread(_get)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.get_hpa_error", error=str(exc))
+            return {"enabled": False, "min_replicas": None, "max_replicas": None, "target_cpu_utilization": None}
+
+    async def update_deployment_autoscaling(self, namespace: str, name: str, enabled: bool, min_replicas: int | None, max_replicas: int | None, target_cpu_utilization: int | None) -> tuple[bool, str | None]:
+        await self._rate_limiter.acquire()
+        try:
+            autoscaling_v2 = client.AutoscalingV2Api(self._api_client)
+
+            def _ensure() -> None:
+                # Discover existing HPA for this deployment
+                try:
+                    hpas = autoscaling_v2.list_namespaced_horizontal_pod_autoscaler(namespace=namespace).items
+                except Exception:
+                    hpas = []
+                existing = None
+                for h in hpas:
+                    target = getattr(getattr(h, "spec", None), "scale_target_ref", None)
+                    if target and getattr(target, "kind", None) == "Deployment" and getattr(target, "name", None) == name:
+                        existing = h
+                        break
+
+                if not enabled:
+                    if existing:
+                        autoscaling_v2.delete_namespaced_horizontal_pod_autoscaler(name=existing.metadata.name, namespace=namespace)
+                    return
+
+                # Build HPA spec
+                hpa_name = existing.metadata.name if existing else f"{name}"
+                spec = {
+                    "scaleTargetRef": {"apiVersion": "apps/v1", "kind": "Deployment", "name": name},
+                    "minReplicas": min_replicas if min_replicas is not None else 1,
+                    "maxReplicas": max_replicas if max_replicas is not None else 3,
+                    "metrics": [
+                        {
+                            "type": "Resource",
+                            "resource": {
+                                "name": "cpu",
+                                "target": {
+                                    "type": "Utilization",
+                                    "averageUtilization": target_cpu_utilization if target_cpu_utilization is not None else 80,
+                                },
+                            },
+                        }
+                    ],
+                }
+
+                body = {
+                    "apiVersion": "autoscaling/v2",
+                    "kind": "HorizontalPodAutoscaler",
+                    "metadata": {"name": hpa_name, "namespace": namespace},
+                    "spec": spec,
+                }
+
+                if existing:
+                    autoscaling_v2.patch_namespaced_horizontal_pod_autoscaler(name=hpa_name, namespace=namespace, body=body)
+                else:
+                    autoscaling_v2.create_namespaced_horizontal_pod_autoscaler(namespace=namespace, body=body)
+
+            await asyncio.to_thread(_ensure)
+            return True, None
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.update_hpa_error", error=str(exc))
             return False, str(exc)
 
     async def scale_deployment(self, namespace: str, name: str, replicas: int) -> tuple[bool, str | None]:

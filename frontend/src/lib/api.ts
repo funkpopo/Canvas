@@ -21,6 +21,8 @@ export const queryKeys = {
   nodeSeries: (name: string, window: string) => ["metrics", "node", name, window] as const,
   namespaces: ["namespaces", "list"] as const,
   podsInNamespace: (ns: string) => ["namespaces", ns, "pods"] as const,
+  hpa: (ns: string, name: string) => ["deployments", ns, name, "autoscaling"] as const,
+  strategy: (ns: string, name: string) => ["deployments", ns, name, "strategy"] as const,
   podsSummary: (ns?: string, name?: string, phase?: string, restart?: string) =>
     [
       "pods",
@@ -454,6 +456,17 @@ export function fetchNamespaces(): Promise<NamespaceSummaryResponse[]> {
   return request<NamespaceSummaryResponse[]>("/namespaces/");
 }
 
+export interface NamespaceCreatePayload { name: string; labels?: Record<string, string> }
+
+export function createNamespace(payload: NamespaceCreatePayload): Promise<OperationResultResponse> {
+  return request<OperationResultResponse>("/namespaces/", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function deleteNamespaceByName(name: string): Promise<OperationResultResponse> {
+  const nm = encodeURIComponent(name);
+  return request<OperationResultResponse>(`/namespaces/${nm}`, { method: "DELETE" });
+}
+
 export interface PodWithContainersResponse {
   name: string;
   containers: string[];
@@ -605,6 +618,42 @@ export function updateDeploymentYaml(ns: string, name: string, yaml: string): Pr
     method: "PUT",
     body: JSON.stringify({ yaml }),
   });
+}
+
+export interface DeploymentImageUpdatePayload { container: string; image: string }
+export function updateDeploymentImage(ns: string, name: string, payload: DeploymentImageUpdatePayload): Promise<OperationResultResponse> {
+  const en = encodeURIComponent(ns);
+  const nm = encodeURIComponent(name);
+  return request<OperationResultResponse>(`/workloads/deployments/${en}/${nm}/image`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export interface DeploymentStrategyResponse { strategy_type: "RollingUpdate" | "Recreate"; max_unavailable?: string | number | null; max_surge?: string | number | null }
+export function fetchDeploymentStrategy(ns: string, name: string): Promise<DeploymentStrategyResponse> {
+  const en = encodeURIComponent(ns);
+  const nm = encodeURIComponent(name);
+  return request<DeploymentStrategyResponse>(`/workloads/deployments/${en}/${nm}/strategy`);
+}
+
+export function updateDeploymentStrategy(ns: string, name: string, payload: DeploymentStrategyResponse): Promise<OperationResultResponse> {
+  const en = encodeURIComponent(ns);
+  const nm = encodeURIComponent(name);
+  return request<OperationResultResponse>(`/workloads/deployments/${en}/${nm}/strategy`, { method: "PUT", body: JSON.stringify(payload) });
+}
+
+export interface AutoscalingConfigResponse { enabled: boolean; min_replicas?: number | null; max_replicas?: number | null; target_cpu_utilization?: number | null }
+export function fetchDeploymentAutoscaling(ns: string, name: string): Promise<AutoscalingConfigResponse> {
+  const en = encodeURIComponent(ns);
+  const nm = encodeURIComponent(name);
+  return request<AutoscalingConfigResponse>(`/workloads/deployments/${en}/${nm}/autoscaling`);
+}
+
+export function updateDeploymentAutoscaling(ns: string, name: string, payload: AutoscalingConfigResponse): Promise<OperationResultResponse> {
+  const en = encodeURIComponent(ns);
+  const nm = encodeURIComponent(name);
+  return request<OperationResultResponse>(`/workloads/deployments/${en}/${nm}/autoscaling`, { method: "PUT", body: JSON.stringify(payload) });
 }
 
 export interface ContainerMetricPointResponse {

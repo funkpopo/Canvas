@@ -1,6 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/features/dashboard/layouts/page-header";
 import {
@@ -12,11 +15,14 @@ import {
 } from "@/shared/ui/card";
 import { Badge, badgePresets } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
-import { fetchNamespaces, queryKeys } from "@/lib/api";
+import { Modal } from "@/shared/ui/modal";
+import { createNamespace, deleteNamespaceByName, fetchNamespaces, queryKeys, type OperationResultResponse } from "@/lib/api";
 import { useI18n } from "@/shared/i18n/i18n";
 
 export default function NamespacesPage() {
   const { t } = useI18n();
+  const router = useRouter();
+  const qc = useQueryClient();
   const { data: namespaces, isLoading, isError } = useQuery({
     queryKey: queryKeys.namespaces,
     queryFn: fetchNamespaces,
@@ -26,12 +32,50 @@ export default function NamespacesPage() {
     (ns) => ns.name === "kube-system" || ns.name === "kube-public" || ns.name === "kube-node-lease" || ns.name.startsWith("kube-")
   ).length;
 
+  // Create namespace modal state
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [newNsName, setNewNsName] = useState("");
+  const createMut = useMutation({
+    mutationFn: () => createNamespace({ name: newNsName.trim() }),
+    onSuccess: () => {
+      setIsCreateOpen(false);
+      setNewNsName("");
+      qc.invalidateQueries({ queryKey: queryKeys.namespaces });
+      alert(t("namespaces.alert.created"));
+    },
+    onError: (e: unknown) => {
+      const err = e as { message?: string };
+      alert(err?.message || t("namespaces.error.create"));
+    },
+  });
+
+  const delMut = useMutation({
+    mutationFn: (name: string) => deleteNamespaceByName(name),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.namespaces });
+      alert(t("namespaces.alert.deleted"));
+    },
+    onError: (e: unknown) => {
+      const err = e as { message?: string };
+      alert(err?.message || t("namespaces.error.delete"));
+    },
+  });
+
+  function handleCardClick(name: string) {
+    router.push(`/namespaces/${encodeURIComponent(name)}`);
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
         eyebrow={t("namespaces.header.eyebrow")}
         title={t("namespaces.header.title")}
         description={t("namespaces.header.desc")}
+        actions={
+          <Button type="button" onClick={() => setIsCreateOpen(true)}>
+            {t("namespaces.create")}
+          </Button>
+        }
         meta={
           <>
             <div>
@@ -78,7 +122,12 @@ export default function NamespacesPage() {
         ) : (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {namespaces!.map((ns) => (
-              <Card key={ns.name} className="relative overflow-hidden">
+              <Card
+                key={ns.name}
+                className="relative overflow-hidden hover:bg-hover cursor-pointer transition-colors"
+                onClick={() => handleCardClick(ns.name)}
+                role="button"
+              >
                 <CardHeader>
                   <div className="flex items-start justify-between">
                     <div>
@@ -91,9 +140,17 @@ export default function NamespacesPage() {
                       </CardDescription>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Link href={`/namespaces/${encodeURIComponent(ns.name)}`}>
-                        <Button size="sm">{t("namespaces.manage")}</Button>
-                      </Link>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (!confirm(t("namespaces.confirm.delete", { name: ns.name } as any))) return;
+                          delMut.mutate(ns.name);
+                        }}
+                      >
+                        {t("namespaces.delete")}
+                      </Button>
                     </div>
                   </div>
                 </CardHeader>
@@ -109,6 +166,28 @@ export default function NamespacesPage() {
           </div>
         )}
       </div>
+
+      <Modal
+        open={isCreateOpen}
+        onClose={() => setIsCreateOpen(false)}
+        title={t("namespaces.create")}
+        description={t("namespaces.create.desc")}
+      >
+        <div className="space-y-3">
+          <label className="text-xs text-text-muted">{t("namespaces.create.name")}</label>
+          <input
+            autoFocus
+            className="w-full rounded-md border border-border bg-surface px-2 py-1 text-sm text-text-primary"
+            placeholder={t("namespaces.create.placeholder")}
+            value={newNsName}
+            onChange={(e) => setNewNsName(e.target.value)}
+          />
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)}>{t("actions.cancel")}</Button>
+            <Button type="button" disabled={!newNsName.trim() || createMut.isPending} onClick={() => createMut.mutate()}>{t("actions.save")}</Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
