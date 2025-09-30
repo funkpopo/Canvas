@@ -80,17 +80,34 @@ export function useWebSocket(config: WebSocketConfig): UseWebSocketReturn {
         }
       };
 
-      ws.onerror = (error) => {
+      // Browsers intentionally provide little detail on WebSocket error events.
+      // Avoid console.error here to prevent noisy dev overlays, and surface
+      // useful context via the close event instead.
+      ws.onerror = (event) => {
         if (isUnmountedRef.current) return;
-        console.error('WebSocket error:', error);
+        // Keep status so UI can reflect an error state if needed
         setStatus('error');
+        // Log as a warning with useful context that is actually available
+        console.warn('WebSocket error event', {
+          url,
+          type: (event as Event).type,
+          readyState: ws.readyState,
+        });
       };
 
-      ws.onclose = () => {
+      ws.onclose = (event) => {
         if (isUnmountedRef.current) return;
         
         clearTimers();
         setStatus('disconnected');
+
+        // Provide actionable diagnostics when a socket closes
+        try {
+          const { code, reason, wasClean } = event as CloseEvent;
+          console.info('WebSocket closed', { code, reason, wasClean });
+        } catch (_) {
+          // no-op: environment may not expose CloseEvent fully
+        }
 
         // Attempt reconnection
         if (reconnectAttemptsRef.current < maxReconnectAttempts!) {
