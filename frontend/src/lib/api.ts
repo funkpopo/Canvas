@@ -35,6 +35,10 @@ export const queryKeys = {
   podDetail: (ns: string, name: string) => ["pods", ns, name, "detail"] as const,
   services: (ns?: string) => ["services", ns ?? "all"] as const,
   serviceYaml: (ns: string, name: string) => ["services", ns, name, "yaml"] as const,
+  ingresses: (ns?: string) => ["ingresses", ns ?? "all"] as const,
+  networkPolicies: (ns?: string) => ["networkpolicies", ns ?? "all"] as const,
+  configMaps: (ns?: string) => ["configmaps", ns ?? "all"] as const,
+  secrets: (ns?: string) => ["secrets", ns ?? "all"] as const,
   containerSeries: (ns: string, pod: string, container: string, window: string) => [
     "metrics",
     "container",
@@ -273,6 +277,29 @@ export interface StorageSummaryResponse {
 
 export function fetchStorageSummary(): Promise<StorageSummaryResponse> {
   return request<StorageSummaryResponse>("/cluster/storage");
+}
+
+// Network resources
+export interface IngressSummary { namespace: string; name: string; hosts?: string[]; created_at?: string }
+export interface NetworkPolicySummary { namespace: string; name: string; created_at?: string }
+export interface ConfigMapSummary { namespace: string; name: string; created_at?: string }
+export interface SecretSummary { namespace: string; name: string; type?: string | null; created_at?: string }
+
+export function fetchIngresses(ns?: string): Promise<IngressSummary[]> {
+  const q = ns && ns !== "all" ? `?namespace=${encodeURIComponent(ns)}` : "";
+  return request<IngressSummary[]>(`/ingresses/${q}`.replace(/\/$/, "/"));
+}
+export function fetchNetworkPolicies(ns?: string): Promise<NetworkPolicySummary[]> {
+  const q = ns && ns !== "all" ? `?namespace=${encodeURIComponent(ns)}` : "";
+  return request<NetworkPolicySummary[]>(`/networkpolicies/${q}`.replace(/\/$/, "/"));
+}
+export function fetchConfigMaps(ns?: string): Promise<ConfigMapSummary[]> {
+  const q = ns && ns !== "all" ? `?namespace=${encodeURIComponent(ns)}` : "";
+  return request<ConfigMapSummary[]>(`/configmaps/${q}`.replace(/\/$/, "/"));
+}
+export function fetchSecrets(ns?: string): Promise<SecretSummary[]> {
+  const q = ns && ns !== "all" ? `?namespace=${encodeURIComponent(ns)}` : "";
+  return request<SecretSummary[]>(`/secrets/${q}`.replace(/\/$/, "/"));
 }
 
 // Storage classes

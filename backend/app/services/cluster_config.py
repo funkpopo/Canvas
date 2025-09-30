@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.models.cluster_config import ClusterConfig
 from app.schemas.config import ClusterConfigPayload
+from app.core.crypto import encrypt_if_configured
 
 
 class ClusterConfigService:
@@ -50,7 +51,7 @@ class ClusterConfigService:
             token: str | None = None
             if payload.token is not None:
                 raw_token = payload.token.get_secret_value().strip()
-                token = raw_token or None
+                token = encrypt_if_configured(raw_token) if raw_token else None
 
             if isinstance(payload.api_server, AnyHttpUrl):
                 api_server: str | None = str(payload.api_server).strip()
@@ -61,9 +62,9 @@ class ClusterConfigService:
 
             namespace = payload.namespace.strip() if payload.namespace else None
             context = payload.context.strip() if payload.context else None
-            kubeconfig = payload.kubeconfig.strip() if payload.kubeconfig else None
+            kubeconfig = encrypt_if_configured(payload.kubeconfig.strip()) if payload.kubeconfig else None
             certificate = (
-                payload.certificate_authority_data.strip()
+                encrypt_if_configured(payload.certificate_authority_data.strip())
                 if payload.certificate_authority_data
                 else None
             )

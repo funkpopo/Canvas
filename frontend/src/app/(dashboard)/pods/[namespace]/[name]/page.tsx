@@ -7,6 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { PageHeader } from "@/features/dashboard/layouts/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
 import { Badge, badgePresets } from "@/shared/ui/badge";
 import { StatusBadge } from "@/shared/ui/status-badge";
 import { Button } from "@/shared/ui/button";
@@ -21,6 +22,8 @@ import {
 import { SimpleLineChart } from "@/shared/ui/line-chart";
 import { useI18n } from "@/shared/i18n/i18n";
 import { formatBytes, formatMillicores } from "@/lib/utils";
+import { PodLogs } from "@/features/pods/components/pod-logs";
+import { PodTerminal } from "@/features/pods/components/pod-terminal";
 
 export default function PodDetailPage() {
   const { t } = useI18n();
@@ -61,6 +64,32 @@ export default function PodDetailPage() {
     staleTime: 10_000,
   });
 
+  // API/WS base hosts
+  const apiBase = useMemo(() => {
+    const full = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
+    // strip trailing /api/v1 if present
+    try {
+      const u = new URL(full);
+      const path = u.pathname.replace(/\/$/, "");
+      if (path.endsWith("/api/v1")) {
+        u.pathname = path.slice(0, -"/api/v1".length) || "/";
+        return u.origin + u.pathname.replace(/\/$/, "");
+      }
+      return u.origin + u.pathname.replace(/\/$/, "");
+    } catch {
+      return "http://localhost:8000";
+    }
+  }, []);
+  const wsBase = useMemo(() => {
+    if (typeof window !== "undefined") {
+      const env = (process.env.NEXT_PUBLIC_WS_BASE_URL as string | undefined) ?? undefined;
+      if (env) return env;
+      const proto = window.location.protocol === "https:" ? "wss" : "ws";
+      return `${proto}://${window.location.hostname}:8000`;
+    }
+    return "ws://localhost:8000";
+  }, []);
+
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
@@ -90,7 +119,15 @@ export default function PodDetailPage() {
         <Card><CardContent className="py-8 text-center text-text-muted">{t("pod.error")}</CardContent></Card>
       ) : (
         <>
-          <Card>
+          <Tabs defaultValue="overview" className="w-full">
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="logs">Logs</TabsTrigger>
+              <TabsTrigger value="terminal">Terminal</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="overview" className="space-y-6">
+              <Card>
             <CardHeader>
               <CardTitle className="text-base">{t("pod.cont.title")}</CardTitle>
               <CardDescription>{t("pod.cont.desc")}</CardDescription>
@@ -194,6 +231,67 @@ export default function PodDetailPage() {
               )}
             </CardContent>
           </Card>
+            </TabsContent>
+
+            <TabsContent value="logs" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Logs</CardTitle>
+                  <CardDescription>Select a container and stream logs.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex items-center gap-2 text-sm">
+                    <label>Container</label>
+                    <select
+                      value={selectedContainer}
+                      onChange={(e) => setSelectedContainer(e.target.value)}
+                      className="rounded-md border border-border bg-surface px-2 py-1 text-sm"
+                    >
+                      {containersForPod.map((c) => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <PodLogs
+                    apiBase={apiBase}
+                    namespace={ns}
+                    name={name}
+                    container={selectedContainer || containersForPod[0]}
+                  />
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="terminal" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Terminal</CardTitle>
+                  <CardDescription>Interactive shell into the container.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex items-center gap-2 text-sm">
+                    <label>Container</label>
+                    <select
+                      value={selectedContainer}
+                      onChange={(e) => setSelectedContainer(e.target.value)}
+                      className="rounded-md border border-border bg-surface px-2 py-1 text-sm"
+                    >
+                      {containersForPod.map((c) => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <PodTerminal
+                    wsBase={wsBase}
+                    namespace={ns}
+                    name={name}
+                    container={selectedContainer || containersForPod[0]}
+                    cmd="/bin/sh"
+                  />
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
         </>
       )}
     </div>

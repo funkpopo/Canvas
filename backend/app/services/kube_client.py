@@ -1187,6 +1187,318 @@ class KubernetesService:
 
         self._cluster_display_name = self.settings.kube_context or "default"
 
+    # ---------------------------
+    # Ingress & NetworkPolicy
+    # ---------------------------
+
+    async def list_ingresses(self, namespace: str | None = None) -> list[dict[str, object]]:
+        await self._rate_limiter.acquire()
+        try:
+            await self._ensure_clients()
+            net = client.NetworkingV1Api(self._api_client)
+
+            def _collect() -> list[dict[str, object]]:
+                items = (
+                    net.list_namespaced_ingress(namespace=namespace, limit=1000).items if namespace else net.list_ingress_for_all_namespaces(limit=1000).items
+                )
+                results: list[dict[str, object]] = []
+                for ing in items:
+                    md = getattr(ing, "metadata", None)
+                    spec = getattr(ing, "spec", None)
+                    ns = getattr(md, "namespace", None) or "default"
+                    nm = getattr(md, "name", None) or ""
+                    hosts: list[str] = []
+                    try:
+                        for rule in (getattr(spec, "rules", None) or []):
+                            hosts.append(getattr(rule, "host", None) or "*")
+                    except Exception:
+                        pass
+                    results.append({"namespace": str(ns), "name": str(nm), "hosts": hosts, "created_at": getattr(md, "creation_timestamp", None)})
+                return results
+
+            return await asyncio.to_thread(_collect)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.list_ingresses_error", error=str(exc))
+            return []
+
+    async def get_ingress_yaml(self, namespace: str, name: str) -> str | None:
+        await self._rate_limiter.acquire()
+        try:
+            await self._ensure_clients()
+            net = client.NetworkingV1Api(self._api_client)
+
+            def _do() -> str:
+                obj = net.read_namespaced_ingress(name=name, namespace=namespace)
+                api_client = self._api_client or ApiClient()
+                data = api_client.sanitize_for_serialization(obj)
+                md = data.get("metadata", {}) if isinstance(data, dict) else {}
+                if isinstance(md, dict) and "managedFields" in md:
+                    md.pop("managedFields", None)
+                return yaml.safe_dump(data, sort_keys=False)
+
+            return await asyncio.to_thread(_do)
+        except Exception as exc:
+            logger.warning("kubernetes.get_ingress_yaml_error", error=str(exc))
+            return None
+
+    async def apply_ingress_yaml(self, namespace: str, name: str, yaml_text: str) -> tuple[bool, str | None]:
+        await self._rate_limiter.acquire()
+        try:
+            await self._ensure_clients()
+            net = client.NetworkingV1Api(self._api_client)
+
+            def _do() -> None:
+                body = yaml.safe_load(yaml_text) or {}
+                if not isinstance(body, dict) or str(body.get("kind")) != "Ingress":
+                    raise RuntimeError("YAML kind must be Ingress")
+                net.patch_namespaced_ingress(name=name, namespace=namespace, body=body)
+
+            await asyncio.to_thread(_do)
+            return True, None
+        except Exception as exc:
+            logger.warning("kubernetes.apply_ingress_yaml_error", error=str(exc))
+            return False, str(exc)
+
+    async def delete_ingress(self, namespace: str, name: str) -> tuple[bool, str | None]:
+        await self._rate_limiter.acquire()
+        try:
+            await self._ensure_clients()
+            net = client.NetworkingV1Api(self._api_client)
+
+            def _do() -> None:
+                net.delete_namespaced_ingress(name=name, namespace=namespace)
+
+            await asyncio.to_thread(_do)
+            return True, None
+        except Exception as exc:
+            logger.warning("kubernetes.delete_ingress_error", error=str(exc))
+            return False, str(exc)
+
+    async def list_network_policies(self, namespace: str | None = None) -> list[dict[str, object]]:
+        await self._rate_limiter.acquire()
+        try:
+            await self._ensure_clients()
+            net = client.NetworkingV1Api(self._api_client)
+
+            def _collect() -> list[dict[str, object]]:
+                items = (
+                    net.list_namespaced_network_policy(namespace=namespace, limit=1000).items if namespace else net.list_network_policy_for_all_namespaces(limit=1000).items
+                )
+                results: list[dict[str, object]] = []
+                for np in items:
+                    md = getattr(np, "metadata", None)
+                    ns = getattr(md, "namespace", None) or "default"
+                    nm = getattr(md, "name", None) or ""
+                    results.append({"namespace": str(ns), "name": str(nm), "created_at": getattr(md, "creation_timestamp", None)})
+                return results
+
+            return await asyncio.to_thread(_collect)
+        except Exception as exc:
+            logger.warning("kubernetes.list_networkpolicies_error", error=str(exc))
+            return []
+
+    async def get_network_policy_yaml(self, namespace: str, name: str) -> str | None:
+        await self._rate_limiter.acquire()
+        try:
+            await self._ensure_clients()
+            net = client.NetworkingV1Api(self._api_client)
+
+            def _do() -> str:
+                obj = net.read_namespaced_network_policy(name=name, namespace=namespace)
+                api_client = self._api_client or ApiClient()
+                data = api_client.sanitize_for_serialization(obj)
+                md = data.get("metadata", {}) if isinstance(data, dict) else {}
+                if isinstance(md, dict) and "managedFields" in md:
+                    md.pop("managedFields", None)
+                return yaml.safe_dump(data, sort_keys=False)
+
+            return await asyncio.to_thread(_do)
+        except Exception as exc:
+            logger.warning("kubernetes.get_networkpolicy_yaml_error", error=str(exc))
+            return None
+
+    async def apply_network_policy_yaml(self, namespace: str, name: str, yaml_text: str) -> tuple[bool, str | None]:
+        await self._rate_limiter.acquire()
+        try:
+            await self._ensure_clients()
+            net = client.NetworkingV1Api(self._api_client)
+
+            def _do() -> None:
+                body = yaml.safe_load(yaml_text) or {}
+                if not isinstance(body, dict) or str(body.get("kind")) != "NetworkPolicy":
+                    raise RuntimeError("YAML kind must be NetworkPolicy")
+                net.patch_namespaced_network_policy(name=name, namespace=namespace, body=body)
+
+            await asyncio.to_thread(_do)
+            return True, None
+        except Exception as exc:
+            logger.warning("kubernetes.apply_networkpolicy_yaml_error", error=str(exc))
+            return False, str(exc)
+
+    async def delete_network_policy(self, namespace: str, name: str) -> tuple[bool, str | None]:
+        await self._rate_limiter.acquire()
+        try:
+            await self._ensure_clients()
+            net = client.NetworkingV1Api(self._api_client)
+
+            def _do() -> None:
+                net.delete_namespaced_network_policy(name=name, namespace=namespace)
+
+            await asyncio.to_thread(_do)
+            return True, None
+        except Exception as exc:
+            logger.warning("kubernetes.delete_networkpolicy_error", error=str(exc))
+            return False, str(exc)
+
+    # ---------------------------
+    # ConfigMap & Secret
+    # ---------------------------
+
+    async def list_configmaps(self, namespace: str | None = None) -> list[dict[str, object]]:
+        await self._rate_limiter.acquire()
+        try:
+            core_v1, _ = await self._ensure_clients()
+
+            def _collect() -> list[dict[str, object]]:
+                items = (
+                    core_v1.list_namespaced_config_map(namespace=namespace, limit=1000).items if namespace else core_v1.list_config_map_for_all_namespaces(limit=1000).items
+                )
+                results: list[dict[str, object]] = []
+                for cm in items:
+                    md = getattr(cm, "metadata", None)
+                    ns = getattr(md, "namespace", None) or "default"
+                    nm = getattr(md, "name", None) or ""
+                    results.append({"namespace": str(ns), "name": str(nm), "created_at": getattr(md, "creation_timestamp", None)})
+                return results
+
+            return await asyncio.to_thread(_collect)
+        except Exception as exc:
+            logger.warning("kubernetes.list_configmaps_error", error=str(exc))
+            return []
+
+    async def get_configmap_yaml(self, namespace: str, name: str) -> str | None:
+        await self._rate_limiter.acquire()
+        try:
+            core_v1, _ = await self._ensure_clients()
+
+            def _do() -> str:
+                obj = core_v1.read_namespaced_config_map(name=name, namespace=namespace)
+                api_client = self._api_client or ApiClient()
+                data = api_client.sanitize_for_serialization(obj)
+                md = data.get("metadata", {}) if isinstance(data, dict) else {}
+                if isinstance(md, dict) and "managedFields" in md:
+                    md.pop("managedFields", None)
+                return yaml.safe_dump(data, sort_keys=False)
+
+            return await asyncio.to_thread(_do)
+        except Exception as exc:
+            logger.warning("kubernetes.get_configmap_yaml_error", error=str(exc))
+            return None
+
+    async def apply_configmap_yaml(self, namespace: str, name: str, yaml_text: str) -> tuple[bool, str | None]:
+        await self._rate_limiter.acquire()
+        try:
+            core_v1, _ = await self._ensure_clients()
+
+            def _do() -> None:
+                body = yaml.safe_load(yaml_text) or {}
+                if not isinstance(body, dict) or str(body.get("kind")) != "ConfigMap":
+                    raise RuntimeError("YAML kind must be ConfigMap")
+                core_v1.patch_namespaced_config_map(name=name, namespace=namespace, body=body)
+
+            await asyncio.to_thread(_do)
+            return True, None
+        except Exception as exc:
+            logger.warning("kubernetes.apply_configmap_yaml_error", error=str(exc))
+            return False, str(exc)
+
+    async def delete_configmap(self, namespace: str, name: str) -> tuple[bool, str | None]:
+        await self._rate_limiter.acquire()
+        try:
+            core_v1, _ = await self._ensure_clients()
+
+            def _do() -> None:
+                core_v1.delete_namespaced_config_map(name=name, namespace=namespace)
+
+            await asyncio.to_thread(_do)
+            return True, None
+        except Exception as exc:
+            logger.warning("kubernetes.delete_configmap_error", error=str(exc))
+            return False, str(exc)
+
+    async def list_secrets(self, namespace: str | None = None) -> list[dict[str, object]]:
+        await self._rate_limiter.acquire()
+        try:
+            core_v1, _ = await self._ensure_clients()
+
+            def _collect() -> list[dict[str, object]]:
+                items = (
+                    core_v1.list_namespaced_secret(namespace=namespace, limit=1000).items if namespace else core_v1.list_secret_for_all_namespaces(limit=1000).items
+                )
+                results: list[dict[str, object]] = []
+                for sec in items:
+                    md = getattr(sec, "metadata", None)
+                    ns = getattr(md, "namespace", None) or "default"
+                    nm = getattr(md, "name", None) or ""
+                    sec_type = getattr(sec, "type", None)
+                    results.append({"namespace": str(ns), "name": str(nm), "type": sec_type, "created_at": getattr(md, "creation_timestamp", None)})
+                return results
+
+            return await asyncio.to_thread(_collect)
+        except Exception as exc:
+            logger.warning("kubernetes.list_secrets_error", error=str(exc))
+            return []
+
+    async def get_secret_yaml(self, namespace: str, name: str) -> str | None:
+        await self._rate_limiter.acquire()
+        try:
+            core_v1, _ = await self._ensure_clients()
+
+            def _do() -> str:
+                obj = core_v1.read_namespaced_secret(name=name, namespace=namespace)
+                api_client = self._api_client or ApiClient()
+                data = api_client.sanitize_for_serialization(obj)
+                md = data.get("metadata", {}) if isinstance(data, dict) else {}
+                if isinstance(md, dict) and "managedFields" in md:
+                    md.pop("managedFields", None)
+                return yaml.safe_dump(data, sort_keys=False)
+
+            return await asyncio.to_thread(_do)
+        except Exception as exc:
+            logger.warning("kubernetes.get_secret_yaml_error", error=str(exc))
+            return None
+
+    async def apply_secret_yaml(self, namespace: str, name: str, yaml_text: str) -> tuple[bool, str | None]:
+        await self._rate_limiter.acquire()
+        try:
+            core_v1, _ = await self._ensure_clients()
+
+            def _do() -> None:
+                body = yaml.safe_load(yaml_text) or {}
+                if not isinstance(body, dict) or str(body.get("kind")) != "Secret":
+                    raise RuntimeError("YAML kind must be Secret")
+                core_v1.patch_namespaced_secret(name=name, namespace=namespace, body=body)
+
+            await asyncio.to_thread(_do)
+            return True, None
+        except Exception as exc:
+            logger.warning("kubernetes.apply_secret_yaml_error", error=str(exc))
+            return False, str(exc)
+
+    async def delete_secret(self, namespace: str, name: str) -> tuple[bool, str | None]:
+        await self._rate_limiter.acquire()
+        try:
+            core_v1, _ = await self._ensure_clients()
+
+            def _do() -> None:
+                core_v1.delete_namespaced_secret(name=name, namespace=namespace)
+
+            await asyncio.to_thread(_do)
+            return True, None
+        except Exception as exc:
+            logger.warning("kubernetes.delete_secret_error", error=str(exc))
+            return False, str(exc)
+
     async def _cached(self, key: str, fetcher: Callable[[], Awaitable[Any]]) -> Any:
         async with self._cache_lock:
             if key in self._cache:
@@ -1262,8 +1574,14 @@ class KubernetesService:
             return None
 
     def _apply_cluster_config(self, cluster_config: ClusterConfig) -> str:
-        if cluster_config.kubeconfig:
-            data = yaml.safe_load(cluster_config.kubeconfig)
+        from app.core.crypto import decrypt_if_encrypted
+
+        kubeconfig_text = decrypt_if_encrypted(cluster_config.kubeconfig)
+        token_text = decrypt_if_encrypted(cluster_config.token)
+        ca_text = decrypt_if_encrypted(cluster_config.certificate_authority_data)
+
+        if kubeconfig_text:
+            data = yaml.safe_load(kubeconfig_text)
             context_name = cluster_config.context or data.get("current-context")
             config.load_kube_config_from_dict(data, context=context_name)
             return cluster_config.name
@@ -1276,13 +1594,13 @@ class KubernetesService:
         user_name = f"{cluster_name}-user"
 
         cluster_entry: dict[str, Any] = {"server": cluster_config.api_server}
-        if cluster_config.certificate_authority_data:
-            cluster_entry["certificate-authority-data"] = cluster_config.certificate_authority_data
+        if ca_text:
+            cluster_entry["certificate-authority-data"] = ca_text
         cluster_entry["insecure-skip-tls-verify"] = cluster_config.insecure_skip_tls_verify
 
         user_entry: dict[str, Any] = {}
-        if cluster_config.token:
-            user_entry["token"] = cluster_config.token
+        if token_text:
+            user_entry["token"] = token_text
 
         context_entry: dict[str, Any] = {
             "cluster": cluster_name,
@@ -1722,6 +2040,55 @@ class KubernetesService:
         except Exception as exc:  # pragma: no cover
             logger.warning("kubernetes.delete_pod_error", error=str(exc))
             return False, str(exc)
+
+    async def iter_pod_logs(
+        self,
+        namespace: str,
+        name: str,
+        container: str | None = None,
+        follow: bool = True,
+        tail_lines: int | None = None,
+        since_seconds: int | None = None,
+    ):
+        """Async iterator yielding pod log bytes suitable for StreamingResponse.
+
+        Uses Kubernetes client's streaming (urllib3) with _preload_content=False, read in chunks.
+        """
+        await self._rate_limiter.acquire()
+        core_v1, _ = await self._ensure_clients()
+
+        def _open():
+            return core_v1.read_namespaced_pod_log(
+                name=name,
+                namespace=namespace,
+                container=container,
+                follow=bool(follow),
+                tail_lines=tail_lines,
+                since_seconds=since_seconds,
+                _preload_content=False,
+                timestamps=False,
+            )
+
+        resp = await asyncio.to_thread(_open)
+
+        async def _gen():
+            try:
+                while True:
+                    chunk = await asyncio.to_thread(resp.read, 1024)
+                    if not chunk:
+                        break
+                    # Ensure bytes
+                    if isinstance(chunk, bytes):
+                        yield chunk
+                    else:
+                        yield str(chunk).encode()
+            finally:
+                try:
+                    await asyncio.to_thread(resp.close)
+                except Exception:
+                    pass
+
+        return _gen()
 
     async def collect_container_metrics_once(self) -> list[tuple[datetime, str, str, str, int, int]]:
         """Collect a single snapshot of container usage across all namespaces.

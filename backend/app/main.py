@@ -180,6 +180,80 @@ def create_app() -> FastAPI:
             logger.warning("websocket.error", error=str(e))
             await manager.disconnect(websocket)
 
+    @app.websocket("/ws/pods/{namespace}/{name}/exec")
+    async def websocket_pod_exec(websocket: WebSocket, namespace: str, name: str):
+        """WebSocket bridge for `kubectl exec`-like interactive sessions."""
+        await websocket.accept()
+        service = get_kubernetes_service()
+        # Parse query params
+        qp = dict(websocket.query_params)
+        container = qp.get("container")
+        raw_cmd = qp.get("cmd") or "/bin/sh"
+        cmd_parts = [part for part in str(raw_cmd).split(" ") if part]
+
+        try:
+            await service._rate_limiter.acquire()
+            core_v1, _ = await service._ensure_clients()
+
+            def _open_ws():
+                return stream(
+                    core_v1.connect_get_namespaced_pod_exec,
+                    name,
+                    namespace,
+                    container=container,
+                    command=cmd_parts,
+                    stderr=True,
+                    stdin=True,
+                    stdout=True,
+                    tty=True,
+                    _preload_content=False,
+                )
+
+            ws_client = await asyncio.to_thread(_open_ws)
+
+            async def _reader():
+                try:
+                    while ws_client.is_open():
+                        out = await asyncio.to_thread(ws_client.read_stdout)
+                        err = await asyncio.to_thread(ws_client.read_stderr)
+                        payload = ""
+                        if out:
+                            payload += out
+                        if err:
+                            payload += err
+                        if payload:
+                            await websocket.send_text(payload)
+                        else:
+                            await asyncio.sleep(0.02)
+                except Exception:
+                    pass
+
+            async def _writer():
+                try:
+                    while ws_client.is_open():
+                        try:
+                            msg = await websocket.receive_text()
+                        except Exception:
+                            break
+                        if msg is None:
+                            break
+                        await asyncio.to_thread(ws_client.write_stdin, msg)
+                except Exception:
+                    pass
+
+            reader = asyncio.create_task(_reader())
+            writer = asyncio.create_task(_writer())
+            await asyncio.gather(reader, writer)
+        except WebSocketDisconnect:
+            pass
+        except Exception as e:
+            logger.warning("websocket.exec.error", error=str(e))
+        finally:
+            try:
+                await websocket.close()
+            except Exception:
+                pass
+
     return app
 
 
@@ -196,4 +270,3 @@ if __name__ == "__main__":
         reload=settings.is_debug,
         log_level=settings.log_level.lower(),
     )
-

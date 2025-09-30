@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.dependencies import get_kubernetes_service, provide_cluster_config_service
+from app.core.crypto import decrypt_if_encrypted
 from app.models.cluster_config import ClusterConfig
 from app.schemas.config import (
     ClusterConfigDetail,
@@ -29,10 +30,10 @@ def _to_detail(config: ClusterConfig, include_sensitive: bool = True) -> Cluster
         "insecure_skip_tls_verify": config.insecure_skip_tls_verify,
         "created_at": config.created_at,
         "updated_at": config.updated_at,
-        "kubeconfig": config.kubeconfig if include_sensitive else None,
-        "token": config.token if include_sensitive else None,
+        "kubeconfig": (decrypt_if_encrypted(config.kubeconfig) if include_sensitive else None),
+        "token": (decrypt_if_encrypted(config.token) if include_sensitive else None),
         "certificate_authority_data": (
-            config.certificate_authority_data if include_sensitive else None
+            decrypt_if_encrypted(config.certificate_authority_data) if include_sensitive else None
         ),
     }
     return ClusterConfigDetail(**data)

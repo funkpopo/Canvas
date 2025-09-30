@@ -200,6 +200,45 @@ export function Sidebar() {
                               <span>{t("sidebar.services")}</span>
                             </Link>
                             <Link
+                              href="/network/ingresses"
+                              className={cn(
+                                "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",
+                                isPathActive("/network/ingresses")
+                                  ? "bg-accent text-accent-foreground"
+                                  : "text-text-muted hover:bg-muted hover:text-text-primary",
+                              )}
+                              title="Ingresses"
+                            >
+                              <FolderTree className="h-4 w-4" />
+                              <span>Ingresses</span>
+                            </Link>
+                            <Link
+                              href="/network/policies"
+                              className={cn(
+                                "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",
+                                isPathActive("/network/policies")
+                                  ? "bg-accent text-accent-foreground"
+                                  : "text-text-muted hover:bg-muted hover:text-text-primary",
+                              )}
+                              title="NetworkPolicies"
+                            >
+                              <FolderTree className="h-4 w-4" />
+                              <span>NetworkPolicies</span>
+                            </Link>
+                            <Link
+                              href="/config"
+                              className={cn(
+                                "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",
+                                isPathActive("/config")
+                                  ? "bg-accent text-accent-foreground"
+                                  : "text-text-muted hover:bg-muted hover:text-text-primary",
+                              )}
+                              title="Config"
+                            >
+                              <FolderTree className="h-4 w-4" />
+                              <span>Config</span>
+                            </Link>
+                            <Link
                               href="/events"
                               className={cn(
                                 "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",

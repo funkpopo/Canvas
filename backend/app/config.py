@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     rate_limit_requests_per_minute: int = 120
     allowed_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
     database_url: str = "sqlite+aiosqlite:///./canvas.db"
+    # Optional Fernet key for encrypting sensitive fields (ClusterConfig)
+    # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    fernet_key: str | None = None
 
     @computed_field
     @property
