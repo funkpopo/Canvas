@@ -63,9 +63,7 @@ export default function WorkloadsPage() {
           </>
         }
       >
-        <Badge variant="info-light" size="sm" className="border-sky-400/40">
-          {t("workloads.badge.gitops")}
-        </Badge>
+
       </PageHeader>
 
       <Tabs defaultValue="deployments" className="w-full">

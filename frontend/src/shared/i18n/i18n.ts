@@ -242,7 +242,7 @@ const dictEn = {
   "workloads.meta.statefulsets.desc": "Stateful application workloads.",
   "workloads.meta.cronjobs": "CronJobs",
   "workloads.meta.cronjobs.desc": "Scheduled job workloads.",
-  "workloads.badge.gitops": "GitOps sync & drift detection ready",
+  
   "workloads.tab.deployments": "Deployments",
   "workloads.tab.statefulsets": "StatefulSets",
   "workloads.tab.cronjobs": "CronJobs",
@@ -862,7 +862,7 @@ const dictZh = {
   "workloads.meta.statefulsets.desc": "有状态应用工作负载",
   "workloads.meta.cronjobs": "CronJobs",
   "workloads.meta.cronjobs.desc": "定时任务工作负载",
-  "workloads.badge.gitops": "已启用 GitOps 同步与漂移检测",
+  
   "workloads.tab.deployments": "Deployments",
   "workloads.tab.statefulsets": "StatefulSets",
   "workloads.tab.cronjobs": "CronJobs",
