@@ -560,6 +560,25 @@ class KubernetesService:
             logger.warning("kubernetes.patch_node_labels_error", error=str(exc))
             return False, str(exc)
 
+    async def patch_node_taints(self, name: str, taints: list[NodeTaint]) -> tuple[bool, str | None]:
+        await self._rate_limiter.acquire()
+        try:
+            core_v1, _ = await self._ensure_clients()
+
+            def _do() -> None:
+                items = [
+                    {"key": t.key, "value": t.value, "effect": t.effect}
+                    for t in (taints or [])
+                ]
+                body = {"spec": {"taints": items}}
+                core_v1.patch_node(name=name, body=body)
+
+            await asyncio.to_thread(_do)
+            return True, None
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.patch_node_taints_error", error=str(exc))
+            return False, str(exc)
+
     async def delete_node(self, name: str) -> tuple[bool, str | None]:
         await self._rate_limiter.acquire()
         try:
@@ -1688,6 +1707,21 @@ class KubernetesService:
         except Exception as exc:  # pragma: no cover
             logger.warning("kubernetes.get_pod_detail_error", error=str(exc))
             return PodDetail(namespace=namespace, name=name)
+
+    async def delete_pod(self, namespace: str, name: str, grace_period_seconds: int | None = None) -> tuple[bool, str | None]:
+        await self._rate_limiter.acquire()
+        try:
+            core_v1, _ = await self._ensure_clients()
+
+            def _do() -> None:
+                body = client.V1DeleteOptions(grace_period_seconds=grace_period_seconds)
+                core_v1.delete_namespaced_pod(name=name, namespace=namespace, body=body)  # type: ignore[arg-type]
+
+            await asyncio.to_thread(_do)
+            return True, None
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.delete_pod_error", error=str(exc))
+            return False, str(exc)
 
     async def collect_container_metrics_once(self) -> list[tuple[datetime, str, str, str, int, int]]:
         """Collect a single snapshot of container usage across all namespaces.

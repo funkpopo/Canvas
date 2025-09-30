@@ -4,17 +4,26 @@ from pydantic import BaseModel
 
 
 class EventType(str, Enum):
-    """WebSocket事件类型"""
+    """WebSocket event types"""
     DEPLOYMENT_ADDED = "deployment_added"
     DEPLOYMENT_MODIFIED = "deployment_modified"
     DEPLOYMENT_DELETED = "deployment_deleted"
+    STATEFULSET_ADDED = "statefulset_added"
+    STATEFULSET_MODIFIED = "statefulset_modified"
+    STATEFULSET_DELETED = "statefulset_deleted"
+    JOB_ADDED = "job_added"
+    JOB_MODIFIED = "job_modified"
+    JOB_DELETED = "job_deleted"
+    CRONJOB_ADDED = "cronjob_added"
+    CRONJOB_MODIFIED = "cronjob_modified"
+    CRONJOB_DELETED = "cronjob_deleted"
     POD_ADDED = "pod_added"
     POD_MODIFIED = "pod_modified"
     POD_DELETED = "pod_deleted"
 
 
 class WebSocketMessage(BaseModel):
-    """WebSocket消息格式"""
+    """WebSocket message payload"""
     type: EventType
     resource_type: str  # "Deployment", "Pod", etc.
     namespace: str
@@ -23,3 +32,4 @@ class WebSocketMessage(BaseModel):
 
     class Config:
         use_enum_values = True
+

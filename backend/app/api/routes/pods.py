@@ -23,3 +23,13 @@ async def list_pods(
 async def get_pod_detail(namespace: str, name: str, service: KubernetesService = Depends(get_kubernetes_service)) -> PodDetail:
     return await service.get_pod_detail(namespace=namespace, name=name)
 
+
+@router.delete("/{namespace}/{name}", response_model=dict, summary="Delete a pod", tags=["pods"])
+async def delete_pod(
+    namespace: str,
+    name: str,
+    grace_period_seconds: int | None = Query(default=None, ge=0),
+    service: KubernetesService = Depends(get_kubernetes_service),
+) -> dict:
+    ok, msg = await service.delete_pod(namespace=namespace, name=name, grace_period_seconds=grace_period_seconds)
+    return {"ok": ok, "message": msg}

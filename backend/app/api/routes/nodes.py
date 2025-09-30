@@ -7,6 +7,7 @@ from app.schemas.kubernetes import (
     NodeMetrics,
     NodePodSummary,
     NodeSummary,
+    NodeTaint,
     OperationResult,
     YamlContent,
 )
@@ -67,6 +68,12 @@ async def drain_node(name: str, service: KubernetesService = Depends(get_kuberne
 @router.patch("/{name}/labels", response_model=OperationResult, summary="Patch node labels")
 async def patch_node_labels(name: str, labels: dict[str, str], service: KubernetesService = Depends(get_kubernetes_service)) -> OperationResult:
     ok, msg = await service.patch_node_labels(name, labels)
+    return OperationResult(ok=ok, message=msg)
+
+
+@router.patch("/{name}/taints", response_model=OperationResult, summary="Patch node taints")
+async def patch_node_taints(name: str, taints: list[NodeTaint], service: KubernetesService = Depends(get_kubernetes_service)) -> OperationResult:
+    ok, msg = await service.patch_node_taints(name, taints)
     return OperationResult(ok=ok, message=msg)
 
 
