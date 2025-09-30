@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { GitBranch, LayoutDashboard, Timer } from "lucide-react";
 import { PageHeader } from "@/features/dashboard/layouts/page-header";
 import {
   Card,
@@ -17,6 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
 import { StatusBadge } from "@/shared/ui/status-badge";
 import { queryKeys, fetchWorkloads } from "@/lib/api";
 import { useI18n } from "@/shared/i18n/i18n";
+import { useDeploymentUpdates } from "@/hooks/useDeploymentUpdates";
 
 export default function WorkloadsPage() {
   const { t } = useI18n();
@@ -24,6 +24,9 @@ export default function WorkloadsPage() {
     queryKey: queryKeys.workloads,
     queryFn: fetchWorkloads,
   });
+
+  // Enable real-time updates via WebSocket
+  useDeploymentUpdates();
 
   const deployments = workloads?.filter((w) => w.kind === "Deployment") ?? [];
   const statefulsets = workloads?.filter((w) => w.kind === "StatefulSet") ?? [];
@@ -95,24 +98,19 @@ export default function WorkloadsPage() {
               </CardContent>
             </Card>
           ) : (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-3 grid-cols-[repeat(auto-fill,300px)] justify-start">
               {deployments.map((workload) => (
                 <Link
                   key={`${workload.namespace}-${workload.name}`}
                   href={`/workloads/deployments/${encodeURIComponent(workload.namespace)}/${encodeURIComponent(workload.name)}`}
-                  className="block"
+                  className="block h-full"
                 >
-                  <Card className="relative overflow-hidden hover:bg-hover cursor-pointer transition-colors">
+                  <Card className="relative overflow-hidden hover:bg-hover cursor-pointer transition-colors py-4 gap-4 h-full flex flex-col">
                     <CardHeader>
                       <div className="flex items-start justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-purple-600">
-                            <LayoutDashboard className="h-5 w-5 text-white" />
-                          </div>
-                          <div>
-                            <CardTitle className="text-base text-text-primary">{workload.name}</CardTitle>
-                            <CardDescription>{t("workloads.card.namespace", { ns: workload.namespace })}</CardDescription>
-                          </div>
+                        <div className="min-w-0 flex-1">
+                          <CardTitle className="text-base text-text-primary truncate" title={workload.name}>{workload.name}</CardTitle>
+                          <CardDescription className="truncate">{t("workloads.card.namespace", { ns: workload.namespace })}</CardDescription>
                         </div>
                         <StatusBadge
                           status={workload.status === "Healthy" ? "healthy" : "warning"}
@@ -159,19 +157,14 @@ export default function WorkloadsPage() {
               </CardContent>
             </Card>
           ) : (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-3 grid-cols-[repeat(auto-fill,300px)] justify-start">
               {statefulsets.map((workload) => (
-                <Card key={`${workload.namespace}-${workload.name}`} className="relative overflow-hidden">
+                <Card key={`${workload.namespace}-${workload.name}`} className="relative overflow-hidden py-4 gap-4 h-full flex flex-col">
                   <CardHeader>
                     <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-green-500 to-teal-600">
-                          <GitBranch className="h-5 w-5 text-white" />
-                        </div>
-                        <div>
-                          <CardTitle className="text-base text-text-primary">{workload.name}</CardTitle>
-                          <CardDescription>{t("workloads.card.namespace", { ns: workload.namespace })}</CardDescription>
-                        </div>
+                      <div className="min-w-0 flex-1">
+                        <CardTitle className="text-base text-text-primary truncate" title={workload.name}>{workload.name}</CardTitle>
+                        <CardDescription className="truncate">{t("workloads.card.namespace", { ns: workload.namespace })}</CardDescription>
                       </div>
                       <StatusBadge
                         status={workload.status === "Healthy" ? "healthy" : "warning"}
@@ -217,19 +210,14 @@ export default function WorkloadsPage() {
               </CardContent>
             </Card>
           ) : (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-3 grid-cols-[repeat(auto-fill,300px)] justify-start">
               {cronjobs.map((workload) => (
-                <Card key={`${workload.namespace}-${workload.name}`} className="relative overflow-hidden">
+                <Card key={`${workload.namespace}-${workload.name}`} className="relative overflow-hidden py-4 gap-4 h-full flex flex-col">
                   <CardHeader>
                     <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-yellow-500 to-orange-600">
-                          <Timer className="h-5 w-5 text-white" />
-                        </div>
-                        <div>
-                          <CardTitle className="text-base text-text-primary">{workload.name}</CardTitle>
-                          <CardDescription>{t("workloads.card.namespace", { ns: workload.namespace })}</CardDescription>
-                        </div>
+                      <div className="min-w-0 flex-1">
+                        <CardTitle className="text-base text-text-primary truncate" title={workload.name}>{workload.name}</CardTitle>
+                        <CardDescription className="truncate">{t("workloads.card.namespace", { ns: workload.namespace })}</CardDescription>
                       </div>
                       <StatusBadge
                         status={workload.status === "Healthy" ? "healthy" : "warning"}

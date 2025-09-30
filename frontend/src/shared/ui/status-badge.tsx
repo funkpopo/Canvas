@@ -1,6 +1,19 @@
 import { Badge, badgePresets } from "@/shared/ui/badge";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/shared/i18n/i18n";
+import { 
+  CheckCircle2, 
+  Play, 
+  Check, 
+  AlertTriangle, 
+  Clock, 
+  XCircle, 
+  X, 
+  Circle, 
+  Square, 
+  Info, 
+  HelpCircle
+} from "lucide-react";
 
 interface StatusBadgeProps {
   status: "healthy" | "warning" | "critical" | "info" | "running" | "pending" | "failed" | "unknown" | "ready" | "not-ready" | "succeeded" | "terminating";
@@ -13,63 +26,63 @@ interface StatusBadgeProps {
 const statusConfig = {
   healthy: { 
     variant: "success-light" as const, 
-    indicatorClass: "bg-success animate-pulse",
-    icon: "●"
+    indicatorClass: "text-success",
+    icon: CheckCircle2
   },
   ready: { 
     variant: "success" as const, 
-    indicatorClass: "bg-success",
-    icon: "●"
+    indicatorClass: "",
+    icon: CheckCircle2
   },
   running: { 
     variant: "success" as const, 
-    indicatorClass: "bg-success animate-pulse",
-    icon: "▶"
+    indicatorClass: "animate-pulse",
+    icon: Play
   },
   succeeded: { 
     variant: "success-light" as const, 
-    indicatorClass: "bg-success",
-    icon: "✓"
+    indicatorClass: "text-success",
+    icon: Check
   },
   warning: { 
     variant: "warning-light" as const, 
-    indicatorClass: "bg-warning animate-pulse",
-    icon: "⚠"
+    indicatorClass: "text-warning animate-pulse",
+    icon: AlertTriangle
   },
   pending: { 
     variant: "warning" as const, 
-    indicatorClass: "bg-warning animate-pulse",
-    icon: "⏳"
+    indicatorClass: "animate-pulse",
+    icon: Clock
   },
   critical: { 
     variant: "destructive" as const, 
-    indicatorClass: "bg-error animate-pulse",
-    icon: "✕"
+    indicatorClass: "animate-pulse",
+    icon: XCircle
   },
   failed: { 
     variant: "destructive" as const, 
-    indicatorClass: "bg-error",
-    icon: "✕"
+    indicatorClass: "",
+    icon: X
   },
   "not-ready": { 
     variant: "error-light" as const, 
-    indicatorClass: "bg-error",
-    icon: "○"
+    indicatorClass: "text-error",
+    icon: Circle
   },
   terminating: { 
     variant: "warning-light" as const, 
-    indicatorClass: "bg-warning animate-pulse",
-    icon: "⏹"
+    indicatorClass: "text-warning animate-pulse",
+    icon: Square
   },
   info: { 
     variant: "info-light" as const, 
-    indicatorClass: "bg-info",
-    icon: "ℹ"
+    indicatorClass: "text-info",
+    icon: Info
   },
   unknown: { 
     variant: "neutral-light" as const, 
-    indicatorClass: "bg-badge-neutral",
-    icon: "?"
+    indicatorClass: "text-badge-neutral",
+    icon: HelpCircle
   },
 } as const;
 
@@ -81,6 +94,9 @@ export function StatusBadge({
   className 
 }: StatusBadgeProps) {
   const config = statusConfig[status] || statusConfig.unknown;
+  const IconComponent = config.icon;
+  
+  const iconSize = size === "sm" ? 12 : size === "lg" ? 16 : 14;
   
   return (
     <Badge 
@@ -89,12 +105,12 @@ export function StatusBadge({
       className={cn(badgePresets.status, className)}
     >
       {showIndicator && (
-        <span 
+        <IconComponent 
           className={cn(
-            "inline-block rounded-full",
-            size === "sm" ? "h-1.5 w-1.5" : size === "lg" ? "h-2.5 w-2.5" : "h-2 w-2",
+            "inline-block",
             config.indicatorClass
           )} 
+          size={iconSize}
           aria-hidden 
         />
       )}

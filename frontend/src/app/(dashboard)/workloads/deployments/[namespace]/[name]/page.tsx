@@ -14,6 +14,7 @@ import { SimpleLineChart } from "@/shared/ui/line-chart";
 import { formatBytes, formatMillicores } from "@/lib/utils";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import { useI18n } from "@/shared/i18n/i18n";
+import { useDeploymentUpdates } from "@/hooks/useDeploymentUpdates";
 import {
   fetchDeploymentPods,
   fetchWorkloads,
@@ -47,12 +48,13 @@ export default function DeploymentDetailPage() {
   const name = decodeURIComponent(params.name);
   const qc = useQueryClient();
 
-  // Refresh workloads more aggressively right after scaling
-  const [watchReplicasUntil, setWatchReplicasUntil] = useState<number | null>(null);
+  // Enable real-time updates via WebSocket
+  useDeploymentUpdates();
+
+  // Workloads query - no need for polling anymore, WebSocket handles updates
   const workloadsQuery = useQuery({
     queryKey: queryKeys.workloads,
     queryFn: fetchWorkloads,
-    refetchInterval: () => (watchReplicasUntil && Date.now() < watchReplicasUntil ? 1500 : false),
   });
   const workloads = workloadsQuery.data;
   const deployment: WorkloadSummaryResponse | undefined = useMemo(
@@ -106,13 +108,19 @@ export default function DeploymentDetailPage() {
   }
 
   function handleDeleteContainers(targets: string[]) {
-    const containers = extractContainersFromYaml(yaml);
+    // Use actual pod containers instead of yaml parsing for more reliable validation
+    if (!yaml || !containersForSelectedPod || containersForSelectedPod.length === 0) {
+      alert(t("error.cont.notFound"));
+      return;
+    }
     const uniqueTargets = Array.from(new Set(targets));
-    const next = containers.filter((c) => !uniqueTargets.includes(c.name));
-    if (containers.length <= 1 || next.length < 1) {
+    const remainingCount = containersForSelectedPod.length - uniqueTargets.length;
+    if (containersForSelectedPod.length <= 1 || remainingCount < 1) {
       alert(t("error.cont.onlyOne"));
       return;
     }
+    const containers = extractContainersFromYaml(yaml);
+    const next = containers.filter((c) => !uniqueTargets.includes(c.name));
     const names = uniqueTargets.join(", ");
     if (!confirm(t("confirm.cont.deleteMany", { names }))) return;
     const newYaml = replaceContainersInYaml(yaml, next);
@@ -196,26 +204,14 @@ export default function DeploymentDetailPage() {
         );
       });
       setReplicasInput(replicas);
-      setWatchReplicasUntil(Date.now() + 20_000);
-      qc.invalidateQueries({ queryKey: queryKeys.workloads });
+      // WebSocket will handle real-time updates, no need for polling
       qc.invalidateQueries({ queryKey: queryKeys.deploymentPods(ns, name) });
       qc.invalidateQueries({ queryKey: queryKeys.deploymentYaml(ns, name) });
-      router.refresh();
     },
     onError: (_e: unknown) => {
       // Suppress browser alerts for replica changes per requirements
     },
   });
-
-  // Stop extra polling once ready matches desired
-  useEffect(() => {
-    if (!watchReplicasUntil) return;
-    if (!workloads) return;
-    const d = (workloads ?? []).find((w) => w.kind === "Deployment" && w.namespace === ns && w.name === name);
-    if (d && d.replicas_ready != null && d.replicas_desired != null && d.replicas_ready === d.replicas_desired) {
-      setWatchReplicasUntil(null);
-    }
-  }, [workloads, watchReplicasUntil, ns, name]);
 
   const delMut = useMutation({
     mutationFn: () => deleteDeployment(ns, name),
@@ -402,8 +398,8 @@ export default function DeploymentDetailPage() {
   });
 
   function handleDeleteContainer(target: string) {
-    const containers = extractContainersFromYaml(yaml);
-    if (containers.length <= 1) {
+    // Use actual pod containers instead of yaml parsing for more reliable validation
+    if (!yaml || !containersForSelectedPod || containersForSelectedPod.length <= 1) {
       alert(t("error.cont.onlyOne"));
       return;
     }
@@ -458,7 +454,8 @@ export default function DeploymentDetailPage() {
             </>
           ) : null
         }
-      />
+      >
+      </PageHeader>
 
       {/* Management actions */}
       <Card>
@@ -635,28 +632,47 @@ export default function DeploymentDetailPage() {
                   const allReady = rr.total > 0 && rr.ready === rr.total;
                   const anyNotReady = rr.total > 0 && rr.ready < rr.total;
                   const selected = selectedPod === p.name;
-                  const colorCls = allReady
-                    ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600"
-                    : anyNotReady
-                      ? "bg-rose-500/10 border-rose-500/20 text-rose-600"
-                      : "bg-background text-text-primary";
-                  const selCls = selected ? "ring-1 ring-emerald-500/30" : "";
+                  
+                  // Simplified color scheme with dark mode support
+                  let colorCls = "bg-background border-border text-text-muted";
+                  let statusIcon = "○";
+                  let statusText = t("common.unknown");
+                  
+                  if (allReady) {
+                    colorCls = "bg-emerald-50/50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400";
+                    statusIcon = "✓";
+                    statusText = t("status.ready");
+                  } else if (anyNotReady) {
+                    colorCls = "bg-rose-50/50 dark:bg-rose-900/20 border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-400";
+                    statusIcon = "✕";
+                    statusText = t("status.notReady");
+                  }
+                  
+                  const selCls = selected ? "border-blue-500 bg-blue-50/30" : "";
+                    
                   return (
                     <button
                       key={p.name}
                       type="button"
                       onClick={() => setSelectedPod(p.name)}
-                      className={`w-full rounded-md border px-3 py-2 text-left text-sm transition ${colorCls} ${selCls}`}
+                      className={`
+                        w-full rounded border px-3 py-2 text-left text-sm 
+                        ${colorCls} ${selCls}
+                      `}
                     >
                       <div className="flex items-start justify-between gap-2">
-                        <span className="flex-1 break-all whitespace-normal">{p.name}</span>
-                        {allReady ? (
-                          <span className="text-xs">{t("status.ready")}</span>
-                        ) : anyNotReady ? (
-                          <span className="text-xs">{t("status.notReady")}</span>
-                        ) : (
-                          <span className="text-xs">{t("common.unknown")}</span>
-                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-sm">{statusIcon}</span>
+                            <span className="break-all whitespace-normal">{p.name}</span>
+                          </div>
+                          <div className="mt-1 text-xs opacity-70">
+                            {rr.ready}/{rr.total} containers
+                          </div>
+                        </div>
+                        <span className="text-xs whitespace-nowrap">
+                          {statusText}
+                        </span>
                       </div>
                     </button>
                   );
@@ -671,16 +687,50 @@ export default function DeploymentDetailPage() {
                     {containersForSelectedPod.map((c) => {
                       const sel = selectedContainer === c;
                       const picked = selectedForDelete.includes(c);
-                      const baseCls = `${sel ? "bg-emerald-500/10 text-emerald-600" : "bg-background text-text-primary"} border border-border rounded px-2 py-1 text-xs`;
-                      const multiCls = picked ? "ring-2 ring-emerald-500/70" : "";
+                      
+                      // Get container status from podDetail
+                      const containerStatus = podDetail?.containers?.find((cs) => cs.name === c);
+                      const isReady = containerStatus?.ready ?? null;
+                      const restartCount = containerStatus?.restart_count ?? 0;
+                      
+                      // Simplified status styling with dark mode support
+                      let statusColors = "bg-background text-text-primary border-border";
+                      let statusIcon = "";
+                      
+                      if (isReady === true) {
+                        statusColors = "bg-emerald-50/50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800";
+                        statusIcon = "✓";
+                      } else if (isReady === false) {
+                        if (restartCount > 0) {
+                          statusColors = "bg-amber-50/50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800";
+                          statusIcon = `⟳${restartCount}`;
+                        } else {
+                          statusColors = "bg-rose-50/50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-800";
+                          statusIcon = "✕";
+                        }
+                      }
+                      
+                      // Simplified selected state with dark mode
+                      const selectedCls = sel ? "border-blue-500 dark:border-blue-400 bg-blue-50/30 dark:bg-blue-900/20 font-medium" : "";
+                      const multiCls = picked ? "border-emerald-500 dark:border-emerald-400 bg-emerald-50/30 dark:bg-emerald-900/20" : "";
+                      
                       return (
                         <button
                           key={c}
                           type="button"
                           onClick={() => (multiSelect ? toggleSelectedForDelete(c) : setSelectedContainer(c))}
-                          className={`${baseCls} ${multiSelect ? "relative" : ""} ${multiCls}`}
+                          className={`
+                            ${statusColors}
+                            ${selectedCls}
+                            ${multiCls}
+                            border rounded px-2.5 py-1 text-xs
+                            ${multiSelect ? "relative" : ""}
+                            inline-flex items-center gap-1
+                          `}
+                          title={`${c}${isReady === true ? ' (Ready)' : isReady === false ? ' (Not Ready)' : ' (Unknown)'}`}
                         >
-                          {c}
+                          {statusIcon && <span className="text-xs">{statusIcon}</span>}
+                          <span>{c}</span>
                         </button>
                       );
                     })}
@@ -702,12 +752,14 @@ export default function DeploymentDetailPage() {
                 </div>
 
                 {editOpenFor === selectedContainer && (
-                  <div className="mt-3 rounded-md border border-border bg-background p-3">
-                    <div className="mb-2 text-sm font-medium text-text-primary">{t("deploy.cont.editing", { name: selectedContainer })}</div>
+                  <div className="mt-3 rounded border border-border bg-surface p-3">
+                    <div className="mb-2 text-sm font-medium text-text-primary">
+                      {t("deploy.cont.editing", { name: selectedContainer })}
+                    </div>
                     <div className="flex items-center gap-2">
                       <label className="text-xs text-text-muted w-20">{t("deploy.cont.image")}</label>
                       <input
-                        className="flex-1 rounded-md border border-border bg-surface px-2 py-1 text-sm text-text-primary"
+                        className="flex-1 rounded border border-border bg-background px-2 py-1.5 text-sm text-text-primary focus:border-blue-500 focus:outline-none"
                         placeholder={t("deploy.cont.image.placeholder")}
                         value={editImage}
                         onChange={(e) => setEditImage(e.target.value)}
@@ -719,7 +771,7 @@ export default function DeploymentDetailPage() {
                         {t("deploy.cont.closeEdit")}
                       </Button>
                     </div>
-                    <div className="mt-1 text-xs text-text-muted">{t("deploy.cont.editHint")}</div>
+                    <div className="mt-1.5 text-xs text-text-muted">{t("deploy.cont.editHint")}</div>
                   </div>
                 )}
 

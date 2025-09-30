@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 import asyncio
 
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 import structlog
 
@@ -11,6 +11,8 @@ from app.db import init_db, get_session_factory
 from app.core.logging import configure_logging
 from app.dependencies import get_kubernetes_service
 from app.workers.scheduler import PeriodicTask
+from app.websocket import ConnectionManager, K8sWatcher
+from app.schemas.websocket import WebSocketMessage
 
 
 @asynccontextmanager
@@ -24,6 +26,29 @@ async def lifespan(app: FastAPI):
     await init_db()
 
     service = get_kubernetes_service()
+    
+    # Initialize WebSocket manager
+    ws_manager = ConnectionManager()
+    app.state.ws_manager = ws_manager
+    
+    # Initialize K8s watcher
+    k8s_watcher = None
+    try:
+        # Get K8s clients
+        core_v1, apps_v1 = await service._ensure_clients()
+        
+        # Create event handler
+        async def on_k8s_event(message: WebSocketMessage):
+            """处理K8s事件并广播到所有WebSocket客户端"""
+            await ws_manager.broadcast(message.model_dump_json())
+        
+        # Start K8s watcher
+        k8s_watcher = K8sWatcher(apps_v1, core_v1, on_k8s_event)
+        await k8s_watcher.start()
+        app.state.k8s_watcher = k8s_watcher
+        logger.info("k8s_watcher.initialized")
+    except Exception as e:
+        logger.warning("k8s_watcher.init_failed", error=str(e))
 
     # Periodically collect container-level metrics if metrics-server is present
     async def _collect_and_store_container_metrics() -> None:
@@ -82,20 +107,20 @@ async def lifespan(app: FastAPI):
             # Best effort
             pass
     cache_warm_task = PeriodicTask(
-        interval_seconds=max(settings.cache_ttl_seconds, 30),
+        interval_seconds=10,
         action=service.get_cluster_overview,
         name="cluster_overview_refresh",
     )
     cache_warm_task.start()
-    # Run metrics collection every 60s
+    # Run metrics collection every 15s
     metrics_collect_task = PeriodicTask(
-        interval_seconds=60,
+        interval_seconds=15,
         action=_collect_and_store_container_metrics,
         name="container_metrics_collect",
     )
     metrics_collect_task.start()
     node_metrics_collect_task = PeriodicTask(
-        interval_seconds=60,
+        interval_seconds=15,
         action=_collect_and_store_node_metrics,
         name="node_metrics_collect",
     )
@@ -105,6 +130,10 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        # Stop K8s watcher
+        if hasattr(app.state, "k8s_watcher") and app.state.k8s_watcher:
+            await app.state.k8s_watcher.stop()
+        
         await cache_warm_task.stop()
         await metrics_collect_task.stop()
         await node_metrics_collect_task.stop()
@@ -132,6 +161,24 @@ def create_app() -> FastAPI:
     @app.get("/healthz", tags=["health"])
     async def healthcheck() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.websocket("/ws/deployments")
+    async def websocket_endpoint(websocket: WebSocket):
+        """WebSocket endpoint for real-time deployment updates"""
+        manager: ConnectionManager = app.state.ws_manager
+        await manager.connect(websocket)
+        try:
+            while True:
+                # Keep connection alive and listen for client messages (e.g., ping)
+                data = await websocket.receive_text()
+                # Echo back for heartbeat
+                if data == "ping":
+                    await websocket.send_text("pong")
+        except WebSocketDisconnect:
+            await manager.disconnect(websocket)
+        except Exception as e:
+            logger.warning("websocket.error", error=str(e))
+            await manager.disconnect(websocket)
 
     return app
 
