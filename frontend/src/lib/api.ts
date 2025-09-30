@@ -472,6 +472,9 @@ export function deleteNamespaceByName(name: string): Promise<OperationResultResp
 export interface PodWithContainersResponse {
   name: string;
   containers: string[];
+  ready_containers?: number | null;
+  total_containers?: number | null;
+  phase?: string | null;
 }
 
 export function fetchPodsInNamespace(ns: string): Promise<PodWithContainersResponse[]> {
@@ -511,7 +514,15 @@ export function fetchPodsSummary(params: {
 export interface PodDetailResponse {
   namespace: string;
   name: string;
-  containers: Array<{ name: string; ready?: boolean | null; restart_count?: number | null; image?: string | null }>;
+  containers: Array<{
+    name: string;
+    ready?: boolean | null;
+    restart_count?: number | null;
+    image?: string | null;
+    state?: 'Running' | 'Waiting' | 'Terminated' | 'Unknown' | null;
+    state_reason?: string | null;
+    state_message?: string | null;
+  }>;
   node_name?: string | null;
   node_ip?: string | null;
   pod_ip?: string | null;

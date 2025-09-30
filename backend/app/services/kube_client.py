@@ -1638,12 +1638,36 @@ class KubernetesService:
                 statuses: list[ContainerStatus] = []
                 try:
                     for s in (getattr(st, "container_statuses", None) or []):
+                        # Extract detailed container state
+                        state_val = None
+                        state_reason = None
+                        state_message = None
+                        try:
+                            cs_state = getattr(s, "state", None)
+                            if getattr(cs_state, "waiting", None):
+                                state_val = "Waiting"
+                                state_reason = getattr(cs_state.waiting, "reason", None)
+                                state_message = getattr(cs_state.waiting, "message", None)
+                            elif getattr(cs_state, "running", None):
+                                state_val = "Running"
+                                # running state typically has no reason/message
+                            elif getattr(cs_state, "terminated", None):
+                                state_val = "Terminated"
+                                state_reason = getattr(cs_state.terminated, "reason", None)
+                                state_message = getattr(cs_state.terminated, "message", None)
+                        except Exception:
+                            state_val = None
+                            state_reason = None
+                            state_message = None
                         statuses.append(
                             ContainerStatus(
                                 name=getattr(s, "name", ""),
                                 ready=getattr(s, "ready", None),
                                 restart_count=getattr(s, "restart_count", None),
                                 image=getattr(s, "image", None),
+                                state=state_val,  # type: ignore[arg-type]
+                                state_reason=state_reason,
+                                state_message=state_message,
                             )
                         )
                 except Exception:
@@ -1797,13 +1821,29 @@ class KubernetesService:
                 results: list[dict[str, object]] = []
                 for pod in pods:
                     name_ = pod.metadata.name if pod.metadata else ""
+                    st = getattr(pod, "status", None)
                     containers: list[str] = []
                     try:
                         for c in (pod.spec.containers or []):  # type: ignore[attr-defined]
                             containers.append(c.name)
                     except Exception:
                         containers = []
-                    results.append({"name": name_, "containers": containers})
+                    # Container readiness and phase for UI without extra calls
+                    try:
+                        cs_list = getattr(st, "container_statuses", None) or []
+                        ready_containers = sum(1 for cs in cs_list if getattr(cs, "ready", False))
+                        total_containers = len(cs_list)
+                    except Exception:
+                        ready_containers = None
+                        total_containers = None
+                    phase = getattr(st, "phase", None)
+                    results.append({
+                        "name": name_,
+                        "containers": containers,
+                        "ready_containers": ready_containers if ready_containers is not None else 0,
+                        "total_containers": total_containers if total_containers is not None else len(containers),
+                        "phase": str(phase) if phase else None,
+                    })
                 return results
 
             return await asyncio.to_thread(_collect)

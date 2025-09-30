@@ -152,19 +152,34 @@ export default function DeploymentDetailPage() {
     queryKey: queryKeys.podDetail(ns, selectedPod || "__none__"),
     queryFn: () => fetchPodDetail(ns, selectedPod),
     enabled: Boolean(selectedPod),
+    staleTime: 10_000,
   });
 
-  // Pod details for readiness coloring on the left list
+  // Prefer readiness info from deployment pods API to avoid extra calls
+  const podsIncludeReadiness = useMemo(
+    () => (pods ?? []).some((p: any) => 'ready_containers' in p || 'total_containers' in p || 'phase' in p),
+    [pods]
+  );
+
+  // Pod details for readiness coloring on the left list (fallback when not included in pods API)
   const podDetailsQueries = useQueries({
     queries: (pods ?? []).map((p) => ({
       queryKey: queryKeys.podDetail(ns, p.name),
       queryFn: () => fetchPodDetail(ns, p.name),
-      enabled: Boolean(pods && pods.length > 0),
+      enabled: Boolean(pods && pods.length > 0 && !podsIncludeReadiness),
       staleTime: 10_000,
     })),
   });
   const podReadiness = useMemo(() => {
     const map: Record<string, { ready: number; total: number }> = {};
+    if (podsIncludeReadiness) {
+      (pods ?? []).forEach((p: any) => {
+        const total = (p.total_containers ?? p.containers?.length ?? 0) as number;
+        const ready = (p.ready_containers ?? 0) as number;
+        map[p.name] = { ready, total };
+      });
+      return map;
+    }
     (pods ?? []).forEach((p, idx) => {
       const d = podDetailsQueries[idx]?.data as (PodDetailResponse | undefined);
       const total = d?.containers?.length ?? (p.containers?.length ?? 0);
@@ -172,7 +187,15 @@ export default function DeploymentDetailPage() {
       map[p.name] = { ready, total };
     });
     return map;
-  }, [pods, podDetailsQueries]);
+  }, [pods, podDetailsQueries, podsIncludeReadiness]);
+
+  const podPhaseByName = useMemo(() => {
+    const map: Record<string, string | undefined> = {};
+    if (podsIncludeReadiness) {
+      (pods ?? []).forEach((p: any) => { map[p.name] = p.phase as string | undefined; });
+    }
+    return map;
+  }, [pods, podsIncludeReadiness]);
 
   // Actions: restart, scale, delete, yaml
   const restartMut = useMutation({
@@ -637,6 +660,7 @@ export default function DeploymentDetailPage() {
                   let colorCls = "bg-background border-border text-text-muted";
                   let statusIcon = "○";
                   let statusText = t("common.unknown");
+                  const phase = podPhaseByName[p.name];
                   
                   if (allReady) {
                     colorCls = "bg-emerald-50/50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400";
@@ -648,6 +672,10 @@ export default function DeploymentDetailPage() {
                     statusText = t("status.notReady");
                   }
                   
+                  if (phase === 'Pending') {
+                    colorCls = "bg-amber-50/50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400";
+                    statusText = t("status.pending");
+                  }
                   const selCls = selected ? "border-blue-500 bg-blue-50/30" : "";
                     
                   return (
@@ -710,6 +738,12 @@ export default function DeploymentDetailPage() {
                         }
                       }
                       
+                      // Ensure pending/waiting shows as warning
+                      if (containerStatus?.state === 'Waiting' || (podDetail?.phase === 'Pending' && isReady === false)) {
+                        statusColors = "bg-amber-50/50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800";
+                        statusIcon = "";
+                      }
+
                       // Simplified selected state with dark mode
                       const selectedCls = sel ? "border-blue-500 dark:border-blue-400 bg-blue-50/30 dark:bg-blue-900/20 font-medium" : "";
                       const multiCls = picked ? "border-emerald-500 dark:border-emerald-400 bg-emerald-50/30 dark:bg-emerald-900/20" : "";

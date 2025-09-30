@@ -26,7 +26,16 @@ async def list_deployment_pods(
     service: KubernetesService = Depends(get_kubernetes_service),
 ) -> list[PodWithContainers]:
     items = await service.list_pods_for_deployment(namespace, name)
-    return [PodWithContainers(name=i.get("name", ""), containers=list(i.get("containers", []))) for i in items]
+    return [
+        PodWithContainers(
+            name=i.get("name", ""),
+            containers=list(i.get("containers", [])),
+            ready_containers=i.get("ready_containers"),
+            total_containers=i.get("total_containers"),
+            phase=i.get("phase"),
+        )
+        for i in items
+    ]
 
 
 @router.post(

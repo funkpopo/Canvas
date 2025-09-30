@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useWebSocket } from './useWebSocket';
 import { WS_ENDPOINTS, WebSocketMessage } from '@/lib/websocket';
-import { queryKeys, WorkloadSummaryResponse } from '@/lib/api';
+import { queryKeys, WorkloadSummaryResponse, PodDetailResponse } from '@/lib/api';
 
 export function useDeploymentUpdates() {
   const queryClient = useQueryClient();
@@ -102,6 +102,34 @@ function handleWebSocketMessage(
 
   // Handle Pod events
   if (resource_type === 'Pod') {
+    // If websocket payload contains container statuses, push into podDetail cache to avoid extra fetches
+    if (data && Array.isArray((data as any).containers)) {
+      const d = data as any;
+      const containers = (d.containers as any[]).map((cs) => ({
+        name: cs.name,
+        ready: cs.ready ?? null,
+        restart_count: cs.restart_count ?? null,
+        image: cs.image ?? null,
+        state: cs.state ?? null,
+        state_reason: cs.state_reason ?? null,
+        state_message: cs.state_message ?? null,
+      }));
+      queryClient.setQueryData<PodDetailResponse>(
+        queryKeys.podDetail(namespace, name),
+        (prev) => ({
+          namespace,
+          name,
+          containers,
+          node_name: prev?.node_name ?? null,
+          node_ip: prev?.node_ip ?? null,
+          pod_ip: prev?.pod_ip ?? null,
+          phase: d.phase ?? prev?.phase ?? null,
+          restart_policy: prev?.restart_policy ?? null,
+          created_at: prev?.created_at ?? null,
+        })
+      );
+    }
+
     // Invalidate deployment pods queries for affected namespace and refetch
     queryClient.invalidateQueries({
       predicate: (query) => {
@@ -114,12 +142,6 @@ function handleWebSocketMessage(
         );
       },
       refetchType: 'active', // Refetch immediately for real-time updates
-    });
-
-    // Also invalidate pod detail queries and refetch
-    queryClient.invalidateQueries({
-      queryKey: queryKeys.podDetail(namespace, name),
-      refetchType: 'active',
     });
   }
 }

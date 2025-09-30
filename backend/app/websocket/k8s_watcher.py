@@ -140,7 +140,7 @@ class K8sWatcher:
                 return
             
             # 提取关键数据
-            data = self._extract_resource_data(resource_type, obj)
+            data = self._extract_resource_data_v2(resource_type, obj)
             
             # 创建并发送WebSocket消息
             message = WebSocketMessage(
@@ -183,4 +183,66 @@ class K8sWatcher:
         
         data["updated_at"] = datetime.now(tz=timezone.utc).isoformat()
         
+        return data
+
+    def _extract_resource_data_v2(self, resource_type: str, obj: Any) -> dict[str, Any]:
+        """Extract minimal-but-useful fields for WS consumers.
+
+        Includes per-container Waiting/Running/Terminated state for Pod events.
+        """
+        data: dict[str, Any] = {}
+
+        if resource_type == "Deployment":
+            status = getattr(obj, "status", None)
+            if status:
+                data["replicas_desired"] = getattr(status, "replicas", 0) or 0
+                data["replicas_ready"] = getattr(status, "ready_replicas", 0) or 0
+                ready = data["replicas_ready"]
+                desired = data["replicas_desired"]
+                data["status"] = "Healthy" if ready == desired else "Warning"
+
+        elif resource_type == "Pod":
+            status = getattr(obj, "status", None)
+            if status:
+                data["phase"] = getattr(status, "phase", "Unknown")
+                container_statuses = getattr(status, "container_statuses", []) or []
+                data["ready_containers"] = sum(1 for cs in container_statuses if getattr(cs, "ready", False))
+                data["total_containers"] = len(container_statuses)
+
+                containers: list[dict[str, object]] = []
+                try:
+                    for cs in container_statuses:
+                        st = getattr(cs, "state", None)
+                        state_val = "Unknown"
+                        state_reason = None
+                        state_message = None
+                        try:
+                            if getattr(st, "waiting", None):
+                                state_val = "Waiting"
+                                state_reason = getattr(st.waiting, "reason", None)
+                                state_message = getattr(st.waiting, "message", None)
+                            elif getattr(st, "running", None):
+                                state_val = "Running"
+                            elif getattr(st, "terminated", None):
+                                state_val = "Terminated"
+                                state_reason = getattr(st.terminated, "reason", None)
+                                state_message = getattr(st.terminated, "message", None)
+                        except Exception:
+                            state_val = "Unknown"
+                            state_reason = None
+                            state_message = None
+                        containers.append({
+                            "name": getattr(cs, "name", ""),
+                            "ready": getattr(cs, "ready", None),
+                            "restart_count": getattr(cs, "restart_count", None),
+                            "image": getattr(cs, "image", None),
+                            "state": state_val,
+                            "state_reason": state_reason,
+                            "state_message": state_message,
+                        })
+                except Exception:
+                    containers = []
+                data["containers"] = containers
+
+        data["updated_at"] = datetime.now(tz=timezone.utc).isoformat()
         return data

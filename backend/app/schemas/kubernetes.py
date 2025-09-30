@@ -155,6 +155,10 @@ class ClusterStorageSummary(BaseModel):
 class PodWithContainers(BaseModel):
     name: str
     containers: list[str]
+    # Optional realtime fields to avoid extra detail calls
+    ready_containers: int | None = None
+    total_containers: int | None = None
+    phase: str | None = None
 
 
 class PodSummary(BaseModel):
@@ -176,6 +180,11 @@ class ContainerStatus(BaseModel):
     ready: bool | None = None
     restart_count: int | None = None
     image: str | None = None
+    # Enriched container state for better UI status mapping
+    # One of: Running, Waiting, Terminated, Unknown
+    state: Literal["Running", "Waiting", "Terminated", "Unknown"] | None = None
+    state_reason: str | None = None
+    state_message: str | None = None
 
 
 class PodDetail(BaseModel):
