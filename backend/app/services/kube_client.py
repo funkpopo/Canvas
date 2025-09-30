@@ -654,22 +654,25 @@ class KubernetesService:
         async def _fetch() -> list[WorkloadSummary]:
             await self._rate_limiter.acquire()
             try:
-                _, apps_v1 = await self._ensure_clients()
+                core_v1, apps_v1 = await self._ensure_clients()
+                batch_v1 = client.BatchV1Api(self._api_client)
 
                 def _collect() -> list[WorkloadSummary]:
-                    deployments = apps_v1.list_deployment_for_all_namespaces(limit=100).items
                     items: list[WorkloadSummary] = []
+
+                    # Deployments
+                    deployments = apps_v1.list_deployment_for_all_namespaces(limit=1000).items
                     for deployment in deployments:
                         status = deployment.status
-                        ready = status.ready_replicas or 0
-                        desired = status.replicas or 0
+                        ready = getattr(status, "ready_replicas", 0) or 0
+                        desired = getattr(status, "replicas", 0) or 0
                         items.append(
                             WorkloadSummary(
                                 name=deployment.metadata.name,
                                 namespace=deployment.metadata.namespace,
                                 kind="Deployment",
-                                replicas_desired=desired,
-                                replicas_ready=ready,
+                                replicas_desired=int(desired),
+                                replicas_ready=int(ready),
                                 version=(
                                     deployment.metadata.annotations.get("deployment.kubernetes.io/revision")
                                     if deployment.metadata.annotations
@@ -679,6 +682,86 @@ class KubernetesService:
                                 updated_at=datetime.now(tz=timezone.utc),
                             )
                         )
+
+                    # StatefulSets
+                    ssets = apps_v1.list_stateful_set_for_all_namespaces(limit=1000).items
+                    for ss in ssets:
+                        st = ss.status
+                        ready = getattr(st, "ready_replicas", 0) or 0
+                        desired = getattr(st, "replicas", 0) or 0
+                        items.append(
+                            WorkloadSummary(
+                                name=ss.metadata.name,
+                                namespace=ss.metadata.namespace,
+                                kind="StatefulSet",
+                                replicas_desired=int(desired),
+                                replicas_ready=int(ready),
+                                version=None,
+                                status="Healthy" if ready == desired else "Warning",
+                                updated_at=datetime.now(tz=timezone.utc),
+                            )
+                        )
+
+                    # DaemonSets
+                    dsets = apps_v1.list_daemon_set_for_all_namespaces(limit=1000).items
+                    for ds in dsets:
+                        st = ds.status
+                        desired = getattr(st, "desired_number_scheduled", 0) or 0
+                        ready = getattr(st, "number_ready", 0) or 0
+                        items.append(
+                            WorkloadSummary(
+                                name=ds.metadata.name,
+                                namespace=ds.metadata.namespace,
+                                kind="DaemonSet",
+                                replicas_desired=int(desired),
+                                replicas_ready=int(ready),
+                                version=None,
+                                status="Healthy" if ready == desired else "Warning",
+                                updated_at=datetime.now(tz=timezone.utc),
+                            )
+                        )
+
+                    # CronJobs
+                    cjs = batch_v1.list_cron_job_for_all_namespaces(limit=1000).items
+                    for cj in cjs:
+                        last = None
+                        try:
+                            last = getattr(cj.status, "last_schedule_time", None)
+                        except Exception:
+                            last = None
+                        items.append(
+                            WorkloadSummary(
+                                name=cj.metadata.name,
+                                namespace=cj.metadata.namespace,
+                                kind="CronJob",
+                                replicas_desired=None,
+                                replicas_ready=None,
+                                version=None,
+                                status="Healthy",
+                                updated_at=last,
+                            )
+                        )
+
+                    # Jobs
+                    jobs = batch_v1.list_job_for_all_namespaces(limit=1000).items
+                    for jb in jobs:
+                        st = jb.status
+                        succ = getattr(st, "succeeded", 0) or 0
+                        compl = getattr(jb.spec, "completions", None) if getattr(jb, "spec", None) else None
+                        desired = int(compl) if compl is not None else None
+                        items.append(
+                            WorkloadSummary(
+                                name=jb.metadata.name,
+                                namespace=jb.metadata.namespace,
+                                kind="Job",
+                                replicas_desired=desired,
+                                replicas_ready=int(succ),
+                                version=None,
+                                status="Healthy" if desired is not None and succ >= desired else "Warning",
+                                updated_at=datetime.now(tz=timezone.utc),
+                            )
+                        )
+
                     return items
 
                 return await asyncio.to_thread(_collect)
@@ -2252,6 +2335,123 @@ class KubernetesService:
             logger.warning("kubernetes.list_pods_for_deployment_error", error=str(exc))
             return []
 
+    async def _list_pods_by_selector(self, namespace: str, selector: object) -> list[dict[str, object]]:
+        await self._rate_limiter.acquire()
+        core_v1, _ = await self._ensure_clients()
+
+        def _selector_to_string(sel) -> str | None:
+            if not sel:
+                return None
+            parts: list[str] = []
+            try:
+                ml = getattr(sel, "match_labels", None) or {}
+                for k, v in ml.items():
+                    parts.append(f"{k}={v}")
+            except Exception:
+                pass
+            try:
+                exprs = getattr(sel, "match_expressions", None) or []
+                for e in exprs:
+                    key = getattr(e, "key", None)
+                    op = getattr(e, "operator", None)
+                    values = getattr(e, "values", None) or []
+                    if not key or not op:
+                        continue
+                    if op == "In" and values:
+                        parts.append(f"{key} in ({','.join(map(str, values))})")
+                    elif op == "NotIn" and values:
+                        parts.append(f"{key} notin ({','.join(map(str, values))})")
+                    elif op == "Exists":
+                        parts.append(f"{key}")
+                    elif op == "DoesNotExist":
+                        parts.append(f"!{key}")
+            except Exception:
+                pass
+            return ",".join(parts) if parts else None
+
+        def _collect() -> list[dict[str, object]]:
+            label_selector = _selector_to_string(selector)
+            pods = (
+                core_v1.list_namespaced_pod(namespace=namespace, label_selector=label_selector).items
+                if label_selector
+                else core_v1.list_namespaced_pod(namespace=namespace).items
+            )
+            results: list[dict[str, object]] = []
+            for pod in pods:
+                name_ = pod.metadata.name if pod.metadata else ""
+                st = getattr(pod, "status", None)
+                containers: list[str] = []
+                try:
+                    for c in (pod.spec.containers or []):  # type: ignore[attr-defined]
+                        containers.append(c.name)
+                except Exception:
+                    containers = []
+                try:
+                    cs_list = getattr(st, "container_statuses", None) or []
+                    ready_containers = sum(1 for cs in cs_list if getattr(cs, "ready", False))
+                    total_containers = len(cs_list)
+                except Exception:
+                    ready_containers = None
+                    total_containers = None
+                phase = getattr(st, "phase", None)
+                results.append(
+                    {
+                        "name": name_,
+                        "containers": containers,
+                        "ready_containers": ready_containers if ready_containers is not None else 0,
+                        "total_containers": total_containers if total_containers is not None else len(containers),
+                        "phase": str(phase) if phase else None,
+                    }
+                )
+            return results
+
+        return await asyncio.to_thread(_collect)
+
+    async def list_pods_for_statefulset(self, namespace: str, name: str) -> list[dict[str, object]]:
+        await self._rate_limiter.acquire()
+        try:
+            _, apps_v1 = await self._ensure_clients()
+
+            def _get_sel():
+                ss = apps_v1.read_namespaced_stateful_set(name=name, namespace=namespace)
+                return getattr(ss.spec, "selector", None)
+
+            sel = await asyncio.to_thread(_get_sel)
+            return await self._list_pods_by_selector(namespace, sel)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.list_pods_for_statefulset_error", error=str(exc))
+            return []
+
+    async def list_pods_for_daemonset(self, namespace: str, name: str) -> list[dict[str, object]]:
+        await self._rate_limiter.acquire()
+        try:
+            _, apps_v1 = await self._ensure_clients()
+
+            def _get_sel():
+                ds = apps_v1.read_namespaced_daemon_set(name=name, namespace=namespace)
+                return getattr(ds.spec, "selector", None)
+
+            sel = await asyncio.to_thread(_get_sel)
+            return await self._list_pods_by_selector(namespace, sel)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.list_pods_for_daemonset_error", error=str(exc))
+            return []
+
+    async def list_pods_for_job(self, namespace: str, name: str) -> list[dict[str, object]]:
+        await self._rate_limiter.acquire()
+        try:
+            batch_v1 = client.BatchV1Api(self._api_client)
+
+            def _get_sel():
+                jb = batch_v1.read_namespaced_job(name=name, namespace=namespace)
+                return getattr(jb.spec, "selector", None) or getattr(jb.spec, "pod_selector", None)
+
+            sel = await asyncio.to_thread(_get_sel)
+            return await self._list_pods_by_selector(namespace, sel)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.list_pods_for_job_error", error=str(exc))
+            return []
+
     async def restart_deployment(self, namespace: str, name: str) -> tuple[bool, str | None]:
         """Trigger a rollout restart by annotating the pod template."""
         await self._rate_limiter.acquire()
@@ -2309,6 +2509,269 @@ class KubernetesService:
             return True, None
         except Exception as exc:  # pragma: no cover
             logger.warning("kubernetes.update_deployment_image_error", error=str(exc))
+            return False, str(exc)
+
+    # ---------------------------
+    # StatefulSet/DaemonSet/Job/CronJob helpers
+    # ---------------------------
+
+    async def scale_statefulset(self, namespace: str, name: str, replicas: int) -> tuple[bool, str | None]:
+        await self._rate_limiter.acquire()
+        try:
+            _, apps_v1 = await self._ensure_clients()
+
+            def _do() -> None:
+                body = {"spec": {"replicas": replicas}}
+                apps_v1.patch_namespaced_stateful_set_scale(name=name, namespace=namespace, body=body)
+
+            await asyncio.to_thread(_do)
+            await self._set_cached("workloads", None)
+            return True, None
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.scale_statefulset_error", error=str(exc))
+            return False, str(exc)
+
+    async def delete_statefulset(self, namespace: str, name: str) -> tuple[bool, str | None]:
+        await self._rate_limiter.acquire()
+        try:
+            _, apps_v1 = await self._ensure_clients()
+
+            def _do() -> None:
+                apps_v1.delete_namespaced_stateful_set(name=name, namespace=namespace)
+
+            await asyncio.to_thread(_do)
+            await self._set_cached("workloads", None)
+            return True, None
+        except Exception as exc:
+            logger.warning("kubernetes.delete_statefulset_error", error=str(exc))
+            return False, str(exc)
+
+    async def get_statefulset_yaml(self, namespace: str, name: str) -> str | None:
+        await self._rate_limiter.acquire()
+        try:
+            _, apps_v1 = await self._ensure_clients()
+
+            def _do() -> str:
+                obj = apps_v1.read_namespaced_stateful_set(name=name, namespace=namespace)
+                api_client = self._api_client or ApiClient()
+                data = api_client.sanitize_for_serialization(obj)
+                md = data.get("metadata", {}) if isinstance(data, dict) else {}
+                if isinstance(md, dict) and "managedFields" in md:
+                    md.pop("managedFields", None)
+                return yaml.safe_dump(data, sort_keys=False)
+
+            return await asyncio.to_thread(_do)
+        except Exception as exc:
+            logger.warning("kubernetes.get_statefulset_yaml_error", error=str(exc))
+            return None
+
+    async def apply_statefulset_yaml(self, namespace: str, name: str, yaml_text: str) -> tuple[bool, str | None]:
+        await self._rate_limiter.acquire()
+        try:
+            _, apps_v1 = await self._ensure_clients()
+
+            def _do() -> None:
+                body = yaml.safe_load(yaml_text) or {}
+                if not isinstance(body, dict) or str(body.get("kind")) != "StatefulSet":
+                    raise RuntimeError("YAML kind must be StatefulSet")
+                spec = body.get("spec", {}) if isinstance(body, dict) else {}
+                if not spec:
+                    raise RuntimeError("YAML missing spec to apply")
+                apps_v1.patch_namespaced_stateful_set(name=name, namespace=namespace, body={"spec": spec})
+
+            await asyncio.to_thread(_do)
+            return True, None
+        except Exception as exc:
+            logger.warning("kubernetes.apply_statefulset_yaml_error", error=str(exc))
+            return False, str(exc)
+
+    async def delete_daemonset(self, namespace: str, name: str) -> tuple[bool, str | None]:
+        await self._rate_limiter.acquire()
+        try:
+            _, apps_v1 = await self._ensure_clients()
+
+            def _do() -> None:
+                apps_v1.delete_namespaced_daemon_set(name=name, namespace=namespace)
+
+            await asyncio.to_thread(_do)
+            await self._set_cached("workloads", None)
+            return True, None
+        except Exception as exc:
+            logger.warning("kubernetes.delete_daemonset_error", error=str(exc))
+            return False, str(exc)
+
+    async def get_daemonset_yaml(self, namespace: str, name: str) -> str | None:
+        await self._rate_limiter.acquire()
+        try:
+            _, apps_v1 = await self._ensure_clients()
+
+            def _do() -> str:
+                obj = apps_v1.read_namespaced_daemon_set(name=name, namespace=namespace)
+                api_client = self._api_client or ApiClient()
+                data = api_client.sanitize_for_serialization(obj)
+                md = data.get("metadata", {}) if isinstance(data, dict) else {}
+                if isinstance(md, dict) and "managedFields" in md:
+                    md.pop("managedFields", None)
+                return yaml.safe_dump(data, sort_keys=False)
+
+            return await asyncio.to_thread(_do)
+        except Exception as exc:
+            logger.warning("kubernetes.get_daemonset_yaml_error", error=str(exc))
+            return None
+
+    async def apply_daemonset_yaml(self, namespace: str, name: str, yaml_text: str) -> tuple[bool, str | None]:
+        await self._rate_limiter.acquire()
+        try:
+            _, apps_v1 = await self._ensure_clients()
+
+            def _do() -> None:
+                body = yaml.safe_load(yaml_text) or {}
+                if not isinstance(body, dict) or str(body.get("kind")) != "DaemonSet":
+                    raise RuntimeError("YAML kind must be DaemonSet")
+                spec = body.get("spec", {}) if isinstance(body, dict) else {}
+                if not spec:
+                    raise RuntimeError("YAML missing spec to apply")
+                apps_v1.patch_namespaced_daemon_set(name=name, namespace=namespace, body={"spec": spec})
+
+            await asyncio.to_thread(_do)
+            return True, None
+        except Exception as exc:
+            logger.warning("kubernetes.apply_daemonset_yaml_error", error=str(exc))
+            return False, str(exc)
+
+    async def delete_job(self, namespace: str, name: str) -> tuple[bool, str | None]:
+        await self._rate_limiter.acquire()
+        try:
+            batch_v1 = client.BatchV1Api(self._api_client)
+
+            def _do() -> None:
+                batch_v1.delete_namespaced_job(name=name, namespace=namespace)
+
+            await asyncio.to_thread(_do)
+            await self._set_cached("workloads", None)
+            return True, None
+        except Exception as exc:
+            logger.warning("kubernetes.delete_job_error", error=str(exc))
+            return False, str(exc)
+
+    async def get_job_yaml(self, namespace: str, name: str) -> str | None:
+        await self._rate_limiter.acquire()
+        try:
+            batch_v1 = client.BatchV1Api(self._api_client)
+
+            def _do() -> str:
+                obj = batch_v1.read_namespaced_job(name=name, namespace=namespace)
+                api_client = self._api_client or ApiClient()
+                data = api_client.sanitize_for_serialization(obj)
+                md = data.get("metadata", {}) if isinstance(data, dict) else {}
+                if isinstance(md, dict) and "managedFields" in md:
+                    md.pop("managedFields", None)
+                return yaml.safe_dump(data, sort_keys=False)
+
+            return await asyncio.to_thread(_do)
+        except Exception as exc:
+            logger.warning("kubernetes.get_job_yaml_error", error=str(exc))
+            return None
+
+    async def apply_job_yaml(self, namespace: str, name: str, yaml_text: str) -> tuple[bool, str | None]:
+        await self._rate_limiter.acquire()
+        try:
+            batch_v1 = client.BatchV1Api(self._api_client)
+
+            def _do() -> None:
+                body = yaml.safe_load(yaml_text) or {}
+                if not isinstance(body, dict) or str(body.get("kind")) != "Job":
+                    raise RuntimeError("YAML kind must be Job")
+                spec = body.get("spec", {}) if isinstance(body, dict) else {}
+                if not spec:
+                    raise RuntimeError("YAML missing spec to apply")
+                batch_v1.patch_namespaced_job(name=name, namespace=namespace, body={"spec": spec})
+
+            await asyncio.to_thread(_do)
+            return True, None
+        except Exception as exc:
+            logger.warning("kubernetes.apply_job_yaml_error", error=str(exc))
+            return False, str(exc)
+
+    async def delete_cronjob(self, namespace: str, name: str) -> tuple[bool, str | None]:
+        await self._rate_limiter.acquire()
+        try:
+            batch_v1 = client.BatchV1Api(self._api_client)
+
+            def _do() -> None:
+                batch_v1.delete_namespaced_cron_job(name=name, namespace=namespace)
+
+            await asyncio.to_thread(_do)
+            await self._set_cached("workloads", None)
+            return True, None
+        except Exception as exc:
+            logger.warning("kubernetes.delete_cronjob_error", error=str(exc))
+            return False, str(exc)
+
+    async def run_cronjob_now(self, namespace: str, name: str) -> tuple[bool, str | None]:
+        await self._rate_limiter.acquire()
+        try:
+            batch_v1 = client.BatchV1Api(self._api_client)
+            core_v1, _ = await self._ensure_clients()
+
+            def _do() -> None:
+                cj = batch_v1.read_namespaced_cron_job(name=name, namespace=namespace)
+                tpl = getattr(getattr(getattr(cj, "spec", None), "job_template", None), "spec", None)
+                if not tpl:
+                    raise RuntimeError("CronJob has no jobTemplate.spec")
+                # Create a job with a unique name
+                from kubernetes.client import V1Job, V1ObjectMeta, V1JobSpec
+                job_name = f"{name}-manual-{int(datetime.now(tz=timezone.utc).timestamp())}"
+                job = V1Job(
+                    metadata=V1ObjectMeta(name=job_name, namespace=namespace),
+                    spec=V1JobSpec(template=tpl.template, backoff_limit=tpl.backoff_limit, ttl_seconds_after_finished=getattr(tpl, "ttl_seconds_after_finished", None)),
+                )
+                batch_v1.create_namespaced_job(namespace=namespace, body=job)
+
+            await asyncio.to_thread(_do)
+            await self._set_cached("workloads", None)
+            return True, None
+        except Exception as exc:
+            logger.warning("kubernetes.run_cronjob_now_error", error=str(exc))
+            return False, str(exc)
+
+    async def get_cronjob_yaml(self, namespace: str, name: str) -> str | None:
+        await self._rate_limiter.acquire()
+        try:
+            batch_v1 = client.BatchV1Api(self._api_client)
+
+            def _do() -> str:
+                obj = batch_v1.read_namespaced_cron_job(name=name, namespace=namespace)
+                api_client = self._api_client or ApiClient()
+                data = api_client.sanitize_for_serialization(obj)
+                md = data.get("metadata", {}) if isinstance(data, dict) else {}
+                if isinstance(md, dict) and "managedFields" in md:
+                    md.pop("managedFields", None)
+                return yaml.safe_dump(data, sort_keys=False)
+
+            return await asyncio.to_thread(_do)
+        except Exception as exc:
+            logger.warning("kubernetes.get_cronjob_yaml_error", error=str(exc))
+            return None
+
+    async def apply_cronjob_yaml(self, namespace: str, name: str, yaml_text: str) -> tuple[bool, str | None]:
+        await self._rate_limiter.acquire()
+        try:
+            batch_v1 = client.BatchV1Api(self._api_client)
+
+            def _do() -> None:
+                body = yaml.safe_load(yaml_text) or {}
+                if not isinstance(body, dict) or str(body.get("kind")) != "CronJob":
+                    raise RuntimeError("YAML kind must be CronJob")
+                spec = body.get("spec", {}) if isinstance(body, dict) else {}
+                if not spec:
+                    raise RuntimeError("YAML missing spec to apply")
+                batch_v1.patch_namespaced_cron_job(name=name, namespace=namespace, body={"spec": spec})
+
+            await asyncio.to_thread(_do)
+            return True, None
+        except Exception as exc:
+            logger.warning("kubernetes.apply_cronjob_yaml_error", error=str(exc))
             return False, str(exc)
 
     async def get_deployment_strategy(self, namespace: str, name: str) -> dict:

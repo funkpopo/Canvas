@@ -1,6 +1,22 @@
 from fastapi import APIRouter
 
-from app.api.routes import cluster, cluster_config, events, namespaces, nodes, metrics, deployments, storage, services, pods, ingresses, networkpolicies, configmaps, secrets
+from app.api.routes import (
+    cluster,
+    cluster_config,
+    events,
+    namespaces,
+    nodes,
+    metrics,
+    deployments,
+    storage,
+    services,
+    pods,
+    ingresses,
+    networkpolicies,
+    configmaps,
+    secrets,
+)
+from app.api.routes import statefulsets, daemonsets, jobs, cronjobs
 
 api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(cluster.router)
@@ -17,3 +33,7 @@ api_router.include_router(ingresses.router)
 api_router.include_router(networkpolicies.router)
 api_router.include_router(configmaps.router)
 api_router.include_router(secrets.router)
+api_router.include_router(statefulsets.router)
+api_router.include_router(daemonsets.router)
+api_router.include_router(jobs.router)
+api_router.include_router(cronjobs.router)

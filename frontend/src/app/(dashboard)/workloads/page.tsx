@@ -157,35 +157,41 @@ export default function WorkloadsPage() {
           ) : (
             <div className="grid gap-3 grid-cols-[repeat(auto-fill,300px)] justify-start">
               {statefulsets.map((workload) => (
-                <Card key={`${workload.namespace}-${workload.name}`} className="relative overflow-hidden py-4 gap-4 h-full flex flex-col">
-                  <CardHeader>
-                    <div className="flex items-start justify-between">
-                      <div className="min-w-0 flex-1">
-                        <CardTitle className="text-base text-text-primary truncate" title={workload.name}>{workload.name}</CardTitle>
-                        <CardDescription className="truncate">{t("workloads.card.namespace", { ns: workload.namespace })}</CardDescription>
+                <Link
+                  key={`${workload.namespace}-${workload.name}`}
+                  href={`/workloads/statefulsets/${encodeURIComponent(workload.namespace)}/${encodeURIComponent(workload.name)}`}
+                  className="block h-full"
+                >
+                  <Card className="relative overflow-hidden py-4 gap-4 h-full flex flex-col hover:bg-hover cursor-pointer">
+                    <CardHeader>
+                      <div className="flex items-start justify-between">
+                        <div className="min-w-0 flex-1">
+                          <CardTitle className="text-base text-text-primary truncate" title={workload.name}>{workload.name}</CardTitle>
+                          <CardDescription className="truncate">{t("workloads.card.namespace", { ns: workload.namespace })}</CardDescription>
+                        </div>
+                        <StatusBadge
+                          status={workload.status === "Healthy" ? "healthy" : "warning"}
+                          label={workload.status}
+                          size="sm"
+                        />
                       </div>
-                      <StatusBadge
-                        status={workload.status === "Healthy" ? "healthy" : "warning"}
-                        label={workload.status}
-                        size="sm"
-                      />
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-text-muted">{t("workloads.field.replicas")}</span>
-                      <Badge variant="neutral-light" size="sm" className={badgePresets.metric}>
-                        {workload.replicas_ready ?? 0}/{workload.replicas_desired ?? 0}
-                      </Badge>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-text-muted">{t("workloads.field.version")}</span>
-                      <Badge variant="neutral-light" size="sm" className={badgePresets.metric}>
-                        {workload.version || "N/A"}
-                      </Badge>
-                    </div>
-                  </CardContent>
-                </Card>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-text-muted">{t("workloads.field.replicas")}</span>
+                        <Badge variant="neutral-light" size="sm" className={badgePresets.metric}>
+                          {workload.replicas_ready ?? 0}/{workload.replicas_desired ?? 0}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-text-muted">{t("workloads.field.version")}</span>
+                        <Badge variant="neutral-light" size="sm" className={badgePresets.metric}>
+                          {workload.version || "N/A"}
+                        </Badge>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </Link>
               ))}
             </div>
           )}

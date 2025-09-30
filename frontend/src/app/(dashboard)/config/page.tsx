@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { PageHeader } from "@/features/dashboard/layouts/page-header";
@@ -8,7 +8,20 @@ import { Card, CardContent } from "@/shared/ui/card";
 import { useI18n } from "@/shared/i18n/i18n";
 import { badgePresets } from "@/shared/ui/badge";
 import { fetchNamespaces, queryKeys, type NamespaceSummaryResponse } from "@/lib/api";
-import { fetchConfigMaps, fetchSecrets, type ConfigMapSummary, type SecretSummary } from "@/lib/api";
+import {
+  fetchConfigMaps,
+  fetchSecrets,
+  fetchConfigMapYaml,
+  updateConfigMapYaml,
+  deleteConfigMap,
+  fetchSecretYaml,
+  updateSecretYaml,
+  deleteSecret,
+  type ConfigMapSummary,
+  type SecretSummary,
+  type YamlContentResponse,
+} from "@/lib/api";
+import { YamlEditor } from "@/shared/ui/yaml-editor";
 
 function useNamespaces() {
   const { data } = useQuery<NamespaceSummaryResponse[]>({ queryKey: queryKeys.namespaces, queryFn: fetchNamespaces });
@@ -31,6 +44,26 @@ export default function ConfigPage() {
 
   const cmItems = cms ?? [];
   const secItems = secs ?? [];
+
+  const [cmEditing, setCmEditing] = useState<{ ns: string; name: string } | null>(null);
+  const [cmYaml, setCmYaml] = useState<string>("");
+  useEffect(() => {
+    (async () => {
+      if (!cmEditing) return;
+      const y: YamlContentResponse = await fetchConfigMapYaml(cmEditing.ns, cmEditing.name);
+      setCmYaml(y.yaml ?? "");
+    })();
+  }, [cmEditing]);
+
+  const [secEditing, setSecEditing] = useState<{ ns: string; name: string } | null>(null);
+  const [secYaml, setSecYaml] = useState<string>("");
+  useEffect(() => {
+    (async () => {
+      if (!secEditing) return;
+      const y: YamlContentResponse = await fetchSecretYaml(secEditing.ns, secEditing.name);
+      setSecYaml(y.yaml ?? "");
+    })();
+  }, [secEditing]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -74,6 +107,7 @@ export default function ConfigPage() {
                       <th className="px-3 py-2">Name</th>
                       <th className="px-3 py-2">Namespace</th>
                       <th className="px-3 py-2">Created</th>
+                      <th className="px-3 py-2">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -87,6 +121,10 @@ export default function ConfigPage() {
                           <td className="px-3 py-2">{it.name}</td>
                           <td className="px-3 py-2">{it.namespace}</td>
                           <td className="px-3 py-2">{it.created_at ? new Date(it.created_at).toLocaleString() : "-"}</td>
+                          <td className="px-3 py-2">
+                            <button className="text-xs underline" onClick={() => setCmEditing({ ns: it.namespace, name: it.name })}>Edit YAML</button>
+                            <button className="ml-2 text-xs text-error underline" onClick={async () => { if (confirm("Delete ConfigMap?")) { await deleteConfigMap(it.namespace, it.name); location.reload(); } }}>Delete</button>
+                          </td>
                         </tr>
                       ))
                     )}
@@ -105,6 +143,7 @@ export default function ConfigPage() {
                       <th className="px-3 py-2">Namespace</th>
                       <th className="px-3 py-2">Type</th>
                       <th className="px-3 py-2">Created</th>
+                      <th className="px-3 py-2">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -119,6 +158,10 @@ export default function ConfigPage() {
                           <td className="px-3 py-2">{it.namespace}</td>
                           <td className="px-3 py-2">{it.type || "-"}</td>
                           <td className="px-3 py-2">{it.created_at ? new Date(it.created_at).toLocaleString() : "-"}</td>
+                          <td className="px-3 py-2">
+                            <button className="text-xs underline" onClick={() => setSecEditing({ ns: it.namespace, name: it.name })}>Edit YAML</button>
+                            <button className="ml-2 text-xs text-error underline" onClick={async () => { if (confirm("Delete Secret?")) { await deleteSecret(it.namespace, it.name); location.reload(); } }}>Delete</button>
+                          </td>
                         </tr>
                       ))
                     )}
@@ -129,7 +172,33 @@ export default function ConfigPage() {
           </div>
         </CardContent>
       </Card>
+
+      <YamlEditor
+        open={Boolean(cmEditing)}
+        title={`Edit ConfigMap ${cmEditing ? `${cmEditing.ns}/${cmEditing.name}` : ""}`}
+        description="Edit and apply ConfigMap"
+        initialYaml={cmYaml}
+        onClose={() => setCmEditing(null)}
+        validateKind="ConfigMap"
+        onSave={async (y) => {
+          if (!cmEditing) return;
+          await updateConfigMapYaml(cmEditing.ns, cmEditing.name, y);
+          alert("Applied");
+        }}
+      />
+      <YamlEditor
+        open={Boolean(secEditing)}
+        title={`Edit Secret ${secEditing ? `${secEditing.ns}/${secEditing.name}` : ""}`}
+        description="Edit and apply Secret (base64-encoded data)"
+        initialYaml={secYaml}
+        onClose={() => setSecEditing(null)}
+        validateKind="Secret"
+        onSave={async (y) => {
+          if (!secEditing) return;
+          await updateSecretYaml(secEditing.ns, secEditing.name, y);
+          alert("Applied");
+        }}
+      />
     </div>
   );
 }
-

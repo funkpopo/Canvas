@@ -49,6 +49,10 @@ export const queryKeys = {
   ] as const,
   deploymentPods: (ns: string, name: string) => ["deployments", ns, name, "pods"] as const,
   deploymentYaml: (ns: string, name: string) => ["deployments", ns, name, "yaml"] as const,
+  statefulsetYaml: (ns: string, name: string) => ["statefulsets", ns, name, "yaml"] as const,
+  daemonsetYaml: (ns: string, name: string) => ["daemonsets", ns, name, "yaml"] as const,
+  jobYaml: (ns: string, name: string) => ["jobs", ns, name, "yaml"] as const,
+  cronjobYaml: (ns: string, name: string) => ["cronjobs", ns, name, "yaml"] as const,
 } as const;
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -289,17 +293,79 @@ export function fetchIngresses(ns?: string): Promise<IngressSummary[]> {
   const q = ns && ns !== "all" ? `?namespace=${encodeURIComponent(ns)}` : "";
   return request<IngressSummary[]>(`/ingresses/${q}`.replace(/\/$/, "/"));
 }
+export interface YamlContentResponse { yaml: string }
+export function fetchIngressYaml(ns: string, name: string): Promise<YamlContentResponse> {
+  const en = encodeURIComponent(ns);
+  const nm = encodeURIComponent(name);
+  return request<YamlContentResponse>(`/ingresses/${en}/${nm}/yaml`);
+}
+export interface OperationResultResponse { ok: boolean; message?: string | null }
+export function updateIngressYaml(ns: string, name: string, yaml: string): Promise<OperationResultResponse> {
+  const en = encodeURIComponent(ns);
+  const nm = encodeURIComponent(name);
+  return request<OperationResultResponse>(`/ingresses/${en}/${nm}/yaml`, { method: "PUT", body: JSON.stringify({ yaml }) });
+}
+export function deleteIngress(ns: string, name: string): Promise<OperationResultResponse> {
+  const en = encodeURIComponent(ns);
+  const nm = encodeURIComponent(name);
+  return request<OperationResultResponse>(`/ingresses/${en}/${nm}`, { method: "DELETE" });
+}
 export function fetchNetworkPolicies(ns?: string): Promise<NetworkPolicySummary[]> {
   const q = ns && ns !== "all" ? `?namespace=${encodeURIComponent(ns)}` : "";
   return request<NetworkPolicySummary[]>(`/networkpolicies/${q}`.replace(/\/$/, "/"));
+}
+export function fetchNetworkPolicyYaml(ns: string, name: string): Promise<YamlContentResponse> {
+  const en = encodeURIComponent(ns);
+  const nm = encodeURIComponent(name);
+  return request<YamlContentResponse>(`/networkpolicies/${en}/${nm}/yaml`);
+}
+export function updateNetworkPolicyYaml(ns: string, name: string, yaml: string): Promise<OperationResultResponse> {
+  const en = encodeURIComponent(ns);
+  const nm = encodeURIComponent(name);
+  return request<OperationResultResponse>(`/networkpolicies/${en}/${nm}/yaml`, { method: "PUT", body: JSON.stringify({ yaml }) });
+}
+export function deleteNetworkPolicy(ns: string, name: string): Promise<OperationResultResponse> {
+  const en = encodeURIComponent(ns);
+  const nm = encodeURIComponent(name);
+  return request<OperationResultResponse>(`/networkpolicies/${en}/${nm}`, { method: "DELETE" });
 }
 export function fetchConfigMaps(ns?: string): Promise<ConfigMapSummary[]> {
   const q = ns && ns !== "all" ? `?namespace=${encodeURIComponent(ns)}` : "";
   return request<ConfigMapSummary[]>(`/configmaps/${q}`.replace(/\/$/, "/"));
 }
+export function fetchConfigMapYaml(ns: string, name: string): Promise<YamlContentResponse> {
+  const en = encodeURIComponent(ns);
+  const nm = encodeURIComponent(name);
+  return request<YamlContentResponse>(`/configmaps/${en}/${nm}/yaml`);
+}
+export function updateConfigMapYaml(ns: string, name: string, yaml: string): Promise<OperationResultResponse> {
+  const en = encodeURIComponent(ns);
+  const nm = encodeURIComponent(name);
+  return request<OperationResultResponse>(`/configmaps/${en}/${nm}/yaml`, { method: "PUT", body: JSON.stringify({ yaml }) });
+}
+export function deleteConfigMap(ns: string, name: string): Promise<OperationResultResponse> {
+  const en = encodeURIComponent(ns);
+  const nm = encodeURIComponent(name);
+  return request<OperationResultResponse>(`/configmaps/${en}/${nm}`, { method: "DELETE" });
+}
 export function fetchSecrets(ns?: string): Promise<SecretSummary[]> {
   const q = ns && ns !== "all" ? `?namespace=${encodeURIComponent(ns)}` : "";
   return request<SecretSummary[]>(`/secrets/${q}`.replace(/\/$/, "/"));
+}
+export function fetchSecretYaml(ns: string, name: string): Promise<YamlContentResponse> {
+  const en = encodeURIComponent(ns);
+  const nm = encodeURIComponent(name);
+  return request<YamlContentResponse>(`/secrets/${en}/${nm}/yaml`);
+}
+export function updateSecretYaml(ns: string, name: string, yaml: string): Promise<OperationResultResponse> {
+  const en = encodeURIComponent(ns);
+  const nm = encodeURIComponent(name);
+  return request<OperationResultResponse>(`/secrets/${en}/${nm}/yaml`, { method: "PUT", body: JSON.stringify({ yaml }) });
+}
+export function deleteSecret(ns: string, name: string): Promise<OperationResultResponse> {
+  const en = encodeURIComponent(ns);
+  const nm = encodeURIComponent(name);
+  return request<OperationResultResponse>(`/secrets/${en}/${nm}`, { method: "DELETE" });
 }
 
 // Storage classes
@@ -661,7 +727,7 @@ export function deleteDeployment(ns: string, name: string): Promise<OperationRes
   return request<OperationResultResponse>(`/workloads/deployments/${en}/${nm}`, { method: "DELETE" });
 }
 
-export interface YamlContentResponse { yaml: string }
+// moved earlier
 
 export function fetchDeploymentYaml(ns: string, name: string): Promise<YamlContentResponse> {
   const en = encodeURIComponent(ns);
@@ -749,4 +815,97 @@ export interface NodeMetricSeriesResponse { has_metrics: boolean; node: string; 
 export function fetchNodeSeries(name: string, window: string): Promise<NodeMetricSeriesResponse> {
   const params = new URLSearchParams({ name, window });
   return request<NodeMetricSeriesResponse>(`/metrics/node?${params.toString()}`);
+}
+
+// StatefulSet management
+export function fetchStatefulSetPods(ns: string, name: string): Promise<PodWithContainersResponse[]> {
+  const en = encodeURIComponent(ns);
+  const nm = encodeURIComponent(name);
+  return request<PodWithContainersResponse[]>(`/workloads/statefulsets/${en}/${nm}/pods`);
+}
+export function scaleStatefulSet(ns: string, name: string, replicas: number): Promise<OperationResultResponse> {
+  const en = encodeURIComponent(ns);
+  const nm = encodeURIComponent(name);
+  return request<OperationResultResponse>(`/workloads/statefulsets/${en}/${nm}/scale`, { method: "POST", body: JSON.stringify({ replicas }) });
+}
+export function deleteStatefulSet(ns: string, name: string): Promise<OperationResultResponse> {
+  const en = encodeURIComponent(ns);
+  const nm = encodeURIComponent(name);
+  return request<OperationResultResponse>(`/workloads/statefulsets/${en}/${nm}`, { method: "DELETE" });
+}
+export function fetchStatefulSetYaml(ns: string, name: string): Promise<YamlContentResponse> {
+  const en = encodeURIComponent(ns);
+  const nm = encodeURIComponent(name);
+  return request<YamlContentResponse>(`/workloads/statefulsets/${en}/${nm}/yaml`);
+}
+export function updateStatefulSetYaml(ns: string, name: string, yaml: string): Promise<OperationResultResponse> {
+  const en = encodeURIComponent(ns);
+  const nm = encodeURIComponent(name);
+  return request<OperationResultResponse>(`/workloads/statefulsets/${en}/${nm}/yaml`, { method: "PUT", body: JSON.stringify({ yaml }) });
+}
+
+// DaemonSet management
+export function fetchDaemonSetPods(ns: string, name: string): Promise<PodWithContainersResponse[]> {
+  const en = encodeURIComponent(ns);
+  const nm = encodeURIComponent(name);
+  return request<PodWithContainersResponse[]>(`/workloads/daemonsets/${en}/${nm}/pods`);
+}
+export function deleteDaemonSet(ns: string, name: string): Promise<OperationResultResponse> {
+  const en = encodeURIComponent(ns);
+  const nm = encodeURIComponent(name);
+  return request<OperationResultResponse>(`/workloads/daemonsets/${en}/${nm}`, { method: "DELETE" });
+}
+export function fetchDaemonSetYaml(ns: string, name: string): Promise<YamlContentResponse> {
+  const en = encodeURIComponent(ns);
+  const nm = encodeURIComponent(name);
+  return request<YamlContentResponse>(`/workloads/daemonsets/${en}/${nm}/yaml`);
+}
+export function updateDaemonSetYaml(ns: string, name: string, yaml: string): Promise<OperationResultResponse> {
+  const en = encodeURIComponent(ns);
+  const nm = encodeURIComponent(name);
+  return request<OperationResultResponse>(`/workloads/daemonsets/${en}/${nm}/yaml`, { method: "PUT", body: JSON.stringify({ yaml }) });
+}
+
+// Job management
+export function fetchJobPods(ns: string, name: string): Promise<PodWithContainersResponse[]> {
+  const en = encodeURIComponent(ns);
+  const nm = encodeURIComponent(name);
+  return request<PodWithContainersResponse[]>(`/workloads/jobs/${en}/${nm}/pods`);
+}
+export function deleteJob(ns: string, name: string): Promise<OperationResultResponse> {
+  const en = encodeURIComponent(ns);
+  const nm = encodeURIComponent(name);
+  return request<OperationResultResponse>(`/workloads/jobs/${en}/${nm}`, { method: "DELETE" });
+}
+export function fetchJobYaml(ns: string, name: string): Promise<YamlContentResponse> {
+  const en = encodeURIComponent(ns);
+  const nm = encodeURIComponent(name);
+  return request<YamlContentResponse>(`/workloads/jobs/${en}/${nm}/yaml`);
+}
+export function updateJobYaml(ns: string, name: string, yaml: string): Promise<OperationResultResponse> {
+  const en = encodeURIComponent(ns);
+  const nm = encodeURIComponent(name);
+  return request<OperationResultResponse>(`/workloads/jobs/${en}/${nm}/yaml`, { method: "PUT", body: JSON.stringify({ yaml }) });
+}
+
+// CronJob management
+export function runCronJobNow(ns: string, name: string): Promise<OperationResultResponse> {
+  const en = encodeURIComponent(ns);
+  const nm = encodeURIComponent(name);
+  return request<OperationResultResponse>(`/workloads/cronjobs/${en}/${nm}/run`, { method: "POST" });
+}
+export function deleteCronJob(ns: string, name: string): Promise<OperationResultResponse> {
+  const en = encodeURIComponent(ns);
+  const nm = encodeURIComponent(name);
+  return request<OperationResultResponse>(`/workloads/cronjobs/${en}/${nm}`, { method: "DELETE" });
+}
+export function fetchCronJobYaml(ns: string, name: string): Promise<YamlContentResponse> {
+  const en = encodeURIComponent(ns);
+  const nm = encodeURIComponent(name);
+  return request<YamlContentResponse>(`/workloads/cronjobs/${en}/${nm}/yaml`);
+}
+export function updateCronJobYaml(ns: string, name: string, yaml: string): Promise<OperationResultResponse> {
+  const en = encodeURIComponent(ns);
+  const nm = encodeURIComponent(name);
+  return request<OperationResultResponse>(`/workloads/cronjobs/${en}/${nm}/yaml`, { method: "PUT", body: JSON.stringify({ yaml }) });
 }

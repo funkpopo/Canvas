@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { PageHeader } from "@/features/dashboard/layouts/page-header";
@@ -8,7 +8,15 @@ import { Card, CardContent } from "@/shared/ui/card";
 import { useI18n } from "@/shared/i18n/i18n";
 import { badgePresets } from "@/shared/ui/badge";
 import { fetchNamespaces, queryKeys, type NamespaceSummaryResponse } from "@/lib/api";
-import { fetchIngresses, type IngressSummary } from "@/lib/api";
+import {
+  fetchIngresses,
+  fetchIngressYaml,
+  updateIngressYaml,
+  deleteIngress,
+  type IngressSummary,
+  type YamlContentResponse,
+} from "@/lib/api";
+import { YamlEditor } from "@/shared/ui/yaml-editor";
 
 function useNamespaces() {
   const { data } = useQuery<NamespaceSummaryResponse[]>({ queryKey: queryKeys.namespaces, queryFn: fetchNamespaces });
@@ -25,6 +33,16 @@ export default function IngressesPage() {
     queryFn: () => fetchIngresses(ns),
   });
   const items = data ?? [];
+
+  const [editing, setEditing] = useState<{ ns: string; name: string } | null>(null);
+  const [yaml, setYaml] = useState<string>("");
+  useEffect(() => {
+    (async () => {
+      if (!editing) return;
+      const y: YamlContentResponse = await fetchIngressYaml(editing.ns, editing.name);
+      setYaml(y.yaml ?? "");
+    })();
+  }, [editing]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -60,6 +78,7 @@ export default function IngressesPage() {
                   <th className="px-3 py-2">Namespace</th>
                   <th className="px-3 py-2">Hosts</th>
                   <th className="px-3 py-2">Created</th>
+                  <th className="px-3 py-2">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -74,6 +93,10 @@ export default function IngressesPage() {
                       <td className="px-3 py-2">{it.namespace}</td>
                       <td className="px-3 py-2">{(it.hosts ?? []).join(", ")}</td>
                       <td className="px-3 py-2">{it.created_at ? new Date(it.created_at).toLocaleString() : "-"}</td>
+                      <td className="px-3 py-2 flex gap-2">
+                        <button className="text-xs underline" onClick={() => setEditing({ ns: it.namespace, name: it.name })}>Edit YAML</button>
+                        <button className="text-xs text-error underline" onClick={async () => { if (confirm("Delete ingress?")) { await deleteIngress(it.namespace, it.name); location.reload(); } }}>Delete</button>
+                      </td>
                     </tr>
                   ))
                 )}
@@ -82,7 +105,20 @@ export default function IngressesPage() {
           </div>
         </CardContent>
       </Card>
+
+      <YamlEditor
+        open={Boolean(editing)}
+        title={`Edit Ingress ${editing ? `${editing.ns}/${editing.name}` : ""}`}
+        description="Edit and apply Ingress manifest"
+        initialYaml={yaml}
+        onClose={() => setEditing(null)}
+        validateKind="Ingress"
+        onSave={async (y) => {
+          if (!editing) return;
+          await updateIngressYaml(editing.ns, editing.name, y);
+          alert("Applied");
+        }}
+      />
     </div>
   );
 }
-
