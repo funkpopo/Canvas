@@ -287,6 +287,7 @@ const dictEn = {
   "workloads.meta.cronjobs.desc": "Scheduled job workloads.",
   
   "workloads.tab.deployments": "Deployments",
+  "workloads.tab.daemonsets": "DaemonSets",
   "workloads.tab.statefulsets": "StatefulSets",
   "workloads.tab.cronjobs": "CronJobs",
   "workloads.tab.jobs": "Jobs",
@@ -294,6 +295,8 @@ const dictEn = {
   "workloads.error.load": "Failed to load workloads. Please check your cluster connection.",
   "workloads.empty.deployments": "No deployments found",
   "workloads.empty.deployments.hint": "Create a deployment to get started",
+  "workloads.empty.daemonsets": "No DaemonSets found",
+  "workloads.empty.daemonsets.hint": "DaemonSets ensure a Pod on each node",
   "workloads.empty.statefulsets": "No StatefulSets found",
   "workloads.empty.statefulsets.hint": "StatefulSets provide persistent storage for applications",
   "workloads.card.namespace": "{ns} namespace",
@@ -515,6 +518,12 @@ const dictEn = {
   "job.header.desc": "Namespace: {ns}",
   "job.manage.deleteConfirm": "Delete this Job?",
   "job.pods.desc": "Pods spawned by this job",
+  
+  // DaemonSet detail
+  "daemon.header.eyebrow": "DaemonSet",
+  "daemon.header.desc": "Namespace: {ns}",
+  "daemon.manage.deleteConfirm": "Delete this DaemonSet?",
+  "daemon.pods.desc": "Pods managed by this DaemonSet",
   
   // Storage
   "storage.eyebrow": "Storage management",
@@ -955,6 +964,7 @@ const dictZh = {
   "workloads.meta.cronjobs.desc": "定时任务工作负载",
   
   "workloads.tab.deployments": "Deployments",
+  "workloads.tab.daemonsets": "DaemonSets",
   "workloads.tab.statefulsets": "StatefulSets",
   "workloads.tab.cronjobs": "CronJobs",
   "workloads.tab.jobs": "Jobs",
@@ -962,6 +972,8 @@ const dictZh = {
   "workloads.error.load": "加载工作负载失败，请检查集群连接。",
   "workloads.empty.deployments": "未找到 Deployments",
   "workloads.empty.deployments.hint": "创建一个 Deployment 开始体验",
+  "workloads.empty.daemonsets": "未找到 DaemonSets",
+  "workloads.empty.daemonsets.hint": "DaemonSet 确保每个节点上都有一个 Pod",
   "workloads.empty.statefulsets": "未找到 StatefulSets",
   "workloads.empty.statefulsets.hint": "StatefulSets 为应用提供持久化存储",
   "workloads.card.namespace": "{ns} 命名空间",
@@ -1181,6 +1193,12 @@ const dictZh = {
   "job.header.desc": "命名空间：{ns}",
   "job.manage.deleteConfirm": "删除该 Job？",
   "job.pods.desc": "该 Job 产生的容器组",
+  
+  // DaemonSet detail
+  "daemon.header.eyebrow": "DaemonSet",
+  "daemon.header.desc": "命名空间：{ns}",
+  "daemon.manage.deleteConfirm": "删除该 DaemonSet？",
+  "daemon.pods.desc": "该 DaemonSet 管理的容器组",
 
   // Storage
   "storage.eyebrow": "存储管理",
