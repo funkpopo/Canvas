@@ -3,12 +3,20 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 
 from app.config import get_settings
 from app.services.helm import HelmService
 from app.services.audit import AuditService
 from app.db import get_session_factory
 from app.schemas.kubernetes import OperationResult
+
+
+class InstallPayload(BaseModel):
+    release: str
+    chart: str
+    namespace: str
+    values_yaml: str | None = None
 
 
 router = APIRouter(prefix="/helm", tags=["helm"])
@@ -37,24 +45,17 @@ async def search_charts(q: str = Query(..., description="Search query"), source:
     return await svc.search_charts(q, source=source)
 
 
-class InstallPayload(dict):
-    release: str
-    chart: str
-    namespace: str
-    values_yaml: str | None
-
-
 @router.post("/install", response_model=OperationResult)
 async def install(payload: InstallPayload, audit: AuditService = Depends(get_audit_service)) -> OperationResult:
     _ensure_enabled()
     svc = HelmService()
     ok, msg = await svc.install(
-        release=str(payload.get("release")),
-        chart=str(payload.get("chart")),
-        namespace=str(payload.get("namespace")),
-        values_yaml=str(payload.get("values_yaml")) if payload.get("values_yaml") else None,
+        release=payload.release,
+        chart=payload.chart,
+        namespace=payload.namespace,
+        values_yaml=payload.values_yaml,
     )
-    await audit.log(action="helm_install", resource="helm", success=ok, details=dict(payload))
+    await audit.log(action="helm_install", resource="helm", success=ok, details=payload.model_dump())
     return OperationResult(ok=ok, message=msg)
 
 
@@ -63,12 +64,12 @@ async def upgrade(payload: InstallPayload, audit: AuditService = Depends(get_aud
     _ensure_enabled()
     svc = HelmService()
     ok, msg = await svc.upgrade(
-        release=str(payload.get("release")),
-        chart=str(payload.get("chart")),
-        namespace=str(payload.get("namespace")),
-        values_yaml=str(payload.get("values_yaml")) if payload.get("values_yaml") else None,
+        release=payload.release,
+        chart=payload.chart,
+        namespace=payload.namespace,
+        values_yaml=payload.values_yaml,
     )
-    await audit.log(action="helm_upgrade", resource="helm", success=ok, details=dict(payload))
+    await audit.log(action="helm_upgrade", resource="helm", success=ok, details=payload.model_dump())
     return OperationResult(ok=ok, message=msg)
 
 
@@ -79,4 +80,3 @@ async def uninstall(namespace: str, release: str, audit: AuditService = Depends(
     ok, msg = await svc.uninstall(release=release, namespace=namespace)
     await audit.log(action="helm_uninstall", resource="helm", success=ok, details={"namespace": namespace, "release": release})
     return OperationResult(ok=ok, message=msg)
-
