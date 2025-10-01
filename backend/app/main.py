@@ -4,6 +4,7 @@ import asyncio
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 import structlog
+from kubernetes.stream import stream
 
 from app.api.router import api_router
 from app.config import get_settings
@@ -167,6 +168,7 @@ def create_app() -> FastAPI:
     @app.websocket("/ws/deployments")
     async def websocket_endpoint(websocket: WebSocket):
         """WebSocket endpoint for real-time deployment updates"""
+        logger = structlog.get_logger()
         manager: ConnectionManager = app.state.ws_manager
         await manager.connect(websocket)
         try:
@@ -185,6 +187,7 @@ def create_app() -> FastAPI:
     @app.websocket("/ws/pods/{namespace}/{name}/exec")
     async def websocket_pod_exec(websocket: WebSocket, namespace: str, name: str):
         """WebSocket bridge for `kubectl exec`-like interactive sessions."""
+        logger = structlog.get_logger()
         await websocket.accept()
         service = get_kubernetes_service()
         # Parse query params
