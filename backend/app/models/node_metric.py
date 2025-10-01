@@ -12,12 +12,13 @@ class NodeMetric(Base):
     __tablename__ = "node_metrics"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True, nullable=False)
-    node: Mapped[str] = mapped_column(String(255), index=True, nullable=False)
+    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    node: Mapped[str] = mapped_column(String(255), nullable=False)
     cpu_mcores: Mapped[int] = mapped_column(Integer, nullable=False)
     memory_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
 
     __table_args__ = (
         Index("ix_node_metrics_key_ts", "node", "ts"),
         Index("ix_node_metrics_ts", "ts"),
+        Index("ix_node_metrics_node", "node"),
     )
