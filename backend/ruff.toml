@@ -1,0 +1,32 @@
+line-length = 120
+target-version = "py311"
+
+[lint]
+select = [
+  "E",  # pycodestyle errors
+  "F",  # pyflakes
+  "I",  # isort
+  "B",  # flake8-bugbear
+  "UP", # pyupgrade
+  "SIM",# simplify
+]
+ignore = [
+  "E203", # whitespace before ':' (black/formatters compatibility)
+]
+
+[lint.isort]
+known-first-party = ["app"]
+combine-as-imports = true
+
+[format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+
+[exclude]
+extend = [
+  "**/__pycache__/**",
+  "**/.venv/**",
+  "**/node_modules/**",
+]
+
