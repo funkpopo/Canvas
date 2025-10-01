@@ -259,6 +259,27 @@ const dictEn = {
   "policies.empty": "No NetworkPolicies found",
   "policies.confirm.delete": "Delete policy?",
 
+  // Config - ConfigMaps
+  "configmaps.title": "ConfigMaps",
+  "configmaps.desc": "List and manage ConfigMaps",
+  "configmaps.col.name": "Name",
+  "configmaps.col.namespace": "Namespace",
+  "configmaps.col.created": "Created",
+  "configmaps.col.actions": "Actions",
+  "configmaps.empty": "No ConfigMaps found",
+  "configmaps.confirm.delete": "Delete ConfigMap?",
+
+  // Config - Secrets
+  "secrets.title": "Secrets",
+  "secrets.desc": "List and manage Secrets",
+  "secrets.col.name": "Name",
+  "secrets.col.namespace": "Namespace",
+  "secrets.col.type": "Type",
+  "secrets.col.created": "Created",
+  "secrets.col.actions": "Actions",
+  "secrets.empty": "No Secrets found",
+  "secrets.confirm.delete": "Delete Secret?",
+
   // CRDs
   "sidebar.crds": "CRDs",
   "crds.header": "CRDs",
@@ -1396,6 +1417,27 @@ const dictZh = {
   "policies.col.actions": "操作",
   "policies.empty": "暂无网络策略",
   "policies.confirm.delete": "删除策略？",
+
+  // Config - ConfigMaps
+  "configmaps.title": "ConfigMap",
+  "configmaps.desc": "列出并管理 ConfigMap",
+  "configmaps.col.name": "名称",
+  "configmaps.col.namespace": "命名空间",
+  "configmaps.col.created": "创建时间",
+  "configmaps.col.actions": "操作",
+  "configmaps.empty": "暂无 ConfigMap",
+  "configmaps.confirm.delete": "删除 ConfigMap？",
+
+  // Config - Secrets
+  "secrets.title": "Secret",
+  "secrets.desc": "列出并管理 Secret（数据以 base64 表示）",
+  "secrets.col.name": "名称",
+  "secrets.col.namespace": "命名空间",
+  "secrets.col.type": "类型",
+  "secrets.col.created": "创建时间",
+  "secrets.col.actions": "操作",
+  "secrets.empty": "暂无 Secret",
+  "secrets.confirm.delete": "删除 Secret？",
 
   // CRDs
   "crds.header": "CRD",

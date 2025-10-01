@@ -263,17 +263,30 @@ export function Sidebar() {
                               <span>NetworkPolicies</span>
                             </Link>
                             <Link
-                              href="/config"
+                              href="/config/configmaps"
                               className={cn(
                                 "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",
-                                isPathActive("/config")
+                                isPathActive("/config/configmaps")
                                   ? "bg-accent text-accent-foreground"
                                   : "text-text-muted hover:bg-muted hover:text-text-primary",
                               )}
-                              title="Config"
+                              title="ConfigMaps"
                             >
                               <FolderTree className="h-4 w-4" />
-                              <span>Config</span>
+                              <span>ConfigMaps</span>
+                            </Link>
+                            <Link
+                              href="/config/secrets"
+                              className={cn(
+                                "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",
+                                isPathActive("/config/secrets")
+                                  ? "bg-accent text-accent-foreground"
+                                  : "text-text-muted hover:bg-muted hover:text-text-primary",
+                              )}
+                              title="Secrets"
+                            >
+                              <FolderTree className="h-4 w-4" />
+                              <span>Secrets</span>
                             </Link>
                             <Link
                               href="/events"
