@@ -31,6 +31,7 @@ export default function WorkloadsPage() {
   const deployments = workloads?.filter((w) => w.kind === "Deployment") ?? [];
   const statefulsets = workloads?.filter((w) => w.kind === "StatefulSet") ?? [];
   const cronjobs = workloads?.filter((w) => w.kind === "CronJob") ?? [];
+  const jobs = workloads?.filter((w) => w.kind === "Job") ?? [];
 
   return (
     <div className="flex flex-col gap-6">
@@ -67,10 +68,11 @@ export default function WorkloadsPage() {
       </PageHeader>
 
       <Tabs defaultValue="deployments" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="deployments">{t("workloads.tab.deployments")}</TabsTrigger>
           <TabsTrigger value="statefulsets">{t("workloads.tab.statefulsets")}</TabsTrigger>
           <TabsTrigger value="cronjobs">{t("workloads.tab.cronjobs")}</TabsTrigger>
+          <TabsTrigger value="jobs">{t("workloads.tab.jobs")}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="deployments" className="space-y-4">
@@ -216,29 +218,88 @@ export default function WorkloadsPage() {
           ) : (
             <div className="grid gap-3 grid-cols-[repeat(auto-fill,300px)] justify-start">
               {cronjobs.map((workload) => (
-                <Card key={`${workload.namespace}-${workload.name}`} className="relative overflow-hidden py-4 gap-4 h-full flex flex-col">
-                  <CardHeader>
-                    <div className="flex items-start justify-between">
-                      <div className="min-w-0 flex-1">
-                        <CardTitle className="text-base text-text-primary truncate" title={workload.name}>{workload.name}</CardTitle>
-                        <CardDescription className="truncate">{t("workloads.card.namespace", { ns: workload.namespace })}</CardDescription>
+                <Link
+                  key={`${workload.namespace}-${workload.name}`}
+                  href={`/workloads/cronjobs/${encodeURIComponent(workload.namespace)}/${encodeURIComponent(workload.name)}`}
+                  className="block h-full"
+                >
+                  <Card className="relative overflow-hidden py-4 gap-4 h-full flex flex-col hover:bg-hover cursor-pointer">
+                    <CardHeader>
+                      <div className="flex items-start justify-between">
+                        <div className="min-w-0 flex-1">
+                          <CardTitle className="text-base text-text-primary truncate" title={workload.name}>{workload.name}</CardTitle>
+                          <CardDescription className="truncate">{t("workloads.card.namespace", { ns: workload.namespace })}</CardDescription>
+                        </div>
+                        <StatusBadge
+                          status={workload.status === "Healthy" ? "healthy" : "warning"}
+                          label={workload.status}
+                          size="sm"
+                        />
                       </div>
-                      <StatusBadge
-                        status={workload.status === "Healthy" ? "healthy" : "warning"}
-                        label={workload.status}
-                        size="sm"
-                      />
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-text-muted">{t("workloads.field.lastRun")}</span>
-                      <span className="text-xs text-text-muted">
-                        {workload.updated_at ? new Date(workload.updated_at).toLocaleString() : t("common.never")}
-                      </span>
-                    </div>
-                  </CardContent>
-                </Card>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-text-muted">{t("workloads.field.lastRun")}</span>
+                        <span className="text-xs text-text-muted">
+                          {workload.updated_at ? new Date(workload.updated_at).toLocaleString() : t("common.never")}
+                        </span>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </Link>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="jobs" className="space-y-4">
+          {isLoading ? (
+            <Card>
+              <CardContent className="flex items-center justify-center py-8">
+                <p className="text-text-muted">{t("workloads.loading.jobs")}</p>
+              </CardContent>
+            </Card>
+          ) : jobs.length === 0 ? (
+            <Card>
+              <CardContent className="flex items-center justify-center py-8">
+                <div className="text-center space-y-2">
+                  <p className="text-text-muted">{t("workloads.empty.jobs")}</p>
+                  <p className="text-xs text-text-muted">{t("workloads.empty.jobs.hint")}</p>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-3 grid-cols-[repeat(auto-fill,300px)] justify-start">
+              {jobs.map((workload) => (
+                <Link
+                  key={`${workload.namespace}-${workload.name}`}
+                  href={`/workloads/jobs/${encodeURIComponent(workload.namespace)}/${encodeURIComponent(workload.name)}`}
+                  className="block h-full"
+                >
+                  <Card className="relative overflow-hidden py-4 gap-4 h-full flex flex-col hover:bg-hover cursor-pointer">
+                    <CardHeader>
+                      <div className="flex items-start justify-between">
+                        <div className="min-w-0 flex-1">
+                          <CardTitle className="text-base text-text-primary truncate" title={workload.name}>{workload.name}</CardTitle>
+                          <CardDescription className="truncate">{t("workloads.card.namespace", { ns: workload.namespace })}</CardDescription>
+                        </div>
+                        <StatusBadge
+                          status={workload.status === "Healthy" ? "healthy" : "warning"}
+                          label={workload.status}
+                          size="sm"
+                        />
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-text-muted">{t("workloads.field.version")}</span>
+                        <Badge variant="neutral-light" size="sm" className={badgePresets.metric}>
+                          {workload.version || "N/A"}
+                        </Badge>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </Link>
               ))}
             </div>
           )}

@@ -120,10 +120,11 @@ export default function PodDetailPage() {
       ) : (
         <>
           <Tabs defaultValue="overview" className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="overview">{t("tabs.overview")}</TabsTrigger>
               <TabsTrigger value="logs">{t("tabs.logs")}</TabsTrigger>
               <TabsTrigger value="terminal">{t("tabs.terminal")}</TabsTrigger>
+              <TabsTrigger value="port">{t("tabs.portForward")}</TabsTrigger>
             </TabsList>
 
             <TabsContent value="overview" className="space-y-6">
@@ -291,9 +292,74 @@ export default function PodDetailPage() {
                 </CardContent>
               </Card>
             </TabsContent>
+
+            <TabsContent value="port" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">{t("port.title")}</CardTitle>
+                  <CardDescription>{t("port.desc")}</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <PortForwardCommand ns={ns} name={name} kind="pod" />
+                </CardContent>
+              </Card>
+            </TabsContent>
           </Tabs>
         </>
       )}
+    </div>
+  );
+}
+
+function PortForwardCommand({ ns, name, kind }: { ns: string; name: string; kind: 'pod' | 'svc' }) {
+  const { t } = useI18n();
+  const [localPort, setLocalPort] = useState<string>('8080');
+  const [targetPort, setTargetPort] = useState<string>('80');
+
+  const cmd = `kubectl -n ${ns} port-forward ${kind}/${name} ${localPort}:${targetPort}`;
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(cmd);
+      alert(t('port.copied'));
+    } catch {
+      // fallback
+      alert(cmd);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="space-y-1">
+          <label className="block text-sm text-text-muted">{t("port.local")}</label>
+          <input
+            type="number"
+            min={1}
+            max={65535}
+            value={localPort}
+            onChange={(e) => setLocalPort(e.target.value)}
+            className="w-full rounded-md border border-border bg-surface px-2 py-1 text-sm"
+          />
+        </div>
+        <div className="space-y-1">
+          <label className="block text-sm text-text-muted">{t("port.target")}</label>
+          <input
+            type="number"
+            min={1}
+            max={65535}
+            value={targetPort}
+            onChange={(e) => setTargetPort(e.target.value)}
+            className="w-full rounded-md border border-border bg-surface px-2 py-1 text-sm"
+          />
+        </div>
+      </div>
+      <div className={`${badgePresets.label} text-text-muted`}>{t('port.command')}</div>
+      <div className="flex items-center gap-2">
+        <code className="flex-1 rounded border border-border bg-surface-raised px-2 py-1 text-xs overflow-x-auto">{cmd}</code>
+        <Button variant="outline" size="sm" onClick={copy}>{t('port.copy')}</Button>
+      </div>
+      <div className="text-xs text-text-muted">{t('port.help')}</div>
     </div>
   );
 }

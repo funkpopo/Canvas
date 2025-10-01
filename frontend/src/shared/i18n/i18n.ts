@@ -73,14 +73,10 @@ const dictEn = {
   "dashboard.badge.cluster": "{name}",
 
   // Tabs
-  "tabs.overview": "概览",
-  "tabs.logs": "日志",
-  "tabs.terminal": "终端",
-
-  // Tabs
   "tabs.overview": "Overview",
   "tabs.logs": "Logs",
   "tabs.terminal": "Terminal",
+  "tabs.portForward": "Port forward",
 
   // Overview grid
   "overview.clusterVersion": "Cluster version",
@@ -293,6 +289,7 @@ const dictEn = {
   "workloads.tab.deployments": "Deployments",
   "workloads.tab.statefulsets": "StatefulSets",
   "workloads.tab.cronjobs": "CronJobs",
+  "workloads.tab.jobs": "Jobs",
   "workloads.loading.deployments": "Loading deployments...",
   "workloads.error.load": "Failed to load workloads. Please check your cluster connection.",
   "workloads.empty.deployments": "No deployments found",
@@ -306,6 +303,9 @@ const dictEn = {
   "workloads.empty.cronjobs": "No CronJobs found",
   "workloads.empty.cronjobs.hint": "CronJobs run tasks on a scheduled basis",
   "workloads.field.lastRun": "Last run",
+  "workloads.loading.jobs": "Loading Jobs...",
+  "workloads.empty.jobs": "No Jobs found",
+  "workloads.empty.jobs.hint": "Jobs run to completion",
 
   // Clusters page
   "clusters.eyebrow": "Clusters",
@@ -498,9 +498,23 @@ const dictEn = {
   "alert.deploy.autoscalingUpdated": "Autoscaling updated",
   "error.deploy.autoscalingUpdate": "Failed to update autoscaling",
   "deploy.chart.cpu": "CPU usage",
+  // Deployment pods (reused for other workloads)
+  "deploy.pods.title": "Pods",
+  "deploy.pods.desc": "Pods created by this workload",
+  "deploy.pods.none": "No pods found",
   "deploy.chart.mem": "Memory usage",
   "deploy.chart.cpuY": "CPU ({value})",
   "deploy.chart.memY": "Memory ({value})",
+
+  // CronJob / Job detail
+  "cron.header.eyebrow": "CronJob",
+  "cron.header.desc": "Namespace: {ns}",
+  "cron.manage.runNow": "Run now",
+  "cron.manage.deleteConfirm": "Delete this CronJob?",
+  "job.header.eyebrow": "Job",
+  "job.header.desc": "Namespace: {ns}",
+  "job.manage.deleteConfirm": "Delete this Job?",
+  "job.pods.desc": "Pods spawned by this job",
   
   // Storage
   "storage.eyebrow": "Storage management",
@@ -664,6 +678,22 @@ const dictEn = {
   "topbar.noClusterConfigured": "No cluster configured",
   "topbar.change": "Change",
   "topbar.online": "Online",
+
+  // Port forward (generic/Pod)
+  "actions.portForward": "Port forward",
+  "port.title": "Port forward to Pod",
+  "port.desc": "Generate a kubectl command to forward a local port to this pod.",
+  "port.local": "Local port",
+  "port.target": "Target port",
+  "port.command": "Command",
+  "port.copy": "Copy command",
+  "port.copied": "Command copied",
+  "port.help": "Run this in a terminal with kubectl configured.",
+
+  // Port forward (Service)
+  "port.svc.title": "Port forward to Service",
+  "port.svc.desc": "Forward a local port to a selected service port.",
+  "port.svc.port": "Service port",
 } as const;
 
 const dictZh = {
@@ -927,6 +957,7 @@ const dictZh = {
   "workloads.tab.deployments": "Deployments",
   "workloads.tab.statefulsets": "StatefulSets",
   "workloads.tab.cronjobs": "CronJobs",
+  "workloads.tab.jobs": "Jobs",
   "workloads.loading.deployments": "正在加载 Deployments...",
   "workloads.error.load": "加载工作负载失败，请检查集群连接。",
   "workloads.empty.deployments": "未找到 Deployments",
@@ -940,6 +971,9 @@ const dictZh = {
   "workloads.empty.cronjobs": "未找到 CronJobs",
   "workloads.empty.cronjobs.hint": "CronJobs 用于按计划运行任务",
   "workloads.field.lastRun": "上次运行",
+  "workloads.loading.jobs": "正在加载 Jobs...",
+  "workloads.empty.jobs": "未找到 Jobs",
+  "workloads.empty.jobs.hint": "Jobs 用于一次性运行任务",
 
   // Clusters page
   "clusters.eyebrow": "集群",
@@ -1133,6 +1167,20 @@ const dictZh = {
   "deploy.chart.mem": "内存使用率",
   "deploy.chart.cpuY": "CPU（{value}）",
   "deploy.chart.memY": "内存（{value}）",
+  // Pods (shared)
+  "deploy.pods.title": "容器组",
+  "deploy.pods.desc": "该工作负载创建的容器组",
+  "deploy.pods.none": "暂无容器组",
+
+  // CronJob / Job detail
+  "cron.header.eyebrow": "CronJob",
+  "cron.header.desc": "命名空间：{ns}",
+  "cron.manage.runNow": "立即运行",
+  "cron.manage.deleteConfirm": "删除该 CronJob？",
+  "job.header.eyebrow": "Job",
+  "job.header.desc": "命名空间：{ns}",
+  "job.manage.deleteConfirm": "删除该 Job？",
+  "job.pods.desc": "该 Job 产生的容器组",
 
   // Storage
   "storage.eyebrow": "存储管理",
@@ -1319,6 +1367,23 @@ const dictZh = {
   "topbar.noClusterConfigured": "未配置集群",
   "topbar.change": "切换",
   "topbar.online": "在线",
+
+  // 端口转发（通用/Pod）
+  "tabs.portForward": "端口转发",
+  "actions.portForward": "端口转发",
+  "port.title": "转发到 Pod",
+  "port.desc": "生成 kubectl 命令，将本地端口转发到该 Pod。",
+  "port.local": "本地端口",
+  "port.target": "目标端口",
+  "port.command": "命令",
+  "port.copy": "复制命令",
+  "port.copied": "已复制命令",
+  "port.help": "在已配置 kubectl 的终端中运行。",
+
+  // 端口转发（Service）
+  "port.svc.title": "转发到 Service",
+  "port.svc.desc": "选择一个 Service 端口并转发到本地端口。",
+  "port.svc.port": "Service 端口",
 } as const;
 
 export type I18nKey = keyof typeof dictEn;

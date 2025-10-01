@@ -20,6 +20,7 @@ import {
   type YamlContentResponse,
 } from "@/lib/api";
 import { Modal } from "@/shared/ui/modal";
+import { Button } from "@/shared/ui/button";
 
 export default function ServicesPage() {
   const { t } = useI18n();
@@ -30,6 +31,7 @@ export default function ServicesPage() {
   const [editing, setEditing] = useState<{ ns: string; name: string } | null>(null);
   const [yaml, setYaml] = useState<string>("");
   const [creating, setCreating] = useState<boolean>(false);
+  const [pf, setPf] = useState<{ open: boolean; name: string; ports: { label: string; value: string }[]; selected: string; local: string } | null>(null);
 
   useEffect(() => {
     if (!namespaces || namespaces.length === 0) return;
@@ -166,6 +168,21 @@ spec:
                       <td className="px-3 py-2">
                         <div className="flex items-center gap-2">
                           <button className="rounded border border-border px-2 py-1 text-xs" onClick={() => openEdit(s.name)}>{t("svc.edit")}</button>
+                          <button
+                            className="rounded border border-border px-2 py-1 text-xs"
+                            onClick={() => {
+                              const options = (s.ports || []).map((p) => {
+                                const svcPort = p.port ?? 0;
+                                const label = `${p.name ? p.name + ': ' : ''}${svcPort}${p.protocol ? '/' + p.protocol : ''}${p.target_port ? ' -> ' + p.target_port : ''}`;
+                                return { label, value: String(svcPort) };
+                              });
+                              const first = options[0]?.value ?? '80';
+                              const defLocal = first || '8080';
+                              setPf({ open: true, name: s.name, ports: options, selected: first, local: defLocal });
+                            }}
+                          >
+                            {t("actions.portForward")}
+                          </button>
                           <button className="rounded border border-destructive text-destructive px-2 py-1 text-xs" onClick={() => onDelete(s.name)}>{t("svc.delete")}</button>
                         </div>
                       </td>
@@ -197,7 +214,69 @@ spec:
           </div>
         </Modal>
       )}
+
+      {pf?.open && (
+        <Modal open onClose={() => setPf(null)} title={`${t("port.svc.title")} ${ns}/${pf.name}`} className="max-w-2xl">
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="block text-sm text-text-muted">{t("port.svc.port")}</label>
+                <select
+                  value={pf.selected}
+                  onChange={(e) => setPf({ ...pf, selected: e.target.value })}
+                  className="w-full rounded-md border border-border bg-surface px-2 py-1 text-sm"
+                >
+                  {pf.ports.length === 0 ? (
+                    <option value="80">80</option>
+                  ) : (
+                    pf.ports.map((opt, idx) => (
+                      <option key={idx} value={opt.value}>{opt.label}</option>
+                    ))
+                  )}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="block text-sm text-text-muted">{t("port.local")}</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={65535}
+                  value={pf.local}
+                  onChange={(e) => setPf({ ...pf, local: e.target.value })}
+                  className="w-full rounded-md border border-border bg-surface px-2 py-1 text-sm"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className={`${badgePresets.label} text-text-muted`}>{t("port.command")}</div>
+              <PortForwardPreview ns={ns} name={pf.name} local={pf.local} remote={pf.selected} kind="svc" />
+              <div className="text-xs text-text-muted">{t("port.help")}</div>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
 
+function PortForwardPreview({ ns, name, local, remote, kind }: { ns: string; name: string; local: string; remote: string; kind: 'pod' | 'svc' }) {
+  const { t } = useI18n();
+  const cmd = `kubectl -n ${ns} port-forward ${kind}/${name} ${local}:${remote}`;
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(cmd);
+      alert(t('port.copied'));
+    } catch {
+      alert(cmd);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <code className="flex-1 rounded border border-border bg-surface-raised px-2 py-1 text-xs overflow-x-auto">{cmd}</code>
+      <Button variant="outline" size="sm" onClick={copy}>{t('port.copy')}</Button>
+    </div>
+  );
+}
