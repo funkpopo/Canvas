@@ -2173,6 +2173,95 @@ class KubernetesService:
 
         return _gen()
 
+    async def create_ephemeral_container(
+        self,
+        namespace: str,
+        name: str,
+        image: str,
+        command: list[str] | None = None,
+        target_container: str | None = None,
+        container_name: str | None = None,
+        tty: bool = True,
+        stdin: bool = True,
+    ) -> tuple[bool, str | None]:
+        """Create an ephemeral debug container in the given Pod.
+
+        Uses the EphemeralContainers subresource via patch_namespaced_pod_ephemeralcontainers.
+        Returns (ok, message_or_container_name).
+        """
+        await self._rate_limiter.acquire()
+        try:
+            core_v1, _ = await self._ensure_clients()
+
+            def _do() -> str:
+                pod = core_v1.read_namespaced_pod(name=name, namespace=namespace)
+                # Gather existing ephemeral containers if any
+                spec = getattr(pod, "spec", None)
+                existing = []
+                try:
+                    for ec in getattr(spec, "ephemeral_containers", None) or []:  # type: ignore[attr-defined]
+                        existing.append(
+                            {
+                                "name": getattr(ec, "name", None),
+                                "image": getattr(ec, "image", None),
+                                "command": getattr(ec, "command", None),
+                                "args": getattr(ec, "args", None),
+                                "stdin": getattr(ec, "stdin", None),
+                                "tty": getattr(ec, "tty", None),
+                                "targetContainerName": getattr(ec, "target_container_name", None)
+                                or getattr(ec, "targetContainerName", None),
+                            }
+                        )
+                except Exception:
+                    existing = []
+
+                # Generate a name if not provided
+                import random, string
+
+                def _gen_name() -> str:
+                    suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=5))
+                    return f"debug-{suffix}"
+
+                new_name = container_name or _gen_name()
+                new_ec: dict[str, object] = {
+                    "name": new_name,
+                    "image": image,
+                    "stdin": bool(stdin),
+                    "tty": bool(tty),
+                }
+                if command:
+                    new_ec["command"] = command
+                if target_container:
+                    new_ec["targetContainerName"] = target_container
+
+                body = {
+                    "apiVersion": "v1",
+                    "kind": "EphemeralContainers",
+                    "metadata": {"name": name},
+                    "ephemeralContainers": existing + [new_ec],
+                }
+                core_v1.patch_namespaced_pod_ephemeralcontainers(
+                    name=name,
+                    namespace=namespace,
+                    body=body,  # type: ignore[arg-type]
+                )
+                return new_name
+
+            created_name = await asyncio.to_thread(_do)
+            return True, created_name
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.create_ephemeral_container_error", error=str(exc))
+            return False, str(exc)
+
+    async def delete_ephemeral_container(
+        self, namespace: str, name: str, container: str
+    ) -> tuple[bool, str | None]:
+        """Ephemeral containers cannot be removed once added to a running pod.
+
+        This method returns (False, message) to indicate the limitation.
+        """
+        return False, "Ephemeral containers cannot be deleted from an existing Pod"
+
     async def collect_container_metrics_once(self) -> list[tuple[datetime, str, str, str, int, int]]:
         """Collect a single snapshot of container usage across all namespaces.
 

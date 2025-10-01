@@ -16,6 +16,7 @@ import {
   fetchMetricsStatus,
   fetchPodDetail,
   queryKeys,
+  createEphemeralContainer,
   type ContainerMetricSeriesResponse,
   type PodDetailResponse,
 } from "@/lib/api";
@@ -120,11 +121,12 @@ export default function PodDetailPage() {
       ) : (
         <>
           <Tabs defaultValue="overview" className="w-full">
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className="grid w-full grid-cols-5">
               <TabsTrigger value="overview">{t("tabs.overview")}</TabsTrigger>
               <TabsTrigger value="logs">{t("tabs.logs")}</TabsTrigger>
               <TabsTrigger value="terminal">{t("tabs.terminal")}</TabsTrigger>
               <TabsTrigger value="port">{t("tabs.portForward")}</TabsTrigger>
+              <TabsTrigger value="debug">{t("tabs.debug")}</TabsTrigger>
             </TabsList>
 
             <TabsContent value="overview" className="space-y-6">
@@ -304,6 +306,18 @@ export default function PodDetailPage() {
                 </CardContent>
               </Card>
             </TabsContent>
+            
+            <TabsContent value="debug" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">{t("pod.debug.title")}</CardTitle>
+                  <CardDescription>{t("pod.debug.desc")}</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <DebugEphemeralForm ns={ns} name={name} defaultTarget={selectedContainer || containersForPod[0]} />
+                </CardContent>
+              </Card>
+            </TabsContent>
           </Tabs>
         </>
       )}
@@ -360,6 +374,80 @@ function PortForwardCommand({ ns, name, kind }: { ns: string; name: string; kind
         <Button variant="outline" size="sm" onClick={copy}>{t('port.copy')}</Button>
       </div>
       <div className="text-xs text-text-muted">{t('port.help')}</div>
+    </div>
+  );
+}
+
+function DebugEphemeralForm({ ns, name, defaultTarget }: { ns: string; name: string; defaultTarget?: string }) {
+  const { t } = useI18n();
+  const [image, setImage] = useState<string>("busybox:1.36");
+  const [command, setCommand] = useState<string>("/bin/sh");
+  const [target, setTarget] = useState<string>(defaultTarget ?? "");
+  const [submitting, setSubmitting] = useState<boolean>(false);
+  const [result, setResult] = useState<string>("");
+
+  useEffect(() => {
+    if (defaultTarget) setTarget(defaultTarget);
+  }, [defaultTarget]);
+
+  async function run() {
+    setSubmitting(true);
+    setResult("");
+    try {
+      const resp = await createEphemeralContainer(ns, name, {
+        image,
+        command,
+        target_container: target || undefined,
+      });
+      if (resp.ok) {
+        setResult(t("pod.debug.created", { name: resp.container ?? "" }));
+      } else {
+        setResult(t("pod.debug.error") + (resp.message ? `: ${resp.message}` : ""));
+      }
+    } catch (e: any) {
+      setResult(t("pod.debug.error") + (e?.message ? `: ${e.message}` : ""));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="space-y-1">
+          <label className="block text-sm text-text-muted">{t("pod.debug.image")}</label>
+          <input
+            value={image}
+            onChange={(e) => setImage(e.target.value)}
+            className="w-full rounded-md border border-border bg-surface px-2 py-1 text-sm"
+            placeholder="busybox:latest"
+          />
+        </div>
+        <div className="space-y-1">
+          <label className="block text-sm text-text-muted">{t("pod.debug.command")}</label>
+          <input
+            value={command}
+            onChange={(e) => setCommand(e.target.value)}
+            className="w-full rounded-md border border-border bg-surface px-2 py-1 text-sm"
+            placeholder="/bin/sh -c 'echo hello'"
+          />
+        </div>
+        <div className="space-y-1">
+          <label className="block text-sm text-text-muted">{t("pod.debug.target")}</label>
+          <input
+            value={target}
+            onChange={(e) => setTarget(e.target.value)}
+            className="w-full rounded-md border border-border bg-surface px-2 py-1 text-sm"
+            placeholder="(optional)"
+          />
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <Button onClick={run} disabled={submitting}>
+          {submitting ? t("pod.debug.running") : t("pod.debug.run")}
+        </Button>
+        {result && <span className="text-sm text-text-muted">{result}</span>}
+      </div>
     </div>
   );
 }

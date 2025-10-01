@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
 from fastapi.responses import StreamingResponse
 
 from app.dependencies import get_kubernetes_service
@@ -58,3 +59,53 @@ async def stream_pod_logs(
         since_seconds=sinceSeconds,
     )
     return StreamingResponse(iterator, media_type="text/plain")
+
+
+class EphemeralContainerRequest(BaseModel):
+    image: str
+    command: str | None = None
+    target_container: str | None = None
+    container_name: str | None = None
+    tty: bool = True
+    stdin: bool = True
+
+
+@router.post(
+    "/{namespace}/{name}/debug",
+    summary="Create an ephemeral debug container in a Pod",
+)
+async def create_ephemeral_container(
+    namespace: str,
+    name: str,
+    payload: EphemeralContainerRequest,
+    service: KubernetesService = Depends(get_kubernetes_service),
+):
+    cmd_list = None
+    if payload.command:
+        # naive split by whitespace; client may send full path + args
+        cmd_list = [p for p in payload.command.split(" ") if p]
+    ok, msg_or_container = await service.create_ephemeral_container(
+        namespace=namespace,
+        name=name,
+        image=payload.image,
+        command=cmd_list,
+        target_container=payload.target_container,
+        container_name=payload.container_name,
+        tty=payload.tty,
+        stdin=payload.stdin,
+    )
+    return {"ok": ok, "container": (msg_or_container if ok else None), "message": (None if ok else msg_or_container)}
+
+
+@router.delete(
+    "/{namespace}/{name}/debug/{container}",
+    summary="Attempt to remove an ephemeral debug container (not supported by Kubernetes)",
+)
+async def delete_ephemeral_container(
+    namespace: str,
+    name: str,
+    container: str,
+    service: KubernetesService = Depends(get_kubernetes_service),
+):
+    ok, msg = await service.delete_ephemeral_container(namespace=namespace, name=name, container=container)
+    return {"ok": ok, "message": msg}

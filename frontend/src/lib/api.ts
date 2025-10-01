@@ -648,6 +648,42 @@ export function deletePod(
   return request<OperationResultResponse>(`/pods/${en}/${nm}${suffix}`, { method: "DELETE" });
 }
 
+// Ephemeral debug containers
+export interface CreateEphemeralContainerPayload {
+  image: string;
+  command?: string | null;
+  target_container?: string | null;
+  container_name?: string | null;
+  tty?: boolean | null;
+  stdin?: boolean | null;
+}
+
+export interface CreateEphemeralContainerResponse {
+  ok: boolean;
+  container?: string | null;
+  message?: string | null;
+}
+
+export function createEphemeralContainer(
+  ns: string,
+  name: string,
+  payload: CreateEphemeralContainerPayload
+): Promise<CreateEphemeralContainerResponse> {
+  const en = encodeURIComponent(ns);
+  const nm = encodeURIComponent(name);
+  return request<CreateEphemeralContainerResponse>(`/pods/${en}/${nm}/debug`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteEphemeralContainer(ns: string, name: string, container: string): Promise<OperationResultResponse> {
+  const en = encodeURIComponent(ns);
+  const nm = encodeURIComponent(name);
+  const ec = encodeURIComponent(container);
+  return request<OperationResultResponse>(`/pods/${en}/${nm}/debug/${ec}`, { method: "DELETE" });
+}
+
 // Services
 export interface ServicePortResponse {
   name?: string | null;

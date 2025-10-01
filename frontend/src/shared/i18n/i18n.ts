@@ -77,6 +77,7 @@ const dictEn = {
   "tabs.logs": "Logs",
   "tabs.terminal": "Terminal",
   "tabs.portForward": "Port forward",
+  "tabs.debug": "Debug",
 
   // Overview grid
   "overview.clusterVersion": "Cluster version",
@@ -143,6 +144,17 @@ const dictEn = {
   "pod.term.desc": "Interactive shell into the container.",
   "pod.term.connected": "Connected",
   "pod.term.disconnected": "Disconnected",
+  
+  // Pod debug (ephemeral container)
+  "pod.debug.title": "Debug container",
+  "pod.debug.desc": "Inject an ephemeral container for troubleshooting.",
+  "pod.debug.image": "Image",
+  "pod.debug.command": "Command",
+  "pod.debug.target": "Target container (optional)",
+  "pod.debug.run": "Run debug container",
+  "pod.debug.running": "Creating...",
+  "pod.debug.created": "Debug container created: {name}",
+  "pod.debug.error": "Failed to create debug container",
 
   // Services
   "svc.eyebrow": "Service management",
@@ -843,6 +855,17 @@ const dictZh = {
   "pod.term.desc": "进入容器的交互式 Shell。",
   "pod.term.connected": "已连接",
   "pod.term.disconnected": "已断开",
+  
+  // 调试容器（临时容器）
+  "pod.debug.title": "调试容器",
+  "pod.debug.desc": "向该 Pod 注入临时容器用于排障。",
+  "pod.debug.image": "镜像",
+  "pod.debug.command": "启动命令",
+  "pod.debug.target": "目标容器（可选）",
+  "pod.debug.run": "创建调试容器",
+  "pod.debug.running": "创建中...",
+  "pod.debug.created": "已创建调试容器：{name}",
+  "pod.debug.error": "创建调试容器失败",
 
   // Services
   "svc.eyebrow": "Service 管理",
@@ -1390,6 +1413,7 @@ const dictZh = {
   "tabs.overview": "概览",
   "tabs.logs": "日志",
   "tabs.terminal": "终端",
+  "tabs.debug": "调试",
 
   // 端口转发（通用/Pod）
   "tabs.portForward": "端口转发",
