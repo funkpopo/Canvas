@@ -31,7 +31,8 @@
     "zod": "^4.1.11",
     "yaml": "^2.5.1",
     "@xterm/xterm": "^5.5.0",
-    "@xterm/addon-fit": "^0.10.0"
+    "@xterm/addon-fit": "^0.10.0",
+    "@tanstack/react-virtual": "^3.10.8"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",

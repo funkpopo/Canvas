@@ -2173,6 +2173,75 @@ class KubernetesService:
 
         return _gen()
 
+    async def check_access(
+        self,
+        *,
+        verb: str,
+        resource: str,
+        namespace: str | None = None,
+        group: str | None = None,
+        subresource: str | None = None,
+    ) -> bool:
+        """SelfSubjectAccessReview for the current identity.
+
+        Caches results in a TTL cache to avoid spamming the API server.
+        """
+        cache_key = ("authz", verb, resource, namespace or "", group or "", subresource or "")
+        async with self._cache_lock:
+            if cache_key in self._cache:
+                val = self._cache.get(cache_key)
+                if isinstance(val, bool):
+                    return val
+
+        await self._rate_limiter.acquire()
+        try:
+            await self._ensure_clients()
+
+            def _do() -> bool:
+                auth = client.AuthorizationV1Api(self._api_client)
+                attrs = client.V1ResourceAttributes(
+                    namespace=namespace,
+                    verb=verb,
+                    group=group or "",
+                    resource=resource,
+                    subresource=subresource,
+                )
+                sar = client.V1SelfSubjectAccessReview(
+                    spec=client.V1SelfSubjectAccessReviewSpec(resource_attributes=attrs)
+                )
+                resp = auth.create_self_subject_access_review(body=sar)
+                status = getattr(resp, "status", None)
+                return bool(getattr(status, "allowed", False))
+
+            allowed = await asyncio.to_thread(_do)
+            async with self._cache_lock:
+                self._cache[cache_key] = allowed
+            return allowed
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.sar_error", error=str(exc))
+            return False
+
+    async def get_pod_yaml(self, namespace: str, name: str) -> str | None:
+        """Return the YAML manifest for a Pod."""
+        await self._rate_limiter.acquire()
+        try:
+            core_v1, _ = await self._ensure_clients()
+
+            def _do() -> str:
+                pod = core_v1.read_namespaced_pod(name=name, namespace=namespace)
+                api_client = self._api_client or ApiClient()
+                data = api_client.sanitize_for_serialization(pod)
+                # Trim managedFields to shorten output
+                md = data.get("metadata", {}) if isinstance(data, dict) else {}
+                if isinstance(md, dict) and "managedFields" in md:
+                    md.pop("managedFields", None)
+                return yaml.safe_dump(data, sort_keys=False)
+
+            return await asyncio.to_thread(_do)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.get_pod_yaml_error", error=str(exc))
+            return None
+
     async def create_ephemeral_container(
         self,
         namespace: str,

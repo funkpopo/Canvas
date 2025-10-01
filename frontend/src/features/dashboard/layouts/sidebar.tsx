@@ -51,6 +51,7 @@ export function Sidebar() {
   const navItems = useMemo(
     () => [
       { name: t("sidebar.clusters"), href: "/clusters", icon: Globe },
+      { name: t("sidebar.audit"), href: "/audit", icon: Rss },
       // Dashboard removed from sidebar; selecting a cluster navigates to "/"
       // Cluster-scoped sections (Nodes/Namespaces/Workloads/Events) are shown under each Cluster
       { name: t("sidebar.settings"), href: "/settings", icon: Settings },

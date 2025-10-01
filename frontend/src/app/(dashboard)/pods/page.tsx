@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
+import { Terminal, ScrollText, ArrowLeftRight, FileCode, Star } from "lucide-react";
 
 import { PageHeader } from "@/features/dashboard/layouts/page-header";
 import { Card, CardContent } from "@/shared/ui/card";
@@ -10,6 +12,10 @@ import { Button } from "@/shared/ui/button";
 import { Modal } from "@/shared/ui/modal";
 import { Badge, badgePresets } from "@/shared/ui/badge";
 import { useI18n } from "@/shared/i18n/i18n";
+import { EmptyState } from "@/shared/ui/empty-state";
+import { ErrorState } from "@/shared/ui/error-state";
+import { VirtualTable } from "@/shared/ui/virtual-table";
+import { useK8sAbilities } from "@/features/auth/hooks/useAbilities";
 import { deletePod, fetchNamespaces, fetchPodsSummary, queryKeys, type NamespaceSummaryResponse, type PodSummaryResponse } from "@/lib/api";
 
 function useNamespaces() {
@@ -20,6 +26,7 @@ function useNamespaces() {
 export default function PodsPage() {
   const { t } = useI18n();
   const qc = useQueryClient();
+  const router = useRouter();
   const namespaces = useNamespaces();
 
   const [ns, setNs] = useState<string>("all");
@@ -27,6 +34,8 @@ export default function PodsPage() {
   const [phase, setPhase] = useState<string>("");
   const [restartPolicy, setRestartPolicy] = useState<string>("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bookmarks, setBookmarks] = useState<Set<string>>(new Set());
+  const [recent, setRecent] = useState<{ ns: string; name: string }[]>([]);
   const [isDeleteOpen, setIsDeleteOpen] = useState<boolean>(false);
   const [forceDelete, setForceDelete] = useState<boolean>(false);
   const [graceInput, setGraceInput] = useState<string>("");
@@ -35,7 +44,7 @@ export default function PodsPage() {
     if (ns === "all" && namespaces.length > 0) return; // keep all by default
   }, [namespaces, ns]);
 
-  const { data, isLoading } = useQuery<PodSummaryResponse[]>({
+  const { data, isLoading, isError } = useQuery<PodSummaryResponse[]>({
     queryKey: queryKeys.podsSummary(ns, name, phase, restartPolicy),
     queryFn: () => fetchPodsSummary({ namespace: ns === "all" ? undefined : ns, name, phase, restart_policy: restartPolicy }),
   });
@@ -44,6 +53,9 @@ export default function PodsPage() {
   const allKeys = useMemo(() => pods.map((p) => `${p.namespace}/${p.name}`), [pods]);
   const allSelected = allKeys.length > 0 && allKeys.every((k) => selected.has(k));
   const hasSelection = selected.size > 0;
+
+  // Abilities (RBAC): for current namespace filter only
+  const { canDeletePods, canExecPods, canViewLogs } = useK8sAbilities(ns === "all" ? undefined : ns);
 
   function toggleAll() {
     setSelected((prev) => {
@@ -100,6 +112,29 @@ export default function PodsPage() {
   const phases = ["", "Running", "Pending", "Succeeded", "Failed", "Unknown"];
   const restartPolicies = ["", "Always", "OnFailure", "Never"];
 
+  // Load bookmarks and recent visits from localStorage
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("bookmarkedPods");
+      if (raw) setBookmarks(new Set<string>(JSON.parse(raw)));
+    } catch {}
+    try {
+      const raw = localStorage.getItem("recentPods");
+      if (raw) setRecent(JSON.parse(raw));
+    } catch {}
+  }, []);
+
+  function toggleBookmark(key: string) {
+    setBookmarks((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      try { localStorage.setItem("bookmarkedPods", JSON.stringify(Array.from(next))); } catch {}
+      return next;
+    });
+  }
+
+  // Virtualization renders the full filtered list (no client-side pagination)
+
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
@@ -149,20 +184,43 @@ export default function PodsPage() {
             </div>
           </div>
 
-          <div className="flex items-center justify-end">
+          <div className="flex items-center justify-between">
+            {/* Recent visits */}
+            <div className="hidden md:flex items-center gap-2">
+              {recent.slice(0, 6).map((r) => (
+                <Link key={`${r.ns}/${r.name}`} href={`/pods/${encodeURIComponent(r.ns)}/${encodeURIComponent(r.name)}?tab=overview`} className="text-xs text-text-muted hover:underline">
+                  {r.ns}/{r.name}
+                </Link>
+              ))}
+            </div>
             <Button
               type="button"
               variant="destructive"
               onClick={() => setIsDeleteOpen(true)}
-              disabled={!hasSelection}
+              disabled={!hasSelection || (ns !== "all" && !canDeletePods)}
             >
               {t("pods.deleteSelected")}
             </Button>
           </div>
 
-          <div className="overflow-auto rounded-md border border-border mt-2">
-            <table className="w-full text-sm">
-              <thead className="bg-muted">
+          {isLoading ? (
+            <div className="rounded-md border border-border mt-2">
+              <EmptyState title={t("common.loading")} />
+            </div>
+          ) : isError ? (
+            <div className="rounded-md border border-border mt-2">
+              <ErrorState message={t("pod.error")} />
+            </div>
+          ) : pods.length === 0 ? (
+            <div className="rounded-md border border-border mt-2">
+              <EmptyState title={t("pods.empty")} />
+            </div>
+          ) : (
+            <VirtualTable
+              height={520}
+              estimateSize={44}
+              count={pods.length}
+              renderHeader={() => (
                 <tr className="text-left text-text-muted">
                   <th className="px-3 py-2 w-10">
                     <input
@@ -180,57 +238,98 @@ export default function PodsPage() {
                   <th className="px-3 py-2">{t("pods.col.podIP")}</th>
                   <th className="px-3 py-2">{t("pods.col.phase")}</th>
                   <th className="px-3 py-2">{t("pods.col.created")}</th>
+                  <th className="px-3 py-2 w-36">{t("svc.col.actions")}</th>
                 </tr>
-              </thead>
-              <tbody>
-                {isLoading ? (
-                  <tr><td className="px-3 py-4 text-text-muted" colSpan={8}>{t("common.loading")}</td></tr>
-                ) : pods.length === 0 ? (
-                  <tr><td className="px-3 py-4 text-text-muted" colSpan={8}>{t("pods.empty")}</td></tr>
-                ) : (
-                  pods.map((p) => (
-                    <tr key={`${p.namespace}/${p.name}`} className="border-t border-border hover:bg-hover">
-                      <td className="px-3 py-2">
-                        <input
-                          type="checkbox"
-                          checked={selected.has(`${p.namespace}/${p.name}`)}
-                          onChange={() => toggleRow(`${p.namespace}/${p.name}`)}
-                          className="h-4 w-4 rounded border-border bg-surface"
-                          aria-label={`select ${p.name}`}
-                        />
-                      </td>
-                      <td className="px-3 py-2">
-                        <Link href={`/pods/${encodeURIComponent(p.namespace)}/${encodeURIComponent(p.name)}`} className="text-primary hover:underline">
-                          {p.name}
-                        </Link>
-                        <div className="text-xs text-text-muted">{p.namespace}</div>
-                      </td>
-                      <td className="px-3 py-2">
-                        {(p.containers || []).join(", ")}
-                      </td>
-                      <td className="px-3 py-2">
-                        <Badge variant="neutral-light" size="sm" className={badgePresets.metric}>
-                          {(p.ready_containers ?? 0)}/{p.total_containers ?? 0}
-                        </Badge>
-                      </td>
-                      <td className="px-3 py-2">
-                        <div>{p.node_ip || "-"}</div>
-                        <div className="text-xs text-text-muted">{p.node_name || ""}</div>
-                      </td>
-                      <td className="px-3 py-2 font-mono">{p.pod_ip || "-"}</td>
-                      <td className="px-3 py-2">
-                        <Badge variant={p.phase === "Running" ? "success" : p.phase === "Pending" ? "warning" : "neutral-light"} size="sm">
-                          {p.phase || t("common.unknown")}
-                        </Badge>
-                      </td>
-                      <td className="px-3 py-2">
-                        {p.created_at ? new Date(p.created_at).toLocaleString() : "-"}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+              )}
+              renderRow={(idx) => {
+                const p = pods[idx];
+                const key = `${p.namespace}/${p.name}`;
+                const disabledLogs = ns !== "all" && !canViewLogs;
+                const disabledExec = ns !== "all" && !canExecPods;
+                return (
+                  <tr key={key} className="border-t border-border hover:bg-hover">
+                    <td className="px-3 py-2">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(key)}
+                        onChange={() => toggleRow(key)}
+                        className="h-4 w-4 rounded border-border bg-surface"
+                        aria-label={`select ${p.name}`}
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <Link href={`/pods/${encodeURIComponent(p.namespace)}/${encodeURIComponent(p.name)}`} className="text-primary hover:underline">
+                        {p.name}
+                      </Link>
+                      <div className="text-xs text-text-muted">{p.namespace}</div>
+                    </td>
+                    <td className="px-3 py-2">{(p.containers || []).join(", ")}</td>
+                    <td className="px-3 py-2">
+                      <Badge variant="neutral-light" size="sm" className={badgePresets.metric}>
+                        {(p.ready_containers ?? 0)}/{p.total_containers ?? 0}
+                      </Badge>
+                    </td>
+                    <td className="px-3 py-2">
+                      <div>{p.node_ip || "-"}</div>
+                      <div className="text-xs text-text-muted">{p.node_name || ""}</div>
+                    </td>
+                    <td className="px-3 py-2 font-mono">{p.pod_ip || "-"}</td>
+                    <td className="px-3 py-2">
+                      <Badge variant={p.phase === "Running" ? "success" : p.phase === "Pending" ? "warning" : "neutral-light"} size="sm">
+                        {p.phase || t("common.unknown")}
+                      </Badge>
+                    </td>
+                    <td className="px-3 py-2">{p.created_at ? new Date(p.created_at).toLocaleString() : "-"}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <button
+                          title={t("pods.actions.logs") as string}
+                          onClick={() => !disabledLogs && router.push(`/pods/${encodeURIComponent(p.namespace)}/${encodeURIComponent(p.name)}?tab=logs`)}
+                          className={`$${"text-text-muted hover:text-primary"} ${disabledLogs ? "opacity-50 pointer-events-none" : ""}`}
+                          aria-disabled={disabledLogs}
+                        >
+                          <ScrollText className="h-4 w-4" />
+                        </button>
+                        <button
+                          title={t("pods.actions.terminal") as string}
+                          onClick={() => !disabledExec && router.push(`/pods/${encodeURIComponent(p.namespace)}/${encodeURIComponent(p.name)}?tab=terminal`)}
+                          className={`text-text-muted hover:text-primary ${disabledExec ? "opacity-50 pointer-events-none" : ""}`}
+                          aria-disabled={disabledExec}
+                        >
+                          <Terminal className="h-4 w-4" />
+                        </button>
+                        <button
+                          title={t("actions.portForward") as string}
+                          onClick={() => router.push(`/pods/${encodeURIComponent(p.namespace)}/${encodeURIComponent(p.name)}?tab=portForward`)}
+                          className="text-text-muted hover:text-primary"
+                        >
+                          <ArrowLeftRight className="h-4 w-4" />
+                        </button>
+                        <button
+                          title={t("pods.actions.yaml") as string}
+                          onClick={() => router.push(`/pods/${encodeURIComponent(p.namespace)}/${encodeURIComponent(p.name)}?tab=overview`)}
+                          className="text-text-muted hover:text-primary"
+                        >
+                          <FileCode className="h-4 w-4" />
+                        </button>
+                        <button
+                          title={t("pods.actions.bookmark") as string}
+                          onClick={() => toggleBookmark(key)}
+                          className={bookmarks.has(key) ? "text-accent" : "text-text-muted hover:text-primary"}
+                        >
+                          <Star className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              }}
+            />
+          )}
+
+          {/* List meta */}
+          <div className="mt-3 flex items-center justify-between text-sm">
+            <div className="text-text-muted">{pods.length} {t("pods.meta.total.help")}</div>
           </div>
         </CardContent>
       </Card>

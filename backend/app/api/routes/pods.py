@@ -3,8 +3,14 @@ from pydantic import BaseModel
 from fastapi.responses import StreamingResponse
 
 from app.dependencies import get_kubernetes_service
-from app.schemas.kubernetes import PodDetail, PodSummary
+from app.schemas.kubernetes import PodDetail, PodSummary, YamlContent
 from app.services.kube_client import KubernetesService
+from app.services.audit import AuditService
+from app.db import get_session_factory
+
+
+def get_audit_service() -> AuditService:
+    return AuditService(get_session_factory())
 
 
 router = APIRouter(prefix="/pods", tags=["pods"])
@@ -32,8 +38,17 @@ async def delete_pod(
     name: str,
     grace_period_seconds: int | None = Query(default=None, ge=0),
     service: KubernetesService = Depends(get_kubernetes_service),
+    audit: AuditService = Depends(get_audit_service),
 ) -> dict:
     ok, msg = await service.delete_pod(namespace=namespace, name=name, grace_period_seconds=grace_period_seconds)
+    await audit.log(
+        action="delete",
+        resource="pods",
+        namespace=namespace,
+        name=name,
+        success=bool(ok),
+        details={"grace_period_seconds": grace_period_seconds} if grace_period_seconds is not None else None,
+    )
     return {"ok": ok, "message": msg}
 
 
@@ -79,6 +94,7 @@ async def create_ephemeral_container(
     name: str,
     payload: EphemeralContainerRequest,
     service: KubernetesService = Depends(get_kubernetes_service),
+    audit: AuditService = Depends(get_audit_service),
 ):
     cmd_list = None
     if payload.command:
@@ -93,6 +109,14 @@ async def create_ephemeral_container(
         container_name=payload.container_name,
         tty=payload.tty,
         stdin=payload.stdin,
+    )
+    await audit.log(
+        action="debug",
+        resource="pods",
+        namespace=namespace,
+        name=name,
+        success=bool(ok),
+        details={"container": (msg_or_container if ok else None), "image": payload.image, "target": payload.target_container},
     )
     return {"ok": ok, "container": (msg_or_container if ok else None), "message": (None if ok else msg_or_container)}
 
@@ -109,3 +133,17 @@ async def delete_ephemeral_container(
 ):
     ok, msg = await service.delete_ephemeral_container(namespace=namespace, name=name, container=container)
     return {"ok": ok, "message": msg}
+
+
+@router.get(
+    "/{namespace}/{name}/yaml",
+    response_model=YamlContent,
+    summary="Get the YAML manifest for a Pod",
+)
+async def get_pod_yaml(
+    namespace: str,
+    name: str,
+    service: KubernetesService = Depends(get_kubernetes_service),
+) -> YamlContent:
+    content = await service.get_pod_yaml(namespace=namespace, name=name)
+    return YamlContent(yaml=content or "")

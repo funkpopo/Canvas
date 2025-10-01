@@ -116,6 +116,10 @@ const dictEn = {
   "pods.deleteDialog.confirm": "Confirm delete",
   "pods.deleteDialog.cancel": "Cancel",
   "pods.deleteDialog.deleting": "Deleting...",
+  "pods.actions.logs": "Logs",
+  "pods.actions.terminal": "Terminal",
+  "pods.actions.yaml": "View YAML",
+  "pods.actions.bookmark": "Bookmark",
 
   // Pod detail
   "pod.header.eyebrow": "Pod",
@@ -729,6 +733,20 @@ const dictEn = {
   "port.svc.title": "Port forward to Service",
   "port.svc.desc": "Forward a local port to a selected service port.",
   "port.svc.port": "Service port",
+
+  // Audit
+  "sidebar.audit": "Audit",
+  "audit.eyebrow": "Security",
+  "audit.title": "Audit logs",
+  "audit.desc": "Immutable record of critical changes",
+  "audit.empty": "No audit events recorded.",
+  "audit.col.time": "Time",
+  "audit.col.action": "Action",
+  "audit.col.resource": "Resource",
+  "audit.col.ns": "Namespace",
+  "audit.col.name": "Name",
+  "audit.col.user": "User",
+  "audit.col.success": "Status",
 } as const;
 
 const dictZh = {
@@ -841,6 +859,10 @@ const dictZh = {
   "pods.deleteDialog.confirm": "确认删除",
   "pods.deleteDialog.cancel": "取消",
   "pods.deleteDialog.deleting": "删除中...",
+  "pods.actions.logs": "日志",
+  "pods.actions.terminal": "终端",
+  "pods.actions.yaml": "查看 YAML",
+  "pods.actions.bookmark": "书签",
 
   // Pod detail
   "pod.header.eyebrow": "容器组",
@@ -1459,6 +1481,20 @@ const dictZh = {
   "port.svc.title": "转发到 Service",
   "port.svc.desc": "选择一个 Service 端口并转发到本地端口。",
   "port.svc.port": "Service 端口",
+  
+  // 审计
+  "sidebar.audit": "审计",
+  "audit.eyebrow": "安全",
+  "audit.title": "审计日志",
+  "audit.desc": "关键变更的不可变记录",
+  "audit.empty": "暂无审计事件",
+  "audit.col.time": "时间",
+  "audit.col.action": "操作",
+  "audit.col.resource": "资源",
+  "audit.col.ns": "命名空间",
+  "audit.col.name": "名称",
+  "audit.col.user": "用户",
+  "audit.col.success": "状态",
 } as const;
 
 export type I18nKey = keyof typeof dictEn;

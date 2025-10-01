@@ -17,6 +17,7 @@ from app.api.routes import (
     secrets,
 )
 from app.api.routes import statefulsets, daemonsets, jobs, cronjobs
+from app.api.routes import audit, authz
 
 api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(cluster.router)
@@ -37,3 +38,5 @@ api_router.include_router(statefulsets.router)
 api_router.include_router(daemonsets.router)
 api_router.include_router(jobs.router)
 api_router.include_router(cronjobs.router)
+api_router.include_router(audit.router)
+api_router.include_router(authz.router)

@@ -53,6 +53,7 @@ export const queryKeys = {
   daemonsetYaml: (ns: string, name: string) => ["daemonsets", ns, name, "yaml"] as const,
   jobYaml: (ns: string, name: string) => ["jobs", ns, name, "yaml"] as const,
   cronjobYaml: (ns: string, name: string) => ["cronjobs", ns, name, "yaml"] as const,
+  auditLogs: ["audit", "logs"] as const,
 } as const;
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -254,6 +255,30 @@ export interface ClusterCapacityResponse {
   memory_total_bytes: number | null;
   memory_used_bytes: number | null;
   memory_percent: number | null;
+}
+
+// --- AuthZ / RBAC ---
+export type AuthzCheck = { verb: string; resource: string; namespace?: string | null; group?: string | null; subresource?: string | null };
+export function checkAuthzMatrix(checks: AuthzCheck[]): Promise<boolean[]> {
+  return request<boolean[]>(`/authz/check`, { method: "POST", body: JSON.stringify({ checks }) });
+}
+
+// --- Audit Logs ---
+export interface AuditLogEntryResponse {
+  id: number;
+  ts: string;
+  action: string;
+  resource: string;
+  namespace: string | null;
+  name: string | null;
+  username: string | null;
+  success: boolean;
+  details: Record<string, unknown> | null;
+}
+
+export function fetchAuditLogs(limit = 200): Promise<AuditLogEntryResponse[]> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  return request<AuditLogEntryResponse[]>(`/audit/logs?${params.toString()}`);
 }
 
 export function fetchMetricsStatus(): Promise<MetricsServerStatusResponse> {

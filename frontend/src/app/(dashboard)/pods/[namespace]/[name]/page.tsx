@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 
 import { PageHeader } from "@/features/dashboard/layouts/page-header";
@@ -32,6 +32,8 @@ export default function PodDetailPage() {
   const router = useRouter();
   const ns = decodeURIComponent(params.namespace);
   const name = decodeURIComponent(params.name);
+  const search = useSearchParams();
+  const initialTab = (search.get("tab") || "overview").toString();
 
   const { data: pod, isLoading, isError } = useQuery<PodDetailResponse>({
     queryKey: queryKeys.podDetail(ns, name),
@@ -91,6 +93,16 @@ export default function PodDetailPage() {
     return "ws://localhost:8000";
   }, []);
 
+  // Record recent visits in localStorage
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("recentPods");
+      const arr = raw ? (JSON.parse(raw) as { ns: string; name: string }[]) : [];
+      const next = [{ ns, name }, ...arr.filter((x) => !(x.ns === ns && x.name === name))];
+      localStorage.setItem("recentPods", JSON.stringify(next.slice(0, 20)));
+    } catch {}
+  }, [ns, name]);
+
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
@@ -120,7 +132,7 @@ export default function PodDetailPage() {
         <Card><CardContent className="py-8 text-center text-text-muted">{t("pod.error")}</CardContent></Card>
       ) : (
         <>
-          <Tabs defaultValue="overview" className="w-full">
+          <Tabs defaultValue={initialTab} className="w-full">
             <TabsList className="grid w-full grid-cols-5">
               <TabsTrigger value="overview">{t("tabs.overview")}</TabsTrigger>
               <TabsTrigger value="logs">{t("tabs.logs")}</TabsTrigger>

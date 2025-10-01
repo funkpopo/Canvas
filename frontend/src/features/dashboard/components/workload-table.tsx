@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import Link from "next/link";
 
 import {
   Card,
@@ -12,6 +13,8 @@ import { Button } from "@/shared/ui/button";
 import { StatusBadge } from "@/shared/ui/status-badge";
 import { queryKeys, fetchWorkloads } from "@/lib/api";
 import { useI18n } from "@/shared/i18n/i18n";
+import { EmptyState } from "@/shared/ui/empty-state";
+import { ErrorState } from "@/shared/ui/error-state";
 
 export function WorkloadTable() {
   const { t } = useI18n();
@@ -29,13 +32,15 @@ export function WorkloadTable() {
         <CardDescription>{t("workloadTable.desc")}</CardDescription>
       </CardHeader>
       <CardContent className="overflow-x-auto">
-        <Button
-          variant="outline"
-          size="sm"
-          className={`mb-4 ${badgePresets.label}`}
-        >
-          {t("workloadTable.viewAll")}
-        </Button>
+        <Link href="/workloads">
+          <Button
+            variant="outline"
+            size="sm"
+            className={`mb-4 ${badgePresets.label}`}
+          >
+            {t("workloadTable.viewAll")}
+          </Button>
+        </Link>
         <table className="w-full text-sm">
           <thead className={`${badgePresets.label} text-text-muted`}>
             <tr className="border-b border-border">
@@ -51,20 +56,20 @@ export function WorkloadTable() {
           <tbody>
             {isLoading ? (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-sm text-text-muted">
-                  {t("workloadTable.loading")}
+                <td colSpan={7} className="px-4 py-6">
+                  <EmptyState title={t("workloadTable.loading")} />
                 </td>
               </tr>
             ) : isError ? (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-sm text-text-muted">
-                  {t("workloadTable.error")}
+                <td colSpan={7} className="px-4 py-6">
+                  <ErrorState message={t("workloadTable.error")} />
                 </td>
               </tr>
             ) : limitedWorkloads.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-sm text-text-muted">
-                  {t("workloadTable.empty")}
+                <td colSpan={7} className="px-4 py-6">
+                  <EmptyState title={t("workloadTable.empty")} />
                 </td>
               </tr>
             ) : (
@@ -102,4 +107,3 @@ export function WorkloadTable() {
     </Card>
   );
 }
-
