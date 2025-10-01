@@ -49,3 +49,12 @@ class SelectClusterRequest(BaseModel):
         if not self.id and not self.name:
             raise ValueError("Either id or name must be provided")
         return self
+
+
+class ClusterHealthResponse(BaseModel):
+    name: str
+    reachable: bool
+    message: str | None = None
+    kubernetes_version: str | None = None
+    node_count: int | None = None
+    ready_nodes: int | None = None

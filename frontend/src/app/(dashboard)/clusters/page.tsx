@@ -6,14 +6,16 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { PageHeader } from "@/features/dashboard/layouts/page-header";
 import { Button } from "@/shared/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/ui/card";
-import { StatusBadge } from "@/shared/ui/status-badge";
+ 
 import { useI18n } from "@/shared/i18n/i18n";
 import {
   fetchClusterConfig,
   listClusterConfigs,
   queryKeys,
   selectActiveClusterByName,
+  fetchClusterHealth,
 } from "@/lib/api";
+import { StatusBadge } from "@/shared/ui/status-badge";
 
 export default function ClustersPage() {
   const { t } = useI18n();
@@ -83,6 +85,7 @@ export default function ClustersPage() {
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
+                    <ClusterHealthChip name={c.name} />
                     <Button
                       size="sm"
                       disabled={selectMutation.isPending}
@@ -117,3 +120,13 @@ export default function ClustersPage() {
   );
 }
 
+function ClusterHealthChip({ name }: { name: string }) {
+  const { t } = useI18n();
+  const { data } = useQuery({ queryKey: queryKeys.clusterHealth(name), queryFn: () => fetchClusterHealth(name) });
+  if (!data) return null;
+  const status: "healthy" | "warning" | "critical" = data.reachable
+    ? (data.ready_nodes != null && data.node_count != null && data.ready_nodes === data.node_count ? "healthy" : "warning")
+    : "critical";
+  const label = status === "healthy" ? t("topbar.health.healthy") : status === "warning" ? t("topbar.health.degraded") : t("topbar.health.offline");
+  return <StatusBadge status={status} label={label} size="sm" />;
+}

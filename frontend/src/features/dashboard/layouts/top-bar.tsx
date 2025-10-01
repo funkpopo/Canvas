@@ -5,8 +5,9 @@ import Link from "next/link";
 
 import { ThemeToggle } from "@/shared/theme/theme-toggle";
 import { useLanguage } from "@/shared/i18n/language-provider";
-import { Badge, badgePresets } from "@/shared/ui/badge";
-import { queryKeys, fetchClusterConfig } from "@/lib/api";
+import { badgePresets } from "@/shared/ui/badge";
+import { StatusBadge } from "@/shared/ui/status-badge";
+import { queryKeys, fetchClusterConfig, fetchClusterOverview } from "@/lib/api";
 import { useI18n } from "@/shared/i18n/i18n";
 
 export function TopBar() {
@@ -16,6 +17,18 @@ export function TopBar() {
     queryKey: queryKeys.clusterConfig,
     queryFn: fetchClusterConfig,
   });
+  const { data: overview } = useQuery({
+    queryKey: queryKeys.clusterOverview,
+    queryFn: fetchClusterOverview,
+  });
+
+  const version = overview?.kubernetes_version ?? undefined;
+  const readyNodes = overview?.ready_nodes ?? 0;
+  const nodeCount = overview?.node_count ?? 0;
+  const hasNodes = nodeCount > 0;
+  const health: "healthy" | "warning" | "critical" = hasNodes
+    ? (readyNodes === nodeCount ? "healthy" : (readyNodes > 0 ? "warning" : "critical"))
+    : "warning";
 
   return (
     <header className="flex h-16 items-center justify-between border-b border-border bg-surface px-6">
@@ -34,14 +47,25 @@ export function TopBar() {
             </Link>
           </div>
         </div>
-        {config?.api_server && (
-          <Badge
-            variant="success-light"
-            size="sm"
-            className={badgePresets.status}
-          >
-            {t("topbar.online")}
-          </Badge>
+        {config?.api_server && overview && (
+          <div className="flex items-center gap-2">
+            {version && (
+              <span className={`${badgePresets.metric} text-text-muted text-xs`}>
+                {t("topbar.version", { v: version })}
+              </span>
+            )}
+            <StatusBadge
+              status={health}
+              label={
+                health === "healthy"
+                  ? t("topbar.health.healthy")
+                  : health === "warning"
+                  ? t("topbar.health.degraded")
+                  : t("topbar.health.offline")
+              }
+              size="sm"
+            />
+          </div>
         )}
       </div>
       <div className="flex items-center gap-4">

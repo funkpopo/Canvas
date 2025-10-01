@@ -6,6 +6,7 @@ export const queryKeys = {
   events: ["cluster", "events"] as const,
   clusterConfig: ["cluster", "config"] as const,
   clusterConfigsAll: ["cluster", "configs", "all"] as const,
+  clusterHealth: (name: string) => ["cluster", "health", name] as const,
   metricsStatus: ["metrics", "status"] as const,
   clusterCapacity: ["cluster", "capacity"] as const,
   clusterStorage: ["cluster", "storage"] as const,
@@ -209,6 +210,15 @@ export interface ClusterConfigPayload {
   insecure_skip_tls_verify: boolean;
 }
 
+export interface ClusterHealthResponse {
+  name: string;
+  reachable: boolean;
+  message: string | null;
+  kubernetes_version: string | null;
+  node_count: number | null;
+  ready_nodes: number | null;
+}
+
 export function fetchClusterOverview(): Promise<ClusterOverviewResponse> {
   return request<ClusterOverviewResponse>("/cluster/overview");
 }
@@ -241,6 +251,11 @@ export function selectActiveClusterByName(name: string): Promise<ClusterConfigRe
     method: "POST",
     body: JSON.stringify({ name }),
   });
+}
+
+export function fetchClusterHealth(name: string): Promise<ClusterHealthResponse> {
+  const params = new URLSearchParams({ name });
+  return request<ClusterHealthResponse>(`/cluster/config/health?${params.toString()}`);
 }
 
 export interface MetricsServerStatusResponse {

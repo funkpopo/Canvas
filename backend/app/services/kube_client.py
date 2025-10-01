@@ -68,6 +68,8 @@ class KubernetesService:
         self._apps_v1: client.AppsV1Api | None = None
         self._rate_limiter = RateLimiter(self.settings.rate_limit_requests_per_minute)
         self._cluster_display_name = self.settings.kube_context or "default"
+        # Concurrency guard for log streaming
+        self._logs_sema = asyncio.BoundedSemaphore(self.settings.stream_max_concurrent_logs)
 
     async def get_cluster_overview(self) -> ClusterOverview:
         async def _fetch() -> ClusterOverview:
@@ -2154,10 +2156,22 @@ class KubernetesService:
                 timestamps=False,
             )
 
+        # Enforce concurrency limit for log streams
+        await self._logs_sema.acquire()
         resp = await asyncio.to_thread(_open)
 
         async def _gen():
             try:
+                # Hard cap the lifetime of the stream by scheduling a closer
+                closer: asyncio.Task | None = None
+                if self.settings.log_stream_max_seconds and self.settings.log_stream_max_seconds > 0:
+                    async def _close_later():
+                        try:
+                            await asyncio.sleep(self.settings.log_stream_max_seconds)
+                            await asyncio.to_thread(resp.close)
+                        except Exception:
+                            pass
+                    closer = asyncio.create_task(_close_later())
                 while True:
                     chunk = await asyncio.to_thread(resp.read, 1024)
                     if not chunk:
@@ -2169,9 +2183,12 @@ class KubernetesService:
                         yield str(chunk).encode()
             finally:
                 try:
+                    if 'closer' in locals() and closer:
+                        closer.cancel()
                     await asyncio.to_thread(resp.close)
                 except Exception:
                     pass
+                self._logs_sema.release()
 
         return _gen()
 

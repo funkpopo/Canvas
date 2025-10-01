@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     service_account_token_path: str | None = None
     cache_ttl_seconds: int = 30
     rate_limit_requests_per_minute: int = 120
+    # Streaming and long-connection safety limits
+    stream_max_concurrent_logs: int = 10
+    stream_max_concurrent_exec: int = 4
+    log_stream_max_seconds: int = 600
+    exec_session_max_seconds: int = 1800
     allowed_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
     database_url: str = "sqlite+aiosqlite:///./canvas.db"
     # Optional Fernet key for encrypting sensitive fields (ClusterConfig)

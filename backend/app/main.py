@@ -30,6 +30,8 @@ async def lifespan(app: FastAPI):
     # Initialize WebSocket manager
     ws_manager = ConnectionManager()
     app.state.ws_manager = ws_manager
+    # Concurrency guard for exec sessions
+    app.state.exec_semaphore = asyncio.BoundedSemaphore(settings.stream_max_concurrent_exec)
     
     # Initialize K8s watcher
     k8s_watcher = None
@@ -192,6 +194,8 @@ def create_app() -> FastAPI:
         cmd_parts = [part for part in str(raw_cmd).split(" ") if part]
 
         try:
+            # Concurrency limit for exec sessions
+            await app.state.exec_semaphore.acquire()  # type: ignore[attr-defined]
             await service._rate_limiter.acquire()
             core_v1, _ = await service._ensure_clients()
 
@@ -243,7 +247,15 @@ def create_app() -> FastAPI:
 
             reader = asyncio.create_task(_reader())
             writer = asyncio.create_task(_writer())
-            await asyncio.gather(reader, writer)
+            # Enforce max session duration
+            max_seconds = get_settings().exec_session_max_seconds
+            if max_seconds and max_seconds > 0:
+                try:
+                    await asyncio.wait_for(asyncio.gather(reader, writer), timeout=max_seconds)
+                except asyncio.TimeoutError:
+                    pass
+            else:
+                await asyncio.gather(reader, writer)
         except WebSocketDisconnect:
             pass
         except Exception as e:
@@ -251,6 +263,10 @@ def create_app() -> FastAPI:
         finally:
             try:
                 await websocket.close()
+            except Exception:
+                pass
+            try:
+                app.state.exec_semaphore.release()  # type: ignore[attr-defined]
             except Exception:
                 pass
 

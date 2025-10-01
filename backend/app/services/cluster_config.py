@@ -40,6 +40,13 @@ class ClusterConfigService:
             await session.refresh(config)
             return config
 
+    async def get_by_name(self, name: str) -> Optional[ClusterConfig]:
+        async with self._session_factory() as session:
+            result = await session.execute(
+                select(ClusterConfig).where(ClusterConfig.name == name)
+            )
+            return result.scalar_one_or_none()
+
     async def upsert_default(self, payload: ClusterConfigPayload) -> ClusterConfig:
         async with self._session_factory() as session:
             # Find existing config by unique name, not just current default

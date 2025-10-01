@@ -9,7 +9,8 @@ import { cn } from "@/lib/utils";
 import { useI18n } from "@/shared/i18n/i18n";
 import { badgePresets } from "@/shared/ui/badge";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { fetchClusterConfig, listClusterConfigs, queryKeys, selectActiveClusterByName } from "@/lib/api";
+import { fetchClusterConfig, listClusterConfigs, queryKeys, selectActiveClusterByName, fetchClusterOverview } from "@/lib/api";
+import { StatusBadge } from "@/shared/ui/status-badge";
 
 export function Sidebar() {
   const { t } = useI18n();
@@ -19,6 +20,7 @@ export function Sidebar() {
 
   const { data: active } = useQuery({ queryKey: queryKeys.clusterConfig, queryFn: fetchClusterConfig });
   const { data: clusters } = useQuery({ queryKey: queryKeys.clusterConfigsAll, queryFn: listClusterConfigs });
+  const { data: overview } = useQuery({ queryKey: queryKeys.clusterOverview, queryFn: fetchClusterOverview });
 
   const [collapsed, setCollapsed] = useState<boolean>(false);
   const [clustersOpen, setClustersOpen] = useState<boolean>(true);
@@ -90,6 +92,27 @@ export function Sidebar() {
             {!collapsed && <span>{t("sidebar.brand")}</span>}
           </Link>
         </div>
+        {/* Active cluster quick status */}
+        {!collapsed && active && overview && (
+          <div className="px-3 pb-2">
+            <div className="rounded-md border border-border bg-muted/30 p-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-text-muted">{t("sidebar.activeCluster")}</span>
+                <span className="text-[10px] text-text-muted">{overview.kubernetes_version}</span>
+              </div>
+              <div className="mt-1 flex items-center justify-between">
+                <span className="truncate text-sm text-text-primary" title={active.name}>{active.name}</span>
+                {(() => {
+                  const ready = overview.ready_nodes ?? 0;
+                  const total = overview.node_count ?? 0;
+                  const status: "healthy" | "warning" | "critical" = total > 0 ? (ready === total ? "healthy" : (ready > 0 ? "warning" : "critical")) : "warning";
+                  const label = status === "healthy" ? t("topbar.health.healthy") : status === "warning" ? t("topbar.health.degraded") : t("topbar.health.offline");
+                  return <StatusBadge status={status} label={label} size="sm" />;
+                })()}
+              </div>
+            </div>
+          </div>
+        )}
 
         <nav className="flex-1 space-y-1 px-2 py-2 overflow-y-auto">
           {/* Clusters tree */}

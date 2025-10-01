@@ -57,6 +57,7 @@ const dictEn = {
   "sidebar.expand": "Expand",
   "sidebar.aria.expand": "Expand sidebar",
   "sidebar.aria.collapse": "Collapse sidebar",
+  "sidebar.activeCluster": "Active cluster",
 
   // Dashboard page
   "dashboard.title": "Kubernetes health & workload intelligence",
@@ -738,6 +739,10 @@ const dictEn = {
   "topbar.noClusterConfigured": "No cluster configured",
   "topbar.change": "Change",
   "topbar.online": "Online",
+  "topbar.version": "{v}",
+  "topbar.health.healthy": "Healthy",
+  "topbar.health.degraded": "Degraded",
+  "topbar.health.offline": "Offline",
 
   // Port forward (generic/Pod)
   "actions.portForward": "Port forward",
@@ -828,6 +833,7 @@ const dictZh = {
   "sidebar.expand": "展开",
   "sidebar.aria.expand": "展开侧边栏",
   "sidebar.aria.collapse": "收起侧边栏",
+  "sidebar.activeCluster": "当前集群",
   "sidebar.audit": "审计",
   "sidebar.crds": "CRD",
 
@@ -1501,6 +1507,10 @@ const dictZh = {
   "topbar.noClusterConfigured": "未配置集群",
   "topbar.change": "切换",
   "topbar.online": "在线",
+  "topbar.version": "{v}",
+  "topbar.health.healthy": "健康",
+  "topbar.health.degraded": "降级",
+  "topbar.health.offline": "离线",
 
   // 选项卡
   "tabs.overview": "概览",
