@@ -37,7 +37,16 @@ export type WebSocketEventType =
   | 'cronjob_deleted'
   | 'pod_added'
   | 'pod_modified'
-  | 'pod_deleted';
+  | 'pod_deleted'
+  | 'service_added'
+  | 'service_modified'
+  | 'service_deleted'
+  | 'ingress_added'
+  | 'ingress_modified'
+  | 'ingress_deleted'
+  | 'node_added'
+  | 'node_modified'
+  | 'node_deleted';
 
 export interface WebSocketMessage {
   type: WebSocketEventType;

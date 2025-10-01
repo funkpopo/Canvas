@@ -144,4 +144,20 @@ function handleWebSocketMessage(
       refetchType: 'active', // Refetch immediately for real-time updates
     });
   }
+
+  // Handle Service events: invalidate services list for the namespace
+  if (resource_type === 'Service') {
+    queryClient.invalidateQueries({ queryKey: ['services', namespace || 'all'] });
+  }
+
+  // Handle Ingress events: invalidate ingresses list for the namespace
+  if (resource_type === 'Ingress') {
+    queryClient.invalidateQueries({ queryKey: ['ingresses', namespace || 'all'] });
+  }
+
+  // Handle Node events: invalidate nodes list and node detail
+  if (resource_type === 'Node') {
+    queryClient.invalidateQueries({ queryKey: ['cluster', 'nodes'] });
+    queryClient.invalidateQueries({ queryKey: ['nodes', name, 'detail'] });
+  }
 }

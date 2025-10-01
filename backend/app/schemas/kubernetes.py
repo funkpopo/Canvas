@@ -245,12 +245,43 @@ class DeploymentStrategy(BaseModel):
     max_unavailable: str | int | None = None
     max_surge: str | int | None = None
 
+# HPA v2 multi-metric support
+class HPAMetricTarget(BaseModel):
+    type: Literal["Utilization", "AverageValue", "Value"]
+    average_utilization: int | None = Field(default=None, description="For Utilization targets (percentage)")
+    average_value: str | None = Field(default=None, description="For AverageValue targets (resource quantities like 200m, 100Mi)")
+    value: str | None = Field(default=None, description="For Value targets (absolute values)")
+
+
+class HPAResourceMetricSpec(BaseModel):
+    name: str  # e.g., "cpu" | "memory"
+    target: HPAMetricTarget
+
+
+class HPAPodsMetricSpec(BaseModel):
+    metric_name: str
+    target: HPAMetricTarget
+
+
+class HPAExternalMetricSpec(BaseModel):
+    metric_name: str
+    selector: dict[str, str] | None = None
+    target: HPAMetricTarget
+
+
+class HPAMetric(BaseModel):
+    type: Literal["Resource", "Pods", "External"]
+    resource: HPAResourceMetricSpec | None = None
+    pods: HPAPodsMetricSpec | None = None
+    external: HPAExternalMetricSpec | None = None
 
 class AutoscalingConfig(BaseModel):
     enabled: bool = False
     min_replicas: int | None = None
     max_replicas: int | None = None
     target_cpu_utilization: int | None = None
+    # New: multi-metric support (autoscaling/v2)
+    metrics: list[HPAMetric] = Field(default_factory=list)
 
 
 # Storage management

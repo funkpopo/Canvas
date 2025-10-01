@@ -2936,12 +2936,85 @@ class KubernetesService:
                         min_r = getattr(spec, "min_replicas", None)
                         max_r = getattr(spec, "max_replicas", None)
                         cpu = None
+                        metrics_out: list[dict] = []
                         try:
                             for m in getattr(spec, "metrics", []) or []:
-                                if getattr(m, "type", None) == "Resource" and getattr(m.resource, "name", None) == "cpu":
-                                    tgt = getattr(m.resource, "target", None)
-                                    if tgt and getattr(tgt, "type", None) == "Utilization":
-                                        cpu = getattr(tgt, "average_utilization", None)
+                                mtype = getattr(m, "type", None)
+                                if mtype == "Resource":
+                                    res = getattr(m, "resource", None)
+                                    if not res:
+                                        continue
+                                    res_name = getattr(res, "name", None)
+                                    tgt = getattr(res, "target", None)
+                                    target_type = getattr(tgt, "type", None) if tgt else None
+                                    avg_util = getattr(tgt, "average_utilization", None) if tgt else None
+                                    avg_val = getattr(tgt, "average_value", None) if tgt else None
+                                    val = getattr(tgt, "value", None) if tgt else None
+                                    # Derive legacy cpu utilization field
+                                    if str(res_name) == "cpu" and str(target_type) == "Utilization" and cpu is None:
+                                        cpu = avg_util
+                                    metrics_out.append({
+                                        "type": "Resource",
+                                        "resource": {
+                                            "name": res_name,
+                                            "target": {
+                                                "type": target_type,
+                                                "average_utilization": avg_util,
+                                                "average_value": (str(avg_val) if avg_val is not None else None),
+                                                "value": (str(val) if val is not None else None),
+                                            },
+                                        },
+                                    })
+                                elif mtype == "Pods":
+                                    pods = getattr(m, "pods", None)
+                                    if not pods:
+                                        continue
+                                    metric = getattr(pods, "metric", None)
+                                    metric_name = getattr(metric, "name", None) if metric else None
+                                    tgt = getattr(pods, "target", None)
+                                    target_type = getattr(tgt, "type", None) if tgt else None
+                                    avg_val = getattr(tgt, "average_value", None) if tgt else None
+                                    val = getattr(tgt, "value", None) if tgt else None
+                                    metrics_out.append({
+                                        "type": "Pods",
+                                        "pods": {
+                                            "metric_name": metric_name,
+                                            "target": {
+                                                "type": target_type,
+                                                "average_value": (str(avg_val) if avg_val is not None else None),
+                                                "value": (str(val) if val is not None else None),
+                                            },
+                                        },
+                                    })
+                                elif mtype == "External":
+                                    ext = getattr(m, "external", None)
+                                    if not ext:
+                                        continue
+                                    metric = getattr(ext, "metric", None)
+                                    metric_name = getattr(metric, "name", None) if metric else None
+                                    selector = getattr(metric, "selector", None)
+                                    selector_labels = None
+                                    try:
+                                        if selector and getattr(selector, "match_labels", None):
+                                            selector_labels = dict(getattr(selector, "match_labels"))
+                                    except Exception:
+                                        selector_labels = None
+                                    tgt = getattr(ext, "target", None)
+                                    target_type = getattr(tgt, "type", None) if tgt else None
+                                    avg_val = getattr(tgt, "average_value", None) if tgt else None
+                                    val = getattr(tgt, "value", None) if tgt else None
+                                    metrics_out.append({
+                                        "type": "External",
+                                        "external": {
+                                            "metric_name": metric_name,
+                                            "selector": selector_labels,
+                                            "target": {
+                                                "type": target_type,
+                                                "average_value": (str(avg_val) if avg_val is not None else None),
+                                                "value": (str(val) if val is not None else None),
+                                            },
+                                        },
+                                    })
                         except Exception:
                             pass
                         return {
@@ -2949,15 +3022,16 @@ class KubernetesService:
                             "min_replicas": min_r,
                             "max_replicas": max_r,
                             "target_cpu_utilization": cpu,
+                            "metrics": metrics_out,
                         }
-                return {"enabled": False, "min_replicas": None, "max_replicas": None, "target_cpu_utilization": None}
+                return {"enabled": False, "min_replicas": None, "max_replicas": None, "target_cpu_utilization": None, "metrics": []}
 
             return await asyncio.to_thread(_get)
         except Exception as exc:  # pragma: no cover
             logger.warning("kubernetes.get_hpa_error", error=str(exc))
-            return {"enabled": False, "min_replicas": None, "max_replicas": None, "target_cpu_utilization": None}
+            return {"enabled": False, "min_replicas": None, "max_replicas": None, "target_cpu_utilization": None, "metrics": []}
 
-    async def update_deployment_autoscaling(self, namespace: str, name: str, enabled: bool, min_replicas: int | None, max_replicas: int | None, target_cpu_utilization: int | None) -> tuple[bool, str | None]:
+    async def update_deployment_autoscaling(self, namespace: str, name: str, enabled: bool, min_replicas: int | None, max_replicas: int | None, target_cpu_utilization: int | None, metrics: list[dict] | None = None) -> tuple[bool, str | None]:
         await self._rate_limiter.acquire()
         try:
             autoscaling_v2 = client.AutoscalingV2Api(self._api_client)
@@ -2982,11 +3056,80 @@ class KubernetesService:
 
                 # Build HPA spec
                 hpa_name = existing.metadata.name if existing else f"{name}"
-                spec = {
+                spec: dict = {
                     "scaleTargetRef": {"apiVersion": "apps/v1", "kind": "Deployment", "name": name},
                     "minReplicas": min_replicas if min_replicas is not None else 1,
                     "maxReplicas": max_replicas if max_replicas is not None else 3,
-                    "metrics": [
+                }
+
+                metrics_body: list[dict] = []
+                mlist = metrics or []
+                if mlist:
+                    for m in mlist:
+                        mtype = str(m.get("type")) if isinstance(m, dict) else None
+                        if mtype == "Resource":
+                            res = (m.get("resource") or {}) if isinstance(m.get("resource"), dict) else {}
+                            name_ = res.get("name")
+                            tgt = (res.get("target") or {}) if isinstance(res.get("target"), dict) else {}
+                            ttype = tgt.get("type")
+                            entry: dict = {
+                                "type": "Resource",
+                                "resource": {
+                                    "name": name_,
+                                    "target": {"type": ttype},
+                                },
+                            }
+                            if ttype == "Utilization" and tgt.get("average_utilization") is not None:
+                                entry["resource"]["target"]["averageUtilization"] = int(tgt.get("average_utilization"))
+                            if ttype == "AverageValue" and tgt.get("average_value") is not None:
+                                entry["resource"]["target"]["averageValue"] = str(tgt.get("average_value"))
+                            if ttype == "Value" and tgt.get("value") is not None:
+                                entry["resource"]["target"]["value"] = str(tgt.get("value"))
+                            metrics_body.append(entry)
+                        elif mtype == "Pods":
+                            pods = (m.get("pods") or {}) if isinstance(m.get("pods"), dict) else {}
+                            metric_name = pods.get("metric_name")
+                            tgt = (pods.get("target") or {}) if isinstance(pods.get("target"), dict) else {}
+                            ttype = tgt.get("type")
+                            entry = {
+                                "type": "Pods",
+                                "pods": {
+                                    "metric": {"name": metric_name},
+                                    "target": {"type": ttype},
+                                },
+                            }
+                            if ttype == "AverageValue" and tgt.get("average_value") is not None:
+                                entry["pods"]["target"]["averageValue"] = str(tgt.get("average_value"))
+                            if ttype == "Value" and tgt.get("value") is not None:
+                                entry["pods"]["target"]["value"] = str(tgt.get("value"))
+                            metrics_body.append(entry)
+                        elif mtype == "External":
+                            ext = (m.get("external") or {}) if isinstance(m.get("external"), dict) else {}
+                            metric_name = ext.get("metric_name")
+                            selector = ext.get("selector") if isinstance(ext.get("selector"), dict) else None
+                            tgt = (ext.get("target") or {}) if isinstance(ext.get("target"), dict) else {}
+                            ttype = tgt.get("type")
+                            metric_dict = {"name": metric_name}
+                            if selector:
+                                metric_dict["selector"] = {"matchLabels": selector}
+                            entry = {
+                                "type": "External",
+                                "external": {
+                                    "metric": metric_dict,
+                                    "target": {"type": ttype},
+                                },
+                            }
+                            if ttype == "AverageValue" and tgt.get("average_value") is not None:
+                                entry["external"]["target"]["averageValue"] = str(tgt.get("average_value"))
+                            if ttype == "Value" and tgt.get("value") is not None:
+                                entry["external"]["target"]["value"] = str(tgt.get("value"))
+                            metrics_body.append(entry)
+
+                if metrics_body:
+                    spec["metrics"] = metrics_body
+                else:
+                    # Fallback to legacy single CPU utilization metric
+                    spec["metrics"] = [
                         {
                             "type": "Resource",
                             "resource": {
@@ -2997,8 +3140,7 @@ class KubernetesService:
                                 },
                             },
                         }
-                    ],
-                }
+                    ]
 
                 body = {
                     "apiVersion": "autoscaling/v2",

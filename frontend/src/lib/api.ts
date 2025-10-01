@@ -803,7 +803,29 @@ export function updateDeploymentStrategy(ns: string, name: string, payload: Depl
   return request<OperationResultResponse>(`/workloads/deployments/${en}/${nm}/strategy`, { method: "PUT", body: JSON.stringify(payload) });
 }
 
-export interface AutoscalingConfigResponse { enabled: boolean; min_replicas?: number | null; max_replicas?: number | null; target_cpu_utilization?: number | null }
+export type HPATargetType = 'Utilization' | 'AverageValue' | 'Value';
+export interface HPAMetricTargetResponse {
+  type: HPATargetType;
+  average_utilization?: number | null;
+  average_value?: string | null;
+  value?: string | null;
+}
+
+export interface HPAResourceMetricResponse { name: string; target: HPAMetricTargetResponse }
+export interface HPAPodsMetricResponse { metric_name: string; target: HPAMetricTargetResponse }
+export interface HPAExternalMetricResponse { metric_name: string; selector?: Record<string, string> | null; target: HPAMetricTargetResponse }
+export type HPAMetricResponse =
+  | { type: 'Resource'; resource: HPAResourceMetricResponse }
+  | { type: 'Pods'; pods: HPAPodsMetricResponse }
+  | { type: 'External'; external: HPAExternalMetricResponse };
+
+export interface AutoscalingConfigResponse {
+  enabled: boolean;
+  min_replicas?: number | null;
+  max_replicas?: number | null;
+  target_cpu_utilization?: number | null; // legacy
+  metrics?: HPAMetricResponse[];
+}
 export function fetchDeploymentAutoscaling(ns: string, name: string): Promise<AutoscalingConfigResponse> {
   const en = encodeURIComponent(ns);
   const nm = encodeURIComponent(name);

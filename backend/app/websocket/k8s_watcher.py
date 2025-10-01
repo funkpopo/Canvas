@@ -25,6 +25,10 @@ class K8sWatcher:
             self.batch_v1 = client.BatchV1Api(core_v1_api.api_client)
         except Exception:
             self.batch_v1 = client.BatchV1Api()
+        try:
+            self.networking_v1 = client.NetworkingV1Api(core_v1_api.api_client)
+        except Exception:
+            self.networking_v1 = client.NetworkingV1Api()
         self.on_event = on_event
         self._stop_event = asyncio.Event()
         self._tasks: list[asyncio.Task] = []
@@ -57,6 +61,21 @@ class K8sWatcher:
         t5 = asyncio.create_task(self._watch_cronjobs())
         t5.set_name("watch_cronjobs")
         self._tasks.append(t5)
+
+        # Services
+        t6 = asyncio.create_task(self._watch_services())
+        t6.set_name("watch_services")
+        self._tasks.append(t6)
+
+        # Ingresses
+        t7 = asyncio.create_task(self._watch_ingresses())
+        t7.set_name("watch_ingresses")
+        self._tasks.append(t7)
+
+        # Nodes
+        t8 = asyncio.create_task(self._watch_nodes())
+        t8.set_name("watch_nodes")
+        self._tasks.append(t8)
 
         logger.info("k8s_watcher.started", tasks=len(self._tasks))
 
@@ -144,6 +163,51 @@ class K8sWatcher:
                 logger.warning("k8s_watcher.cronjob_error", error=str(e))
                 await asyncio.sleep(2)
 
+    async def _watch_services(self) -> None:
+        while not self._stop_event.is_set():
+            try:
+                await self._watch_resource(
+                    resource_type="Service",
+                    watch_func=lambda: watch.Watch().stream(
+                        self.core_v1.list_service_for_all_namespaces, timeout_seconds=60
+                    ),
+                )
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.warning("k8s_watcher.service_error", error=str(e))
+                await asyncio.sleep(2)
+
+    async def _watch_ingresses(self) -> None:
+        while not self._stop_event.is_set():
+            try:
+                await self._watch_resource(
+                    resource_type="Ingress",
+                    watch_func=lambda: watch.Watch().stream(
+                        self.networking_v1.list_ingress_for_all_namespaces, timeout_seconds=60
+                    ),
+                )
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.warning("k8s_watcher.ingress_error", error=str(e))
+                await asyncio.sleep(2)
+
+    async def _watch_nodes(self) -> None:
+        while not self._stop_event.is_set():
+            try:
+                await self._watch_resource(
+                    resource_type="Node",
+                    watch_func=lambda: watch.Watch().stream(
+                        self.core_v1.list_node, timeout_seconds=60
+                    ),
+                )
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.warning("k8s_watcher.node_error", error=str(e))
+                await asyncio.sleep(2)
+
     async def _watch_resource(self, resource_type: str, watch_func: Callable) -> None:
         w = watch.Watch()
 
@@ -192,6 +256,15 @@ class K8sWatcher:
                 ("Pod", "ADDED"): EventType.POD_ADDED,
                 ("Pod", "MODIFIED"): EventType.POD_MODIFIED,
                 ("Pod", "DELETED"): EventType.POD_DELETED,
+                ("Service", "ADDED"): EventType.SERVICE_ADDED,
+                ("Service", "MODIFIED"): EventType.SERVICE_MODIFIED,
+                ("Service", "DELETED"): EventType.SERVICE_DELETED,
+                ("Ingress", "ADDED"): EventType.INGRESS_ADDED,
+                ("Ingress", "MODIFIED"): EventType.INGRESS_MODIFIED,
+                ("Ingress", "DELETED"): EventType.INGRESS_DELETED,
+                ("Node", "ADDED"): EventType.NODE_ADDED,
+                ("Node", "MODIFIED"): EventType.NODE_MODIFIED,
+                ("Node", "DELETED"): EventType.NODE_DELETED,
             }
 
             event_type = event_type_map.get((resource_type, event_type_raw))
@@ -291,7 +364,42 @@ class K8sWatcher:
                 except Exception:
                     containers = []
                 data["containers"] = containers
+        elif resource_type == "Service":
+            spec = getattr(obj, "spec", None)
+            if spec:
+                data["type"] = getattr(spec, "type", None)
+                data["cluster_ip"] = getattr(spec, "cluster_ip", None)
+                try:
+                    ports = getattr(spec, "ports", None) or []
+                    data["ports_count"] = len(ports)
+                except Exception:
+                    data["ports_count"] = 0
+        elif resource_type == "Ingress":
+            spec = getattr(obj, "spec", None)
+            rules = getattr(spec, "rules", None) if spec else None
+            try:
+                data["rules_count"] = len(rules or [])
+            except Exception:
+                data["rules_count"] = 0
+        elif resource_type == "Node":
+            status = getattr(obj, "status", None)
+            if status:
+                conditions = getattr(status, "conditions", None) or []
+                ready_cond = None
+                try:
+                    for c in conditions:
+                        if getattr(c, "type", None) == "Ready":
+                            ready_cond = c
+                            break
+                except Exception:
+                    ready_cond = None
+                is_ready = None
+                try:
+                    if ready_cond is not None:
+                        is_ready = True if getattr(ready_cond, "status", None) == "True" else False
+                except Exception:
+                    is_ready = None
+                data["status"] = "Ready" if is_ready else "NotReady"
 
         data["updated_at"] = datetime.now(tz=timezone.utc).isoformat()
         return data
-

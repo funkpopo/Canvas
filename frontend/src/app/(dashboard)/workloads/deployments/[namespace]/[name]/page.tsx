@@ -38,6 +38,8 @@ import {
   type WorkloadSummaryResponse,
   type DeploymentStrategyResponse,
   type AutoscalingConfigResponse,
+  type HPAMetricResponse,
+  type HPATargetType,
 } from "@/lib/api";
 
 export default function DeploymentDetailPage() {
@@ -375,6 +377,8 @@ export default function DeploymentDetailPage() {
   const [minReplicas, setMinReplicas] = useState<number | "">("");
   const [maxReplicas, setMaxReplicas] = useState<number | "">("");
   const [targetCpu, setTargetCpu] = useState<number | "">("");
+  const [useAdvancedMetrics, setUseAdvancedMetrics] = useState<boolean>(false);
+  const [metrics, setMetrics] = useState<HPAMetricResponse[]>([]);
 
   useEffect(() => {
     if (strategy) {
@@ -389,6 +393,9 @@ export default function DeploymentDetailPage() {
       setMinReplicas(hpa.min_replicas ?? "");
       setMaxReplicas(hpa.max_replicas ?? "");
       setTargetCpu(hpa.target_cpu_utilization ?? "");
+      const ms = hpa.metrics ?? [];
+      setMetrics(ms);
+      setUseAdvancedMetrics((ms?.length ?? 0) > 0);
     }
   }, [hpa]);
 
@@ -404,7 +411,8 @@ export default function DeploymentDetailPage() {
         enabled: autoEnabled,
         min_replicas: autoEnabled ? (minReplicas === "" ? 1 : Number(minReplicas)) : null,
         max_replicas: autoEnabled ? (maxReplicas === "" ? 3 : Number(maxReplicas)) : null,
-        target_cpu_utilization: autoEnabled ? (targetCpu === "" ? 80 : Number(targetCpu)) : null,
+        target_cpu_utilization: autoEnabled && !useAdvancedMetrics ? (targetCpu === "" ? 80 : Number(targetCpu)) : null,
+        metrics: autoEnabled && useAdvancedMetrics ? metrics : [],
       });
     },
     onSuccess: () => {
@@ -419,6 +427,80 @@ export default function DeploymentDetailPage() {
       alert(err?.message || t("error.deploy.strategyUpdate"));
     },
   });
+
+  // HPA advanced metrics helpers
+  function addMetric(mt: 'Resource' | 'Pods' | 'External') {
+    let m: HPAMetricResponse;
+    if (mt === 'Resource') {
+      m = { type: 'Resource', resource: { name: 'cpu', target: { type: 'Utilization', average_utilization: 80 } } } as HPAMetricResponse;
+    } else if (mt === 'Pods') {
+      m = { type: 'Pods', pods: { metric_name: '', target: { type: 'AverageValue', average_value: '1' } } } as HPAMetricResponse;
+    } else {
+      m = { type: 'External', external: { metric_name: '', selector: {}, target: { type: 'AverageValue', average_value: '1' } } } as HPAMetricResponse;
+    }
+    setMetrics((prev) => [...prev, m]);
+  }
+  function removeMetric(idx: number) {
+    setMetrics((prev) => prev.filter((_, i) => i !== idx));
+  }
+  function updateMetricType(idx: number, newType: 'Resource' | 'Pods' | 'External') {
+    const next = [...metrics];
+    next[idx] = (newType === 'Resource')
+      ? { type: 'Resource', resource: { name: 'cpu', target: { type: 'Utilization', average_utilization: 80 } } }
+      : (newType === 'Pods')
+        ? { type: 'Pods', pods: { metric_name: '', target: { type: 'AverageValue', average_value: '1' } } }
+        : { type: 'External', external: { metric_name: '', selector: {}, target: { type: 'AverageValue', average_value: '1' } } };
+    setMetrics(next as HPAMetricResponse[]);
+  }
+  function updateResourceMetric(idx: number, patch: Partial<{ name: string; target_type: HPATargetType; avg_util?: number; avg_val?: string; val?: string }>) {
+    const next = [...metrics] as HPAMetricResponse[];
+    const m = next[idx];
+    if (!m || m.type !== 'Resource') return;
+    const current = m.resource;
+    const targetType = patch.target_type ?? current.target.type;
+    const target: any = { type: targetType };
+    if (targetType === 'Utilization') target.average_utilization = patch.avg_util ?? current.target.average_utilization ?? 80;
+    if (targetType === 'AverageValue') target.average_value = patch.avg_val ?? current.target.average_value ?? '1';
+    if (targetType === 'Value') target.value = patch.val ?? current.target.value ?? '1';
+    m.resource = { name: patch.name ?? current.name, target } as any;
+    setMetrics(next);
+  }
+  function updatePodsMetric(idx: number, patch: Partial<{ metric_name: string; target_type: HPATargetType; avg_val?: string; val?: string }>) {
+    const next = [...metrics] as HPAMetricResponse[];
+    const m = next[idx];
+    if (!m || m.type !== 'Pods') return;
+    const current = m.pods;
+    const targetType = patch.target_type ?? current.target.type;
+    const target: any = { type: targetType };
+    if (targetType === 'AverageValue') target.average_value = patch.avg_val ?? current.target.average_value ?? '1';
+    if (targetType === 'Value') target.value = patch.val ?? current.target.value ?? '1';
+    m.pods = { metric_name: patch.metric_name ?? current.metric_name, target } as any;
+    setMetrics(next);
+  }
+  function updateExternalMetric(idx: number, patch: Partial<{ metric_name: string; selector_text: string; target_type: HPATargetType; avg_val?: string; val?: string }>) {
+    const next = [...metrics] as HPAMetricResponse[];
+    const m = next[idx];
+    if (!m || m.type !== 'External') return;
+    const current = m.external;
+    const targetType = patch.target_type ?? current.target.type;
+    const target: any = { type: targetType };
+    if (targetType === 'AverageValue') target.average_value = patch.avg_val ?? current.target.average_value ?? '1';
+    if (targetType === 'Value') target.value = patch.val ?? current.target.value ?? '1';
+    let selector: Record<string, string> | undefined = current.selector || undefined;
+    if (typeof patch.selector_text === 'string') {
+      const text = patch.selector_text.trim();
+      if (text === '') selector = undefined;
+      else {
+        selector = {};
+        text.split(',').forEach((kv) => {
+          const [k, v] = kv.split('=');
+          if (k && v) selector![k.trim()] = v.trim();
+        });
+      }
+    }
+    m.external = { metric_name: patch.metric_name ?? current.metric_name, selector, target } as any;
+    setMetrics(next);
+  }
 
   function handleDeleteContainer(target: string) {
     // Use actual pod containers instead of yaml parsing for more reliable validation
@@ -577,10 +659,228 @@ export default function DeploymentDetailPage() {
               <input type="number" min={1} className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm text-text-primary" value={maxReplicas as any} onChange={(e) => setMaxReplicas(e.target.value === "" ? "" : Number(e.target.value))} disabled={!autoEnabled} />
             </div>
             <div className="space-y-1">
-              <label className="text-xs text-text-muted">{t("deploy.autoscaling.cpu")}</label>
-              <input type="number" min={1} max={100} className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm text-text-primary" value={targetCpu as any} onChange={(e) => setTargetCpu(e.target.value === "" ? "" : Number(e.target.value))} disabled={!autoEnabled} />
+              <label className="text-xs text-text-muted">{t("deploy.autoscaling.advanced")}</label>
+              <div className="flex items-center gap-2">
+                <input type="checkbox" checked={useAdvancedMetrics} onChange={(e) => setUseAdvancedMetrics(e.target.checked)} disabled={!autoEnabled} />
+                <span className="text-xs text-text-muted">{t("deploy.autoscaling.advancedHint")}</span>
+              </div>
             </div>
           </div>
+
+          {!useAdvancedMetrics ? (
+            <div className="mt-3 grid gap-3 md:grid-cols-3">
+              <div className="space-y-1">
+                <label className="text-xs text-text-muted">{t("deploy.autoscaling.cpu")}</label>
+                <input type="number" min={1} max={100} className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm text-text-primary" value={targetCpu as any} onChange={(e) => setTargetCpu(e.target.value === "" ? "" : Number(e.target.value))} disabled={!autoEnabled} />
+              </div>
+            </div>
+          ) : (
+            <div className="mt-3 space-y-3">
+              {metrics.map((m, idx) => (
+                <div key={idx} className="rounded border border-border bg-background p-2">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs text-text-muted">{t("deploy.autoscaling.metric.type")}</label>
+                      <select
+                        className="rounded border border-border bg-surface px-2 py-1 text-sm text-text-primary"
+                        value={m.type}
+                        onChange={(e) => updateMetricType(idx, e.target.value as any)}
+                        disabled={!autoEnabled}
+                      >
+                        <option value="Resource">{t("deploy.autoscaling.metric.resource")}</option>
+                        <option value="Pods">{t("deploy.autoscaling.metric.pods")}</option>
+                        <option value="External">{t("deploy.autoscaling.metric.external")}</option>
+                      </select>
+                    </div>
+                    <Button type="button" variant="destructive" onClick={() => removeMetric(idx)} disabled={!autoEnabled}>{t("deploy.autoscaling.remove")}</Button>
+                  </div>
+
+                  {m.type === 'Resource' && (
+                    <div className="grid gap-3 md:grid-cols-3">
+                      <div className="space-y-1">
+                        <label className="text-xs text-text-muted">{t("deploy.autoscaling.resource.name")}</label>
+                        <select
+                          className="w-full rounded border border-border bg-surface px-2 py-1 text-sm text-text-primary"
+                          value={(m as any).resource?.name ?? 'cpu'}
+                          onChange={(e) => updateResourceMetric(idx, { name: e.target.value })}
+                          disabled={!autoEnabled}
+                        >
+                          <option value="cpu">cpu</option>
+                          <option value="memory">memory</option>
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs text-text-muted">{t("deploy.autoscaling.target.type")}</label>
+                        <select
+                          className="w-full rounded border border-border bg-surface px-2 py-1 text-sm text-text-primary"
+                          value={(m as any).resource?.target?.type ?? 'Utilization'}
+                          onChange={(e) => updateResourceMetric(idx, { target_type: e.target.value as HPATargetType })}
+                          disabled={!autoEnabled}
+                        >
+                          <option value="Utilization">{t("deploy.autoscaling.target.utilization")}</option>
+                          <option value="AverageValue">{t("deploy.autoscaling.target.averageValue")}</option>
+                          <option value="Value">{t("deploy.autoscaling.target.value")}</option>
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        {((m as any).resource?.target?.type ?? 'Utilization') === 'Utilization' && (
+                          <>
+                            <label className="text-xs text-text-muted">{t("deploy.autoscaling.target.utilization")}</label>
+                            <input
+                              type="number"
+                              min={1}
+                              max={100}
+                              className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm text-text-primary"
+                              value={(m as any).resource?.target?.average_utilization ?? 80}
+                              onChange={(e) => updateResourceMetric(idx, { avg_util: Number(e.target.value) })}
+                              disabled={!autoEnabled}
+                            />
+                          </>
+                        )}
+                        {((m as any).resource?.target?.type ?? '') === 'AverageValue' && (
+                          <>
+                            <label className="text-xs text-text-muted">{t("deploy.autoscaling.target.averageValue")}</label>
+                            <input
+                              className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm text-text-primary"
+                              value={(m as any).resource?.target?.average_value ?? ''}
+                              onChange={(e) => updateResourceMetric(idx, { avg_val: e.target.value })}
+                              disabled={!autoEnabled}
+                            />
+                          </>
+                        )}
+                        {((m as any).resource?.target?.type ?? '') === 'Value' && (
+                          <>
+                            <label className="text-xs text-text-muted">{t("deploy.autoscaling.target.value")}</label>
+                            <input
+                              className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm text-text-primary"
+                              value={(m as any).resource?.target?.value ?? ''}
+                              onChange={(e) => updateResourceMetric(idx, { val: e.target.value })}
+                              disabled={!autoEnabled}
+                            />
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {m.type === 'Pods' && (
+                    <div className="grid gap-3 md:grid-cols-3">
+                      <div className="space-y-1">
+                        <label className="text-xs text-text-muted">{t("deploy.autoscaling.pods.metricName")}</label>
+                        <input
+                          className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm text-text-primary"
+                          value={(m as any).pods?.metric_name ?? ''}
+                          onChange={(e) => updatePodsMetric(idx, { metric_name: e.target.value })}
+                          disabled={!autoEnabled}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs text-text-muted">{t("deploy.autoscaling.target.type")}</label>
+                        <select
+                          className="w-full rounded border border-border bg-surface px-2 py-1 text-sm text-text-primary"
+                          value={(m as any).pods?.target?.type ?? 'AverageValue'}
+                          onChange={(e) => updatePodsMetric(idx, { target_type: e.target.value as HPATargetType })}
+                          disabled={!autoEnabled}
+                        >
+                          <option value="AverageValue">{t("deploy.autoscaling.target.averageValue")}</option>
+                          <option value="Value">{t("deploy.autoscaling.target.value")}</option>
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        {((m as any).pods?.target?.type ?? 'AverageValue') === 'AverageValue' && (
+                          <>
+                            <label className="text-xs text-text-muted">{t("deploy.autoscaling.target.averageValue")}</label>
+                            <input
+                              className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm text-text-primary"
+                              value={(m as any).pods?.target?.average_value ?? ''}
+                              onChange={(e) => updatePodsMetric(idx, { avg_val: e.target.value })}
+                              disabled={!autoEnabled}
+                            />
+                          </>
+                        )}
+                        {((m as any).pods?.target?.type ?? '') === 'Value' && (
+                          <>
+                            <label className="text-xs text-text-muted">{t("deploy.autoscaling.target.value")}</label>
+                            <input
+                              className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm text-text-primary"
+                              value={(m as any).pods?.target?.value ?? ''}
+                              onChange={(e) => updatePodsMetric(idx, { val: e.target.value })}
+                              disabled={!autoEnabled}
+                            />
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {m.type === 'External' && (
+                    <div className="grid gap-3 md:grid-cols-4">
+                      <div className="space-y-1">
+                        <label className="text-xs text-text-muted">{t("deploy.autoscaling.external.metricName")}</label>
+                        <input
+                          className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm text-text-primary"
+                          value={(m as any).external?.metric_name ?? ''}
+                          onChange={(e) => updateExternalMetric(idx, { metric_name: e.target.value })}
+                          disabled={!autoEnabled}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs text-text-muted">selector</label>
+                        <input
+                          className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm text-text-primary"
+                          placeholder="key1=value1,key2=value2"
+                          value={Object.entries((m as any).external?.selector ?? {}).map(([k,v]) => `${k}=${v}`).join(',')}
+                          onChange={(e) => updateExternalMetric(idx, { selector_text: e.target.value })}
+                          disabled={!autoEnabled}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs text-text-muted">{t("deploy.autoscaling.target.type")}</label>
+                        <select
+                          className="w-full rounded border border-border bg-surface px-2 py-1 text-sm text-text-primary"
+                          value={(m as any).external?.target?.type ?? 'AverageValue'}
+                          onChange={(e) => updateExternalMetric(idx, { target_type: e.target.value as HPATargetType })}
+                          disabled={!autoEnabled}
+                        >
+                          <option value="AverageValue">{t("deploy.autoscaling.target.averageValue")}</option>
+                          <option value="Value">{t("deploy.autoscaling.target.value")}</option>
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        {((m as any).external?.target?.type ?? 'AverageValue') === 'AverageValue' && (
+                          <>
+                            <label className="text-xs text-text-muted">{t("deploy.autoscaling.target.averageValue")}</label>
+                            <input
+                              className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm text-text-primary"
+                              value={(m as any).external?.target?.average_value ?? ''}
+                              onChange={(e) => updateExternalMetric(idx, { avg_val: e.target.value })}
+                              disabled={!autoEnabled}
+                            />
+                          </>
+                        )}
+                        {((m as any).external?.target?.type ?? '') === 'Value' && (
+                          <>
+                            <label className="text-xs text-text-muted">{t("deploy.autoscaling.target.value")}</label>
+                            <input
+                              className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm text-text-primary"
+                              value={(m as any).external?.target?.value ?? ''}
+                              onChange={(e) => updateExternalMetric(idx, { val: e.target.value })}
+                              disabled={!autoEnabled}
+                            />
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+              <div className="flex items-center gap-2">
+                <Button type="button" variant="outline" onClick={() => addMetric('Resource')} disabled={!autoEnabled}>{t("deploy.autoscaling.metric.resource")}</Button>
+                <Button type="button" variant="outline" onClick={() => addMetric('Pods')} disabled={!autoEnabled}>{t("deploy.autoscaling.metric.pods")}</Button>
+                <Button type="button" variant="outline" onClick={() => addMetric('External')} disabled={!autoEnabled}>{t("deploy.autoscaling.metric.external")}</Button>
+              </div>
+            </div>
+          )}
           <div className="mt-4 flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => setIsStrategyOpen(false)}>{t("actions.cancel")}</Button>
             <Button type="button" onClick={() => saveStrategyMut.mutate()}>{t("deploy.strategy.save")}</Button>

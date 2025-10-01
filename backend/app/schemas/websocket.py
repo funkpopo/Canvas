@@ -20,6 +20,15 @@ class EventType(str, Enum):
     POD_ADDED = "pod_added"
     POD_MODIFIED = "pod_modified"
     POD_DELETED = "pod_deleted"
+    SERVICE_ADDED = "service_added"
+    SERVICE_MODIFIED = "service_modified"
+    SERVICE_DELETED = "service_deleted"
+    INGRESS_ADDED = "ingress_added"
+    INGRESS_MODIFIED = "ingress_modified"
+    INGRESS_DELETED = "ingress_deleted"
+    NODE_ADDED = "node_added"
+    NODE_MODIFIED = "node_modified"
+    NODE_DELETED = "node_deleted"
 
 
 class WebSocketMessage(BaseModel):
@@ -32,4 +41,3 @@ class WebSocketMessage(BaseModel):
 
     class Config:
         use_enum_values = True
-

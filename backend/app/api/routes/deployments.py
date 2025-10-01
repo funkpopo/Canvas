@@ -213,6 +213,7 @@ async def put_deployment_autoscaling(
         payload.min_replicas,
         payload.max_replicas,
         payload.target_cpu_utilization,
+        payload.metrics,
     )
     if not ok:
         raise HTTPException(status_code=400, detail=msg or "Failed to update autoscaling")
