@@ -1368,6 +1368,11 @@ const dictZh = {
   "topbar.change": "切换",
   "topbar.online": "在线",
 
+  // 选项卡
+  "tabs.overview": "概览",
+  "tabs.logs": "日志",
+  "tabs.terminal": "终端",
+
   // 端口转发（通用/Pod）
   "tabs.portForward": "端口转发",
   "actions.portForward": "端口转发",
