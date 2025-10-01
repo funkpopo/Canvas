@@ -19,5 +19,5 @@ class NodeMetric(Base):
 
     __table_args__ = (
         Index("ix_node_metrics_key_ts", "node", "ts"),
+        Index("ix_node_metrics_ts", "ts"),
     )
-

@@ -35,6 +35,7 @@ from app.schemas.kubernetes import (
     StorageClassSummary,
     StorageClassCreate,
     PersistentVolumeClaimSummary,
+    PersistentVolumeDetail,
     VolumeFileEntry,
     FileContent,
     PodSummary,
@@ -1091,14 +1092,16 @@ class KubernetesService:
             except Exception:
                 # create it
                 pass
+            image = self.settings.pvc_browser_image if hasattr(self.settings, "pvc_browser_image") else "busybox:1.36"
+            cont_name = self.settings.pvc_browser_container_name if hasattr(self.settings, "pvc_browser_container_name") else "sh"
             body = client.V1Pod(
                 metadata=client.V1ObjectMeta(name=name, labels={"app": "canvas-pvc-browser"}),
                 spec=client.V1PodSpec(
                     restart_policy="Never",
                     containers=[
                         client.V1Container(
-                            name="sh",
-                            image="busybox:1.36",
+                            name=cont_name,
+                            image=image,
                             command=["sh", "-c", "sleep 43200"],
                             volume_mounts=[client.V1VolumeMount(name="data", mount_path="/data")],
                         )
@@ -1152,6 +1155,8 @@ class KubernetesService:
                     size = int(parts[4])
                 except Exception:
                     size = None
+                owner = parts[2] if len(parts) > 2 else None
+                group = parts[3] if len(parts) > 3 else None
                 name = " ".join(parts[8:]) if len(parts) > 8 else parts[-1]
                 if name in (".", ".."):
                     continue
@@ -1166,6 +1171,8 @@ class KubernetesService:
                         path=(norm.rstrip("/") + "/" + name).replace("//", "/"),
                         is_dir=is_dir,
                         permissions=perm,
+                        owner=owner,
+                        group=group,
                         size=size,
                         mtime=mtime,
                     )
@@ -1218,6 +1225,31 @@ class KubernetesService:
             return True, None
         except Exception as exc:  # pragma: no cover
             logger.warning("kubernetes.rename_path_error", error=str(exc))
+            return False, str(exc)
+
+    async def make_dir(self, namespace: str, pvc: str, path: str) -> tuple[bool, str | None]:
+        await self._rate_limiter.acquire()
+        try:
+            pod = await self._ensure_browser_pod(namespace, pvc)
+            norm = "/" + path.strip("/") if path and path != "/" else "/"
+            full = f"/data{norm}"
+            await self._exec_in_pod(namespace, pod, ["sh", "-c", f"mkdir -p {full} || true"])
+            return True, None
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.mkdir_error", error=str(exc))
+            return False, str(exc)
+
+    async def delete_path(self, namespace: str, pvc: str, path: str, recursive: bool = True) -> tuple[bool, str | None]:
+        await self._rate_limiter.acquire()
+        try:
+            pod = await self._ensure_browser_pod(namespace, pvc)
+            norm = "/" + path.strip("/") if path and path != "/" else "/"
+            full = f"/data{norm}"
+            cmd = f"rm {'-rf' if recursive else ''} {full} || true".strip()
+            await self._exec_in_pod(namespace, pod, ["sh", "-c", cmd])
+            return True, None
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.delete_path_error", error=str(exc))
             return False, str(exc)
 
     async def stream_events(self) -> list[EventMessage]:
@@ -1307,6 +1339,73 @@ class KubernetesService:
         except Exception as exc:  # pragma: no cover
             logger.warning("kubernetes.list_ingresses_error", error=str(exc))
             return []
+
+    async def get_pv_detail(self, name: str) -> PersistentVolumeDetail | None:
+        await self._rate_limiter.acquire()
+        try:
+            await self._ensure_clients()
+            storage_v1 = client.CoreV1Api(self._api_client)
+
+            def _do() -> PersistentVolumeDetail | None:
+                try:
+                    pv = storage_v1.read_persistent_volume(name)
+                except Exception:
+                    return None
+                md = getattr(pv, "metadata", None)
+                spec = getattr(pv, "spec", None)
+                stat = getattr(pv, "status", None)
+                cap = None
+                try:
+                    capd = getattr(pv.status, "capacity", None) or {}
+                    cap = str(capd.get("storage")) if capd else None
+                except Exception:
+                    cap = None
+                access = [str(x) for x in (getattr(spec, "access_modes", None) or [])]
+                claim_ref = None
+                try:
+                    cr = getattr(spec, "claim_ref", None)
+                    if cr and getattr(cr, "name", None) and getattr(cr, "namespace", None):
+                        claim_ref = f"{cr.namespace}/{cr.name}"
+                except Exception:
+                    claim_ref = None
+                return PersistentVolumeDetail(
+                    name=getattr(md, "name", name) if md else name,
+                    capacity=cap,
+                    access_modes=access,
+                    reclaim_policy=getattr(spec, "persistent_volume_reclaim_policy", None),
+                    storage_class=getattr(spec, "storage_class_name", None),
+                    status=getattr(stat, "phase", None) if stat else None,
+                    claim_ref=claim_ref,
+                    created_at=getattr(md, "creation_timestamp", None) if md else None,
+                )
+
+            return await asyncio.to_thread(_do)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.get_pv_detail_error", error=str(exc))
+            return None
+
+    async def expand_pvc(self, namespace: str, name: str, new_size: str) -> tuple[bool, str | None]:
+        await self._rate_limiter.acquire()
+        try:
+            core_v1, _ = await self._ensure_clients()
+
+            def _do() -> None:
+                body = {
+                    "spec": {
+                        "resources": {
+                            "requests": {
+                                "storage": new_size,
+                            }
+                        }
+                    }
+                }
+                core_v1.patch_namespaced_persistent_volume_claim(name=name, namespace=namespace, body=body)
+
+            await asyncio.to_thread(_do)
+            return True, None
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.expand_pvc_error", error=str(exc))
+            return False, str(exc)
 
     async def get_ingress_yaml(self, namespace: str, name: str) -> str | None:
         await self._rate_limiter.acquire()

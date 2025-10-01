@@ -13,6 +13,7 @@ export const queryKeys = {
   storageClasses: ["storage", "classes"] as const,
   pvcs: (ns?: string) => ["storage", "pvcs", ns ?? "all"] as const,
   volumeList: (ns: string, pvc: string, path: string) => ["storage", "browser", ns, pvc, path] as const,
+  pvDetail: (name: string) => ["storage", "pv", name] as const,
   nodes: ["cluster", "nodes"] as const,
   nodeDetail: (name: string) => ["nodes", name, "detail"] as const,
   nodeEvents: (name: string) => ["nodes", name, "events"] as const,
@@ -536,6 +537,8 @@ export interface VolumeFileEntryResponse {
   path: string;
   is_dir: boolean;
   permissions?: string | null;
+  owner?: string | null;
+  group?: string | null;
   size?: number | null;
   mtime?: string | null;
 }
@@ -577,6 +580,51 @@ export function downloadVolumePath(ns: string, pvc: string, path: string): strin
   const pv = encodeURIComponent(pvc);
   const params = new URLSearchParams({ path });
   return `${API_BASE_URL}/storage/browser/${en}/${pv}/download?${params.toString()}`;
+}
+
+export function createVolumeDir(ns: string, pvc: string, path: string): Promise<OperationResultResponse> {
+  const en = encodeURIComponent(ns);
+  const pv = encodeURIComponent(pvc);
+  const params = new URLSearchParams({ path });
+  return request<OperationResultResponse>(`/storage/browser/${en}/${pv}/mkdir?${params.toString()}`, { method: "POST" });
+}
+
+export function deleteVolumePath(ns: string, pvc: string, path: string, recursive: boolean = true): Promise<OperationResultResponse> {
+  const en = encodeURIComponent(ns);
+  const pv = encodeURIComponent(pvc);
+  const params = new URLSearchParams({ path, recursive: String(Boolean(recursive)) });
+  return request<OperationResultResponse>(`/storage/browser/${en}/${pv}/delete?${params.toString()}`, { method: "DELETE" });
+}
+
+export function downloadVolumeZip(ns: string, pvc: string, paths: string[]): string {
+  const en = encodeURIComponent(ns);
+  const pv = encodeURIComponent(pvc);
+  const params = new URLSearchParams();
+  for (const p of paths) params.append("paths", p);
+  return `${API_BASE_URL}/storage/browser/${en}/${pv}/download-zip?${params.toString()}`;
+}
+
+export interface PersistentVolumeDetailResponse {
+  name: string;
+  capacity?: string | null;
+  access_modes: string[];
+  reclaim_policy?: string | null;
+  storage_class?: string | null;
+  status?: string | null;
+  claim_ref?: string | null;
+  created_at?: string | null;
+}
+
+export function fetchPvDetail(name: string): Promise<PersistentVolumeDetailResponse | null> {
+  const nm = encodeURIComponent(name);
+  return request<PersistentVolumeDetailResponse | null>(`/storage/pv/${nm}`);
+}
+
+export function expandPvc(namespace: string, name: string, newSize: string): Promise<OperationResultResponse> {
+  const en = encodeURIComponent(namespace);
+  const nm = encodeURIComponent(name);
+  const params = new URLSearchParams({ new_size: newSize });
+  return request<OperationResultResponse>(`/storage/pvcs/${en}/${nm}/expand?${params.toString()}`, { method: "POST" });
 }
 
 export function fetchNodes(): Promise<NodeSummaryResponse[]> {

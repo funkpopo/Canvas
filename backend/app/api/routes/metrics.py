@@ -10,6 +10,9 @@ from app.schemas.kubernetes import (
     ContainerMetricSeries,
     NodeMetricPoint,
     NodeMetricSeries,
+    PodAggregatePoint,
+    PodAggregateSeries,
+    NamespaceAggregateSeries,
 )
 from app.services.kube_client import KubernetesService
 
@@ -140,5 +143,94 @@ async def node_series(
     return NodeMetricSeries(
         has_metrics=bool(status.installed and status.healthy),
         node=name,
+        points=points,
+    )
+
+
+@router.get(
+    "/aggregate/pod",
+    response_model=PodAggregateSeries,
+    summary="Aggregate CPU/Memory usage across containers of a Pod",
+)
+async def aggregate_pod(
+    namespace: str = Query(..., description="Pod namespace"),
+    pod: str = Query(..., description="Pod name"),
+    window: str = Query(_WINDOW_DEFAULT, description="Time window: 10m,30m,1h,3h,6h,12h"),
+    session: AsyncSession = Depends(get_session),
+    service: KubernetesService = Depends(get_kubernetes_service),
+) -> PodAggregateSeries:
+    status = await service.get_metrics_server_status()
+    minutes = _WINDOWS_ALLOWED.get(window, _WINDOWS_ALLOWED[_WINDOW_DEFAULT])
+    now = datetime.now(tz=timezone.utc)
+    since = now - timedelta(minutes=minutes)
+
+    stmt = (
+        select(ContainerMetric)
+        .where(
+            ContainerMetric.namespace == namespace,
+            ContainerMetric.pod == pod,
+            ContainerMetric.ts >= since,
+        )
+        .order_by(ContainerMetric.ts.asc())
+    )
+    rows = (await session.execute(stmt)).scalars().all()
+    bucket: dict[datetime, tuple[int, int]] = {}
+    for r in rows:
+        k = r.ts
+        cpu = r.cpu_mcores or 0
+        mem = r.memory_bytes or 0
+        if k in bucket:
+            prev = bucket[k]
+            bucket[k] = (prev[0] + cpu, prev[1] + mem)
+        else:
+            bucket[k] = (cpu, mem)
+    points = [PodAggregatePoint(ts=ts, cpu_mcores=cpu, memory_bytes=mem) for ts, (cpu, mem) in sorted(bucket.items())]
+    return PodAggregateSeries(
+        has_metrics=bool(status.installed and status.healthy),
+        namespace=namespace,
+        pod=pod,
+        points=points,
+    )
+
+
+@router.get(
+    "/aggregate/namespace",
+    response_model=NamespaceAggregateSeries,
+    summary="Aggregate CPU/Memory usage across Pods in a Namespace",
+)
+async def aggregate_namespace(
+    namespace: str = Query(..., description="Namespace"),
+    window: str = Query(_WINDOW_DEFAULT, description="Time window: 10m,30m,1h,3h,6h,12h"),
+    session: AsyncSession = Depends(get_session),
+    service: KubernetesService = Depends(get_kubernetes_service),
+) -> NamespaceAggregateSeries:
+    status = await service.get_metrics_server_status()
+    minutes = _WINDOWS_ALLOWED.get(window, _WINDOWS_ALLOWED[_WINDOW_DEFAULT])
+    now = datetime.now(tz=timezone.utc)
+    since = now - timedelta(minutes=minutes)
+
+    stmt = (
+        select(ContainerMetric)
+        .where(
+            ContainerMetric.namespace == namespace,
+            ContainerMetric.ts >= since,
+        )
+        .order_by(ContainerMetric.ts.asc())
+    )
+    rows = (await session.execute(stmt)).scalars().all()
+    bucket: dict[datetime, tuple[int, int]] = {}
+    for r in rows:
+        k = r.ts
+        cpu = r.cpu_mcores or 0
+        mem = r.memory_bytes or 0
+        if k in bucket:
+            prev = bucket[k]
+            bucket[k] = (prev[0] + cpu, prev[1] + mem)
+        else:
+            bucket[k] = (cpu, mem)
+    points = [PodAggregatePoint(ts=ts, cpu_mcores=cpu, memory_bytes=mem) for ts, (cpu, mem) in sorted(bucket.items())]
+    return NamespaceAggregateSeries(
+        has_metrics=bool(status.installed and status.healthy),
+        namespace=namespace,
         points=points,
     )

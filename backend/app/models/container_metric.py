@@ -21,5 +21,6 @@ class ContainerMetric(Base):
 
     __table_args__ = (
         Index("ix_container_metrics_key_ts", "namespace", "pod", "container", "ts"),
+        Index("ix_container_metrics_ns_pod_ts", "namespace", "pod", "ts"),
+        Index("ix_container_metrics_ts", "ts"),
     )
-

@@ -627,6 +627,9 @@ const dictEn = {
   "storage.browser.actions": "Actions",
   "storage.browser.empty": "No entries",
   "storage.browser.open": "Open",
+  "storage.browser.newDir": "New folder",
+  "storage.browser.downloadSelected": "Download selected (ZIP)",
+  "storage.browser.deleteSelected": "Delete selected",
   "storage.rename": "Rename",
   "storage.rename.prompt": "New name",
   "storage.edit": "Edit",
@@ -636,6 +639,8 @@ const dictEn = {
   "storage.delete": "Delete",
   "storage.size": "Size",
   "storage.accessModes": "Access modes",
+  "storage.expand": "Expand",
+  "storage.expand.prompt": "New size (e.g., 10Gi)",
   "status.status": "Status",
 
   // Alerts/errors/confirmations
@@ -1353,6 +1358,9 @@ const dictZh = {
   "storage.browser.actions": "操作",
   "storage.browser.empty": "无文件或目录",
   "storage.browser.open": "打开",
+  "storage.browser.newDir": "新建目录",
+  "storage.browser.downloadSelected": "下载选中（ZIP）",
+  "storage.browser.deleteSelected": "删除选中",
   "storage.rename": "重命名",
   "storage.rename.prompt": "新名称",
   "storage.edit": "编辑",
@@ -1362,6 +1370,8 @@ const dictZh = {
   "storage.delete": "删除",
   "storage.size": "大小",
   "storage.accessModes": "访问模式",
+  "storage.expand": "扩容",
+  "storage.expand.prompt": "新容量（例如 10Gi）",
   "status.status": "状态",
 
   // Network - Ingresses

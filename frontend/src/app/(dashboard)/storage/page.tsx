@@ -19,6 +19,10 @@ import {
   readVolumeFile,
   renameVolumePath,
   writeVolumeFile,
+  createVolumeDir,
+  deleteVolumePath,
+  downloadVolumeZip,
+  expandPvc,
   type PersistentVolumeClaimSummaryResponse,
   type StorageClassCreatePayload,
   type StorageClassSummaryResponse,
@@ -184,6 +188,7 @@ function VolumeBrowser({ ns, pvc, onClose }: { ns: string; pvc: string; onClose:
   const [path, setPath] = useState<string>("/");
   const [editPath, setEditPath] = useState<string | null>(null);
   const [editText, setEditText] = useState<string>("");
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
   const queryClient = useQueryClient();
 
   const { data: list } = useQuery({ queryKey: queryKeys.volumeList(ns, pvc, path), queryFn: () => fetchVolumeList(ns, pvc, path) });
@@ -231,6 +236,28 @@ function VolumeBrowser({ ns, pvc, onClose }: { ns: string; pvc: string; onClose:
     setPath(p || "/");
   };
 
+  const toggleSelect = (p: string) => {
+    setSelected((prev) => ({ ...prev, [p]: !prev[p] }));
+  };
+
+  const selectedPaths = useMemo(() => Object.keys(selected).filter((k) => selected[k]), [selected]);
+
+  const newDir = async () => {
+    const name = prompt(t("storage.browser.newDir"));
+    if (!name) return;
+    const full = path.endsWith("/") ? `${path}${name}` : `${path}/${name}`;
+    await createVolumeDir(ns, pvc, full);
+    reload();
+  };
+
+  const deleteSelected = async () => {
+    for (const p of selectedPaths) {
+      await deleteVolumePath(ns, pvc, p, true);
+    }
+    setSelected({});
+    reload();
+  };
+
   return (
     <Modal open onClose={onClose} title={`${t("storage.browser.title")} ${ns}/${pvc}`} className="max-w-5xl">
       <div className="grid grid-cols-3 gap-4">
@@ -251,11 +278,29 @@ function VolumeBrowser({ ns, pvc, onClose }: { ns: string; pvc: string; onClose:
         <div className="col-span-2">
           <div className="mb-2 flex items-center justify-between">
             <div className="text-xs text-text-muted">{t("storage.browser.path")}: <span className="font-mono text-text-primary">{path}</span></div>
+            <div className="flex items-center gap-2">
+              <button className="text-xs text-primary" onClick={newDir}>{t("storage.browser.newDir")}</button>
+              <a className="text-xs text-primary" href={downloadVolumeZip(ns, pvc, selectedPaths)} target="_blank" rel="noreferrer">{t("storage.browser.downloadSelected")}</a>
+              <button className="text-xs text-error" onClick={deleteSelected}>{t("storage.browser.deleteSelected")}</button>
+            </div>
           </div>
           <div className="overflow-auto border border-border rounded-md">
             <table className="w-full text-sm">
               <thead className="bg-muted text-text-muted">
                 <tr>
+                  <th className="px-2 py-1 text-left">
+                    <input
+                      type="checkbox"
+                      checked={selectedPaths.length > 0 && selectedPaths.length === (list?.length ?? 0)}
+                      onChange={(e) => {
+                        const all: Record<string, boolean> = {};
+                        if (e.target.checked) {
+                          (list ?? []).forEach((it) => (all[it.path] = true));
+                        }
+                        setSelected(all);
+                      }}
+                    />
+                  </th>
                   <th className="px-2 py-1 text-left">{t("storage.browser.name")}</th>
                   <th className="px-2 py-1 text-left">{t("storage.browser.perms")}</th>
                   <th className="px-2 py-1 text-left">{t("storage.browser.size")}</th>
@@ -266,12 +311,13 @@ function VolumeBrowser({ ns, pvc, onClose }: { ns: string; pvc: string; onClose:
               <tbody>
                 {(list ?? []).length === 0 ? (
                   <tr>
-                    <td className="px-2 py-2 text-text-muted" colSpan={5}>{t("storage.browser.empty")}</td>
+                    <td className="px-2 py-2 text-text-muted" colSpan={6}>{t("storage.browser.empty")}</td>
                   </tr>
                 ) : (
                   <>
                     {dirs.map((e) => (
                       <tr key={e.path} className="hover:bg-muted/50">
+                        <td className="px-2 py-1"><input type="checkbox" checked={!!selected[e.path]} onChange={() => toggleSelect(e.path)} /></td>
                         <td className="px-2 py-1 font-medium">📁 {e.name}</td>
                         <td className="px-2 py-1">{e.permissions ?? ""}</td>
                         <td className="px-2 py-1">-</td>
@@ -280,11 +326,14 @@ function VolumeBrowser({ ns, pvc, onClose }: { ns: string; pvc: string; onClose:
                           <button className="text-xs text-primary" onClick={() => setPath(e.path)}>{t("storage.browser.open")}</button>
                           <span className="mx-2">•</span>
                           <button className="text-xs text-primary" onClick={() => doRename(e.path)}>{t("storage.rename")}</button>
+                          <span className="mx-2">•</span>
+                          <button className="text-xs text-error" onClick={() => deleteVolumePath(ns, pvc, e.path, true).then(reload)}>{t("storage.delete")}</button>
                         </td>
                       </tr>
                     ))}
                     {files.map((e) => (
                       <tr key={e.path} className="hover:bg-muted/50">
+                        <td className="px-2 py-1"><input type="checkbox" checked={!!selected[e.path]} onChange={() => toggleSelect(e.path)} /></td>
                         <td className="px-2 py-1">📄 {e.name}</td>
                         <td className="px-2 py-1">{e.permissions ?? ""}</td>
                         <td className="px-2 py-1">{e.size ?? ""}</td>
@@ -295,6 +344,8 @@ function VolumeBrowser({ ns, pvc, onClose }: { ns: string; pvc: string; onClose:
                           <a className="text-xs text-primary" href={downloadVolumePath(ns, pvc, e.path)} target="_blank" rel="noreferrer">{t("storage.download")}</a>
                           <span className="mx-2">•</span>
                           <button className="text-xs text-primary" onClick={() => doRename(e.path)}>{t("storage.rename")}</button>
+                          <span className="mx-2">•</span>
+                          <button className="text-xs text-error" onClick={() => deleteVolumePath(ns, pvc, e.path, false).then(reload)}>{t("storage.delete")}</button>
                         </td>
                       </tr>
                     ))}
@@ -452,6 +503,13 @@ export default function StoragePage() {
                           <td className="px-2 py-1">{(p.access_modes ?? []).join(", ")}</td>
                           <td className="px-2 py-1">
                             <button className="text-xs text-primary" onClick={() => setBrowser({ ns: p.namespace, pvc: p.name })}>{t("storage.browse")}</button>
+                            <span className="mx-2">•</span>
+                            <button className="text-xs text-primary" onClick={async () => {
+                              const size = prompt(t("storage.expand.prompt"));
+                              if (!size) return;
+                              await expandPvc(p.namespace, p.name, size);
+                              queryClient.invalidateQueries({ queryKey: queryKeys.pvcs() });
+                            }}>{t("storage.expand")}</button>
                           </td>
                         </tr>
                       ))

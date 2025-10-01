@@ -225,6 +225,26 @@ class NodeMetricSeries(BaseModel):
     points: list[NodeMetricPoint]
 
 
+# Aggregated metrics
+class PodAggregatePoint(BaseModel):
+    ts: datetime
+    cpu_mcores: int
+    memory_bytes: int
+
+
+class PodAggregateSeries(BaseModel):
+    has_metrics: bool = False
+    namespace: str
+    pod: str
+    points: list[PodAggregatePoint]
+
+
+class NamespaceAggregateSeries(BaseModel):
+    has_metrics: bool = False
+    namespace: str
+    points: list[PodAggregatePoint]
+
+
 class OperationResult(BaseModel):
     ok: bool
     message: str | None = None
@@ -327,6 +347,17 @@ class PersistentVolumeClaimSummary(BaseModel):
     created_at: datetime | None = None
 
 
+class PersistentVolumeDetail(BaseModel):
+    name: str
+    capacity: str | None = None
+    access_modes: list[str] = Field(default_factory=list)
+    reclaim_policy: str | None = None
+    storage_class: str | None = None
+    status: str | None = None
+    claim_ref: str | None = None
+    created_at: datetime | None = None
+
+
 # Services
 class ServicePort(BaseModel):
     name: str | None = None
@@ -350,6 +381,8 @@ class VolumeFileEntry(BaseModel):
     path: str
     is_dir: bool
     permissions: str | None = None
+    owner: str | None = None
+    group: str | None = None
     size: int | None = None
     mtime: str | None = None
 

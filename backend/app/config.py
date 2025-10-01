@@ -27,6 +27,12 @@ class Settings(BaseSettings):
     # Optional Fernet key for encrypting sensitive fields (ClusterConfig)
     # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
     fernet_key: str | None = None
+    # PVC browser pod configuration
+    pvc_browser_image: str = Field(default="busybox:1.36", description="Image for the ephemeral PVC browser pod")
+    pvc_browser_container_name: str = Field(default="sh", description="Container name for the PVC browser pod")
+    # Optional Helm integration (server-side). Disabled by default.
+    helm_enabled: bool = Field(default=False, description="Enable server-side Helm CLI integration")
+    helm_binary: str = Field(default="helm", description="Path to Helm binary")
 
     @computed_field
     @property
