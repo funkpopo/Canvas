@@ -43,7 +43,7 @@ export default function PodDetailPage() {
   const { data: metricsStatus } = useQuery({ queryKey: queryKeys.metricsStatus, queryFn: fetchMetricsStatus });
 
   const [selectedContainer, setSelectedContainer] = useState<string>("");
-  const [window, setWindow] = useState<string>("10m");
+  const [timeWindow, setTimeWindow] = useState<string>("10m");
 
   // Derive container name list for this pod
   const containersForPod = useMemo(() => (pod?.containers ?? []).map((c) => c.name), [pod]);
@@ -61,8 +61,8 @@ export default function PodDetailPage() {
   }, [pod, containersForPod, selectedContainer]);
 
   const { data: series } = useQuery<ContainerMetricSeriesResponse>({
-    queryKey: queryKeys.containerSeries(ns, name, selectedContainer, window),
-    queryFn: () => fetchContainerSeries(ns, name, selectedContainer, window),
+    queryKey: queryKeys.containerSeries(ns, name, selectedContainer, timeWindow),
+    queryFn: () => fetchContainerSeries(ns, name, selectedContainer, timeWindow),
     enabled: Boolean(selectedContainer),
     staleTime: 10_000,
   });
@@ -185,7 +185,7 @@ export default function PodDetailPage() {
                   <CardDescription>{t("deploy.cont.desc")}</CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
-                  <select value={window} onChange={(e) => setWindow(e.target.value)} className="rounded-md border border-border bg-surface px-2 py-1 text-sm">
+              <select value={timeWindow} onChange={(e) => setTimeWindow(e.target.value)} className="rounded-md border border-border bg-surface px-2 py-1 text-sm">
                     <option value="10m">{t("deploy.cont.range.10m")}</option>
                     <option value="30m">{t("deploy.cont.range.30m")}</option>
                     <option value="1h">{t("deploy.cont.range.1h")}</option>

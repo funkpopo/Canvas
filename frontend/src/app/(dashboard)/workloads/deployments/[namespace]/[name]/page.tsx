@@ -509,6 +509,7 @@ export default function DeploymentDetailPage() {
       return;
     }
     if (!confirm(t("confirm.cont.delete", { name: target }))) return;
+    const containers = extractContainersFromYaml(yaml);
     const next = containers.filter((c) => c.name !== target);
     const newYaml = replaceContainersInYaml(yaml, next);
     updateDeploymentYaml(ns, name, newYaml)

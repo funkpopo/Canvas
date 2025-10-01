@@ -8,11 +8,11 @@ let XTerm: any = null;
 let FitAddonMod: any = null;
 const loadXterm = async () => {
   if (!XTerm) {
-    const mod = await import("xterm");
+    const mod = await import("@xterm/xterm");
     XTerm = mod.Terminal;
   }
   if (!FitAddonMod) {
-    FitAddonMod = (await import("xterm-addon-fit")).FitAddon;
+    FitAddonMod = (await import("@xterm/addon-fit")).FitAddon;
   }
 };
 
