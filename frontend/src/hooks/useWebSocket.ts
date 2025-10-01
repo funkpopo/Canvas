@@ -10,8 +10,8 @@ interface UseWebSocketReturn {
 export function useWebSocket(config: WebSocketConfig): UseWebSocketReturn {
   const [status, setStatus] = useState<WebSocketStatus>('connecting');
   const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
-  const heartbeatIntervalRef = useRef<NodeJS.Timeout>();
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
+  const heartbeatIntervalRef = useRef<NodeJS.Timeout | undefined>(undefined);
   const reconnectAttemptsRef = useRef(0);
   const subscribersRef = useRef<Set<(message: WebSocketMessage) => void>>(new Set());
   const isUnmountedRef = useRef(false);

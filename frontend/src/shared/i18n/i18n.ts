@@ -110,6 +110,7 @@ const dictEn = {
   "pods.empty": "No pods found.",
   "pods.deleteSelected": "Delete selected",
   "pods.forceDelete": "Force delete",
+  "pods.groupByNamespace": "Group by namespace",
   "pods.confirm.deleteMany": "Delete pods: {names}?",
   "pods.deleteDialog.title": "Delete Pods",
   "pods.deleteDialog.desc": "Configure grace period and force delete.",
@@ -881,6 +882,7 @@ const dictZh = {
   "pods.empty": "暂无容器组",
   "pods.deleteSelected": "删除选中",
   "pods.forceDelete": "强制删除",
+  "pods.groupByNamespace": "按命名空间分组",
   "pods.confirm.deleteMany": "删除以下容器组：{names}？",
   "pods.deleteDialog.title": "删除容器组",
   "pods.deleteDialog.desc": "配置宽限期（Grace Period）与强制删除。",
@@ -1536,7 +1538,6 @@ const dictZh = {
   "port.svc.port": "Service 端口",
   
   // 审计
-  "sidebar.audit": "审计",
   "audit.eyebrow": "安全",
   "audit.title": "审计日志",
   "audit.desc": "关键变更的不可变记录",
