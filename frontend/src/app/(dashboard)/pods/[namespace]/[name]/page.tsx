@@ -121,9 +121,9 @@ export default function PodDetailPage() {
         <>
           <Tabs defaultValue="overview" className="w-full">
             <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="overview">Overview</TabsTrigger>
-              <TabsTrigger value="logs">Logs</TabsTrigger>
-              <TabsTrigger value="terminal">Terminal</TabsTrigger>
+              <TabsTrigger value="overview">{t("tabs.overview")}</TabsTrigger>
+              <TabsTrigger value="logs">{t("tabs.logs")}</TabsTrigger>
+              <TabsTrigger value="terminal">{t("tabs.terminal")}</TabsTrigger>
             </TabsList>
 
             <TabsContent value="overview" className="space-y-6">
@@ -236,12 +236,12 @@ export default function PodDetailPage() {
             <TabsContent value="logs" className="space-y-4">
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">Logs</CardTitle>
-                  <CardDescription>Select a container and stream logs.</CardDescription>
+                  <CardTitle className="text-base">{t("pod.logs.title")}</CardTitle>
+                  <CardDescription>{t("pod.logs.desc")}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="flex items-center gap-2 text-sm">
-                    <label>Container</label>
+                    <label>{t("deploy.cont.container")}</label>
                     <select
                       value={selectedContainer}
                       onChange={(e) => setSelectedContainer(e.target.value)}
@@ -265,12 +265,12 @@ export default function PodDetailPage() {
             <TabsContent value="terminal" className="space-y-4">
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">Terminal</CardTitle>
-                  <CardDescription>Interactive shell into the container.</CardDescription>
+                  <CardTitle className="text-base">{t("pod.term.title")}</CardTitle>
+                  <CardDescription>{t("pod.term.desc")}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="flex items-center gap-2 text-sm">
-                    <label>Container</label>
+                    <label>{t("deploy.cont.container")}</label>
                     <select
                       value={selectedContainer}
                       onChange={(e) => setSelectedContainer(e.target.value)}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useI18n } from "@/shared/i18n/i18n";
 
 interface PodLogsProps {
   apiBase: string; // e.g., http://localhost:8000
@@ -10,6 +11,7 @@ interface PodLogsProps {
 }
 
 export function PodLogs({ apiBase, namespace, name, container }: PodLogsProps) {
+  const { t } = useI18n();
   const [follow, setFollow] = useState(true);
   const [tail, setTail] = useState<number | undefined>(500);
   const [since, setSince] = useState<number | undefined>(undefined);
@@ -77,10 +79,10 @@ export function PodLogs({ apiBase, namespace, name, container }: PodLogsProps) {
       <div className="flex items-center gap-3 text-sm">
         <label className="flex items-center gap-2">
           <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} />
-          Follow
+          {t("pod.logs.follow")}
         </label>
         <label className="flex items-center gap-2">
-          Tail
+          {t("pod.logs.tail")}
           <input
             type="number"
             className="w-24 rounded border border-border bg-surface px-2 py-1"
@@ -93,7 +95,7 @@ export function PodLogs({ apiBase, namespace, name, container }: PodLogsProps) {
           />
         </label>
         <label className="flex items-center gap-2">
-          Since (s)
+          {t("pod.logs.since")}
           <input
             type="number"
             className="w-24 rounded border border-border bg-surface px-2 py-1"
@@ -111,8 +113,7 @@ export function PodLogs({ apiBase, namespace, name, container }: PodLogsProps) {
         ref={preRef}
         className="h-80 overflow-auto rounded border border-border bg-surface-raised p-3 text-xs text-text-primary"
       />
-      {isStreaming && <div className="text-xs text-text-muted">Streaming...</div>}
+      {isStreaming && <div className="text-xs text-text-muted">{t("pod.logs.streaming")}</div>}
     </div>
   );
 }
-

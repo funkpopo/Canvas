@@ -11,6 +11,7 @@ const dictEn = {
   "common.synced": "Synced",
   "common.of": "{used} of {total}",
   "common.never": "Never",
+  "common.total": "Total",
   "common.namespace": "namespace",
   "status.ready": "Ready",
   "status.pending": "Pending",
@@ -38,6 +39,7 @@ const dictEn = {
 
   "actions.save": "Save",
   "actions.cancel": "Cancel",
+  "actions.delete": "Delete",
 
   // Sidebar
   "sidebar.brand": "Canvas",
@@ -69,6 +71,16 @@ const dictEn = {
   "dashboard.meta.podHealth.help": "Healthy pods sampled this minute.",
   "dashboard.badge.workloadsHealthy": "{healthy}/{total} workloads healthy",
   "dashboard.badge.cluster": "{name}",
+
+  // Tabs
+  "tabs.overview": "概览",
+  "tabs.logs": "日志",
+  "tabs.terminal": "终端",
+
+  // Tabs
+  "tabs.overview": "Overview",
+  "tabs.logs": "Logs",
+  "tabs.terminal": "Terminal",
 
   // Overview grid
   "overview.clusterVersion": "Cluster version",
@@ -123,6 +135,18 @@ const dictEn = {
   "pod.error": "Failed to load pod",
   "alert.pods.deleted": "Deleted selected pods",
   "error.pods.delete": "Failed to delete pods",
+
+  // Pod logs/terminal
+  "pod.logs.title": "Logs",
+  "pod.logs.desc": "Select a container and stream logs.",
+  "pod.logs.follow": "Follow",
+  "pod.logs.tail": "Tail",
+  "pod.logs.since": "Since (s)",
+  "pod.logs.streaming": "Streaming...",
+  "pod.term.title": "Terminal",
+  "pod.term.desc": "Interactive shell into the container.",
+  "pod.term.connected": "Connected",
+  "pod.term.disconnected": "Disconnected",
 
   // Services
   "svc.eyebrow": "Service management",
@@ -197,6 +221,29 @@ const dictEn = {
   "pulse.conn": "Cluster connectivity",
   "pulse.conn.desc": "{percent}% of pods in healthy state",
   "pulse.updated": "Last updated",
+
+  // Network - Ingresses
+  "network.header": "Network",
+  "ingresses.title": "Ingresses",
+  "ingresses.desc": "List and inspect Ingress resources",
+  "ingresses.col.name": "Name",
+  "ingresses.col.namespace": "Namespace",
+  "ingresses.col.hosts": "Hosts",
+  "ingresses.col.created": "Created",
+  "ingresses.col.actions": "Actions",
+  "ingresses.empty": "No ingresses found",
+  "ingresses.confirm.delete": "Delete ingress?",
+  "ingresses.applied": "Applied",
+
+  // Network - Policies
+  "policies.title": "NetworkPolicies",
+  "policies.desc": "List NetworkPolicy resources",
+  "policies.col.name": "Name",
+  "policies.col.namespace": "Namespace",
+  "policies.col.created": "Created",
+  "policies.col.actions": "Actions",
+  "policies.empty": "No NetworkPolicies found",
+  "policies.confirm.delete": "Delete policy?",
 
   // Activity timeline
   "activity.title": "Recent activity",
@@ -631,6 +678,7 @@ const dictZh = {
   "common.synced": "已同步",
   "common.of": "{used}/{total}",
   "common.never": "从未",
+  "common.total": "总数",
   "common.namespace": "命名空间",
   "status.ready": "就绪",
   "status.pending": "等待中",
@@ -658,6 +706,7 @@ const dictZh = {
 
   "actions.save": "保存",
   "actions.cancel": "取消",
+  "actions.delete": "删除",
 
   // Sidebar
   "sidebar.brand": "Canvas",
@@ -743,6 +792,18 @@ const dictZh = {
   "pod.error": "加载容器组失败",
   "alert.pods.deleted": "已删除所选容器组",
   "error.pods.delete": "删除容器组失败",
+
+  // Pod logs/terminal
+  "pod.logs.title": "日志",
+  "pod.logs.desc": "选择容器并流式查看日志。",
+  "pod.logs.follow": "追踪",
+  "pod.logs.tail": "尾部",
+  "pod.logs.since": "起始时间（秒）",
+  "pod.logs.streaming": "流式传输中...",
+  "pod.term.title": "终端",
+  "pod.term.desc": "进入容器的交互式 Shell。",
+  "pod.term.connected": "已连接",
+  "pod.term.disconnected": "已断开",
 
   // Services
   "svc.eyebrow": "Service 管理",
@@ -1132,6 +1193,29 @@ const dictZh = {
   "storage.size": "大小",
   "storage.accessModes": "访问模式",
   "status.status": "状态",
+
+  // Network - Ingresses
+  "network.header": "网络",
+  "ingresses.title": "Ingress",
+  "ingresses.desc": "列出并查看 Ingress 资源",
+  "ingresses.col.name": "名称",
+  "ingresses.col.namespace": "命名空间",
+  "ingresses.col.hosts": "主机",
+  "ingresses.col.created": "创建时间",
+  "ingresses.col.actions": "操作",
+  "ingresses.empty": "暂无 Ingress",
+  "ingresses.confirm.delete": "删除 Ingress？",
+  "ingresses.applied": "已应用",
+
+  // Network - Policies
+  "policies.title": "网络策略",
+  "policies.desc": "列出 NetworkPolicy 资源",
+  "policies.col.name": "名称",
+  "policies.col.namespace": "命名空间",
+  "policies.col.created": "创建时间",
+  "policies.col.actions": "操作",
+  "policies.empty": "暂无网络策略",
+  "policies.confirm.delete": "删除策略？",
 
   // Alerts/errors/confirmations
   "alert.deploy.restarted": "已重启 Deployment",

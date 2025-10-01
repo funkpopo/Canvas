@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useI18n } from "@/shared/i18n/i18n";
 
 // Lazy import xterm on client only
 let XTerm: any = null;
@@ -24,6 +25,7 @@ interface PodTerminalProps {
 }
 
 export function PodTerminal({ wsBase, namespace, name, container, cmd = "/bin/sh" }: PodTerminalProps) {
+  const { t } = useI18n();
   const divRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<any>(null);
   const fitRef = useRef<any>(null);
@@ -101,9 +103,8 @@ export function PodTerminal({ wsBase, namespace, name, container, cmd = "/bin/sh
 
   return (
     <div className="space-y-2">
-      <div className="text-xs text-text-muted">{connected ? "Connected" : "Disconnected"}</div>
+      <div className="text-xs text-text-muted">{connected ? t("pod.term.connected") : t("pod.term.disconnected")}</div>
       <div ref={divRef} className="h-80 rounded border border-border bg-surface-raised p-1" />
     </div>
   );
 }
-

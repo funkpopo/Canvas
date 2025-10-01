@@ -47,12 +47,12 @@ export default function IngressesPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="Network"
-        title="Ingresses"
-        description="List and inspect Ingress resources"
+        eyebrow={t("network.header")}
+        title={t("ingresses.title")}
+        description={t("ingresses.desc")}
         meta={
           <div>
-            <p className={`${badgePresets.label} text-text-muted`}>Total</p>
+            <p className={`${badgePresets.label} text-text-muted`}>{t("common.total")}</p>
             <p className="mt-1 text-lg font-semibold text-text-primary">{items.length}</p>
           </div>
         }
@@ -61,7 +61,7 @@ export default function IngressesPage() {
       <Card>
         <CardContent className="space-y-4 py-4">
           <div>
-            <label className="block text-sm text-text-muted mb-1">Namespace</label>
+            <label className="block text-sm text-text-muted mb-1">{t("pods.filter.namespace")}</label>
             <select value={ns} onChange={(e) => setNs(e.target.value)} className="w-full rounded-md border border-border bg-surface px-2 py-1 text-sm max-w-xs">
               <option value="all">{t("global")}</option>
               {namespaces.map((n) => (
@@ -74,18 +74,18 @@ export default function IngressesPage() {
             <table className="w-full text-sm">
               <thead className="bg-muted">
                 <tr className="text-left text-text-muted">
-                  <th className="px-3 py-2">Name</th>
-                  <th className="px-3 py-2">Namespace</th>
-                  <th className="px-3 py-2">Hosts</th>
-                  <th className="px-3 py-2">Created</th>
-                  <th className="px-3 py-2">Actions</th>
+                  <th className="px-3 py-2">{t("ingresses.col.name")}</th>
+                  <th className="px-3 py-2">{t("ingresses.col.namespace")}</th>
+                  <th className="px-3 py-2">{t("ingresses.col.hosts")}</th>
+                  <th className="px-3 py-2">{t("ingresses.col.created")}</th>
+                  <th className="px-3 py-2">{t("ingresses.col.actions")}</th>
                 </tr>
               </thead>
               <tbody>
                 {isLoading ? (
                   <tr><td className="px-3 py-4 text-text-muted" colSpan={4}>{t("common.loading")}</td></tr>
                 ) : items.length === 0 ? (
-                  <tr><td className="px-3 py-4 text-text-muted" colSpan={4}>No ingresses found</td></tr>
+                  <tr><td className="px-3 py-4 text-text-muted" colSpan={4}>{t("ingresses.empty")}</td></tr>
                 ) : (
                   items.map((it) => (
                     <tr key={`${it.namespace}/${it.name}`} className="border-t border-border hover:bg-hover">
@@ -94,8 +94,8 @@ export default function IngressesPage() {
                       <td className="px-3 py-2">{(it.hosts ?? []).join(", ")}</td>
                       <td className="px-3 py-2">{it.created_at ? new Date(it.created_at).toLocaleString() : "-"}</td>
                       <td className="px-3 py-2 flex gap-2">
-                        <button className="text-xs underline" onClick={() => setEditing({ ns: it.namespace, name: it.name })}>Edit YAML</button>
-                        <button className="text-xs text-error underline" onClick={async () => { if (confirm("Delete ingress?")) { await deleteIngress(it.namespace, it.name); location.reload(); } }}>Delete</button>
+                        <button className="text-xs underline" onClick={() => setEditing({ ns: it.namespace, name: it.name })}>{t("deploy.yaml.edit")}</button>
+                        <button className="text-xs text-error underline" onClick={async () => { if (confirm(t("ingresses.confirm.delete"))) { await deleteIngress(it.namespace, it.name); location.reload(); } }}>{t("actions.delete")}</button>
                       </td>
                     </tr>
                   ))
@@ -108,15 +108,15 @@ export default function IngressesPage() {
 
       <YamlEditor
         open={Boolean(editing)}
-        title={`Edit Ingress ${editing ? `${editing.ns}/${editing.name}` : ""}`}
-        description="Edit and apply Ingress manifest"
+        title={`${t("deploy.yaml.edit")} ${editing ? `${editing.ns}/${editing.name}` : ""}`}
+        description={t("ingresses.desc")}
         initialYaml={yaml}
         onClose={() => setEditing(null)}
         validateKind="Ingress"
         onSave={async (y) => {
           if (!editing) return;
           await updateIngressYaml(editing.ns, editing.name, y);
-          alert("Applied");
+          alert(t("alert.yaml.applied"));
         }}
       />
     </div>
