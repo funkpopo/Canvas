@@ -42,6 +42,8 @@ from app.schemas.kubernetes import (
     ContainerStatus,
     ServiceSummary,
     ServicePort,
+    CRDSummary,
+    GenericResourceEntry,
 )
 from app.services.cluster_config import ClusterConfigService
 
@@ -3450,4 +3452,206 @@ class KubernetesService:
             return True, None
         except Exception as exc:  # pragma: no cover
             logger.warning("kubernetes.delete_service_error", error=str(exc))
+            return False, str(exc)
+
+    # ---------------------------
+    # CRDs & Generic resources
+    # ---------------------------
+
+    async def list_crds(self) -> list[CRDSummary]:
+        async def _fetch() -> list[CRDSummary]:
+            await self._rate_limiter.acquire()
+            await self._ensure_clients()
+
+            def _list() -> list[CRDSummary]:
+                api_ext = client.ApiextensionsV1Api(self._api_client)
+                crds = api_ext.list_custom_resource_definition().items
+                items: list[CRDSummary] = []
+                for crd in crds:
+                    spec = getattr(crd, "spec", None)
+                    if not spec:
+                        continue
+                    group = getattr(spec, "group", "")
+                    versions = [getattr(v, "name", "") for v in getattr(spec, "versions", [])]
+                    scope = getattr(spec, "scope", "Namespaced")
+                    names = getattr(spec, "names", None)
+                    kind = getattr(names, "kind", "") if names else ""
+                    plural = getattr(names, "plural", "") if names else ""
+                    # metadata can be model; use getattr fallback
+                    meta = getattr(crd, "metadata", None)
+                    crd_name = getattr(meta, "name", None) if meta is not None else None
+                    if not crd_name and isinstance(meta, dict):
+                        crd_name = meta.get("name")
+                    items.append(
+                        CRDSummary(
+                            name=crd_name or "",
+                            group=group,
+                            versions=[v for v in versions if v] or [],
+                            scope=scope,
+                            kind=kind,
+                            plural=plural,
+                        )
+                    )
+                return items
+
+            return await asyncio.to_thread(_list)
+
+        key = "crds:list"
+        try:
+            return await self._cached(key, _fetch)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.crds_list_error", error=str(exc))
+            return []
+
+    async def list_crd_resources(self, crd_name: str, namespace: str | None = None) -> list[GenericResourceEntry]:
+        async def _fetch() -> list[GenericResourceEntry]:
+            await self._rate_limiter.acquire()
+            await self._ensure_clients()
+
+            def _list() -> list[GenericResourceEntry]:
+                api_ext = client.ApiextensionsV1Api(self._api_client)
+                crd = api_ext.read_custom_resource_definition(crd_name)
+                spec = getattr(crd, "spec", None)
+                if not spec:
+                    return []
+                group = getattr(spec, "group", "")
+                names = getattr(spec, "names", None)
+                plural = getattr(names, "plural", "") if names else ""
+                scope = getattr(spec, "scope", "Namespaced")
+                version = None
+                for v in getattr(spec, "versions", []) or []:
+                    if getattr(v, "served", False) and getattr(v, "storage", False):
+                        version = getattr(v, "name", None)
+                        break
+                if not version:
+                    for v in getattr(spec, "versions", []) or []:
+                        if getattr(v, "served", False):
+                            version = getattr(v, "name", None)
+                            break
+                if not version and getattr(spec, "versions", []):
+                    try:
+                        version = getattr(spec.versions[0], "name", None)
+                    except Exception:
+                        pass
+
+                co = client.CustomObjectsApi(self._api_client)
+                items: list[dict] = []
+                if scope == "Namespaced":
+                    if namespace and namespace != "all":
+                        data = co.list_namespaced_custom_object(group, version, namespace, plural)
+                        items = data.get("items", []) if isinstance(data, dict) else []
+                    else:
+                        data = co.list_cluster_custom_object(group, version, plural)
+                        items = data.get("items", []) if isinstance(data, dict) else []
+                else:
+                    data = co.list_cluster_custom_object(group, version, plural)
+                    items = data.get("items", []) if isinstance(data, dict) else []
+
+                results: list[GenericResourceEntry] = []
+                for it in items:
+                    if not isinstance(it, dict):
+                        continue
+                    md = it.get("metadata", {}) if isinstance(it, dict) else {}
+                    name = md.get("name")
+                    ns = md.get("namespace")
+                    # creationTimestamp may exist but we keep None for now to avoid parsing
+                    results.append(GenericResourceEntry(namespace=ns, name=name, created_at=None))
+                return results
+
+            return await asyncio.to_thread(_list)
+
+        try:
+            return await _fetch()
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.crd_resources_error", error=str(exc))
+            return []
+
+    async def get_generic_resource_yaml(
+        self,
+        group: str,
+        version: str,
+        plural: str,
+        name: str,
+        namespace: str | None = None,
+    ) -> str | None:
+        await self._rate_limiter.acquire()
+        await self._ensure_clients()
+
+        def _get() -> str | None:
+            co = client.CustomObjectsApi(self._api_client)
+            if namespace:
+                obj = co.get_namespaced_custom_object(group, version, namespace, plural, name)
+            else:
+                obj = co.get_cluster_custom_object(group, version, plural, name)
+            try:
+                return yaml.safe_dump(obj, sort_keys=False)
+            except Exception:
+                return yaml.safe_dump(obj)
+
+        try:
+            return await asyncio.to_thread(_get)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.generic_get_error", error=str(exc))
+            return None
+
+    async def put_generic_resource_yaml(
+        self,
+        group: str,
+        version: str,
+        plural: str,
+        name: str,
+        yaml_text: str,
+        namespace: str | None = None,
+    ) -> tuple[bool, str | None]:
+        await self._rate_limiter.acquire()
+        await self._ensure_clients()
+
+        def _put() -> tuple[bool, str | None]:
+            body = yaml.safe_load(yaml_text)
+            if not isinstance(body, dict):
+                return False, "YAML must represent a Kubernetes object"
+            md = body.get("metadata", {}) if isinstance(body, dict) else {}
+            body_name = md.get("name")
+            body_ns = md.get("namespace")
+            if body_name and body_name != name:
+                return False, "metadata.name does not match"
+            if namespace and body_ns and body_ns != namespace:
+                return False, "metadata.namespace does not match"
+
+            co = client.CustomObjectsApi(self._api_client)
+            if namespace:
+                co.replace_namespaced_custom_object(group, version, namespace, plural, name, body)
+            else:
+                co.replace_cluster_custom_object(group, version, plural, name, body)
+            return True, None
+
+        try:
+            return await asyncio.to_thread(_put)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.generic_put_error", error=str(exc))
+            return False, str(exc)
+
+    async def delete_generic_resource(
+        self,
+        group: str,
+        version: str,
+        plural: str,
+        name: str,
+        namespace: str | None = None,
+    ) -> tuple[bool, str | None]:
+        await self._rate_limiter.acquire()
+        await self._ensure_clients()
+
+        def _delete() -> tuple[bool, str | None]:
+            co = client.CustomObjectsApi(self._api_client)
+            if namespace:
+                co.delete_namespaced_custom_object(group, version, namespace, plural, name)
+            else:
+                co.delete_cluster_custom_object(group, version, plural, name)
+            return True, None
+
+        try:
+            return await asyncio.to_thread(_delete)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.generic_delete_error", error=str(exc))
             return False, str(exc)

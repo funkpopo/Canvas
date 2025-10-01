@@ -257,6 +257,27 @@ const dictEn = {
   "policies.empty": "No NetworkPolicies found",
   "policies.confirm.delete": "Delete policy?",
 
+  // CRDs
+  "sidebar.crds": "CRDs",
+  "crds.header": "CRDs",
+  "crds.title": "Custom Resource Definitions",
+  "crds.desc": "Discover and browse custom resources",
+  "crds.col.name": "Name",
+  "crds.col.group": "Group",
+  "crds.col.kind": "Kind",
+  "crds.col.scope": "Scope",
+  "crds.col.versions": "Versions",
+  "crds.col.namespace": "Namespace",
+  "crds.col.actions": "Actions",
+  "crds.empty": "No CRDs found",
+  "crds.resources.title": "Resources for",
+  "crds.resources.desc": "List, view YAML, and delete generic custom resources",
+  "crds.resources.empty": "No custom resources found",
+  "crds.confirm.delete": "Delete resource?",
+  "crds.field.group": "Group",
+  "crds.field.version": "Version",
+  "crds.field.plural": "Plural",
+
   // Activity timeline
   "activity.title": "Recent activity",
   "activity.desc": "Latest changes and events across your cluster",
@@ -807,6 +828,8 @@ const dictZh = {
   "sidebar.expand": "展开",
   "sidebar.aria.expand": "展开侧边栏",
   "sidebar.aria.collapse": "收起侧边栏",
+  "sidebar.audit": "审计",
+  "sidebar.crds": "CRD",
 
   // Dashboard page
   "dashboard.title": "Kubernetes 健康与工作负载洞察",
@@ -1355,6 +1378,26 @@ const dictZh = {
   "policies.col.actions": "操作",
   "policies.empty": "暂无网络策略",
   "policies.confirm.delete": "删除策略？",
+
+  // CRDs
+  "crds.header": "CRD",
+  "crds.title": "自定义资源定义",
+  "crds.desc": "发现并浏览自定义资源",
+  "crds.col.name": "名称",
+  "crds.col.group": "分组",
+  "crds.col.kind": "Kind",
+  "crds.col.scope": "作用域",
+  "crds.col.versions": "版本",
+  "crds.col.namespace": "命名空间",
+  "crds.col.actions": "操作",
+  "crds.empty": "未发现 CRD",
+  "crds.resources.title": "资源：",
+  "crds.resources.desc": "列出、查看 YAML 并删除自定义资源",
+  "crds.resources.empty": "暂无该 CRD 实例",
+  "crds.confirm.delete": "确认删除该资源？",
+  "crds.field.group": "分组",
+  "crds.field.version": "版本",
+  "crds.field.plural": "复数名",
 
   // Alerts/errors/confirmations
   "alert.deploy.restarted": "已重启 Deployment",

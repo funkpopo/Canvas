@@ -54,6 +54,8 @@ export const queryKeys = {
   jobYaml: (ns: string, name: string) => ["jobs", ns, name, "yaml"] as const,
   cronjobYaml: (ns: string, name: string) => ["cronjobs", ns, name, "yaml"] as const,
   auditLogs: ["audit", "logs"] as const,
+  crds: ["crds", "list"] as const,
+  crdResources: (crd: string, ns?: string) => ["crds", crd, ns ?? "all"] as const,
 } as const;
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -306,6 +308,63 @@ export interface StorageSummaryResponse {
 
 export function fetchStorageSummary(): Promise<StorageSummaryResponse> {
   return request<StorageSummaryResponse>("/cluster/storage");
+}
+
+// CRDs & generic resources
+export interface CRDSummaryResponse {
+  name: string; // e.g., foos.example.com
+  group: string;
+  versions: string[];
+  scope: "Namespaced" | "Cluster";
+  kind: string;
+  plural: string;
+}
+
+export interface GenericResourceEntryResponse { namespace?: string | null; name: string; created_at?: string | null }
+
+export function fetchCrds(): Promise<CRDSummaryResponse[]> {
+  return request<CRDSummaryResponse[]>("/crds/");
+}
+
+export function fetchCrdResources(crd: string, namespace?: string): Promise<GenericResourceEntryResponse[]> {
+  const params = new URLSearchParams();
+  if (namespace && namespace !== "all") params.set("namespace", namespace);
+  const nm = encodeURIComponent(crd);
+  const qs = params.toString();
+  return request<GenericResourceEntryResponse[]>(`/crds/${nm}/resources${qs ? `?${qs}` : ""}`);
+}
+
+export function fetchGenericYaml(group: string, version: string, plural: string, name: string, namespace?: string): Promise<YamlContentResponse> {
+  const g = encodeURIComponent(group);
+  const v = encodeURIComponent(version);
+  const p = encodeURIComponent(plural);
+  const n = encodeURIComponent(name);
+  const params = new URLSearchParams();
+  if (namespace) params.set("namespace", namespace);
+  const qs = params.toString();
+  return request<YamlContentResponse>(`/resources/${g}/${v}/${p}/${n}${qs ? `?${qs}` : ""}`);
+}
+
+export function updateGenericYaml(group: string, version: string, plural: string, name: string, yaml: string, namespace?: string): Promise<OperationResultResponse> {
+  const g = encodeURIComponent(group);
+  const v = encodeURIComponent(version);
+  const p = encodeURIComponent(plural);
+  const n = encodeURIComponent(name);
+  const params = new URLSearchParams();
+  if (namespace) params.set("namespace", namespace);
+  const qs = params.toString();
+  return request<OperationResultResponse>(`/resources/${g}/${v}/${p}/${n}${qs ? `?${qs}` : ""}`, { method: "PUT", body: JSON.stringify({ yaml }) });
+}
+
+export function deleteGenericResource(group: string, version: string, plural: string, name: string, namespace?: string): Promise<OperationResultResponse> {
+  const g = encodeURIComponent(group);
+  const v = encodeURIComponent(version);
+  const p = encodeURIComponent(plural);
+  const n = encodeURIComponent(name);
+  const params = new URLSearchParams();
+  if (namespace) params.set("namespace", namespace);
+  const qs = params.toString();
+  return request<OperationResultResponse>(`/resources/${g}/${v}/${p}/${n}${qs ? `?${qs}` : ""}`, { method: "DELETE" });
 }
 
 // Network resources

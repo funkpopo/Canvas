@@ -201,6 +201,19 @@ export function Sidebar() {
                               <span>{t("sidebar.services")}</span>
                             </Link>
                             <Link
+                              href="/crds"
+                              className={cn(
+                                "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",
+                                isPathActive("/crds")
+                                  ? "bg-accent text-accent-foreground"
+                                  : "text-text-muted hover:bg-muted hover:text-text-primary",
+                              )}
+                              title={t("sidebar.crds")}
+                            >
+                              <Package className="h-4 w-4" />
+                              <span>{t("sidebar.crds")}</span>
+                            </Link>
+                            <Link
                               href="/network/ingresses"
                               className={cn(
                                 "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",

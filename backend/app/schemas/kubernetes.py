@@ -357,3 +357,19 @@ class VolumeFileEntry(BaseModel):
 class FileContent(BaseModel):
     path: str
     base64_data: str
+
+
+# CRD & Generic resources
+class CRDSummary(BaseModel):
+    name: str
+    group: str
+    versions: list[str] = Field(default_factory=list)
+    scope: Literal["Namespaced", "Cluster"]
+    kind: str
+    plural: str
+
+
+class GenericResourceEntry(BaseModel):
+    namespace: str | None = None
+    name: str
+    created_at: datetime | None = None
