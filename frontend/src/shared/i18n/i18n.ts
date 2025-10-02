@@ -162,7 +162,7 @@ const dictEn = {
   "pod.debug.created": "Debug container created: {name}",
   "pod.debug.error": "Failed to create debug container",
 
-  /* Services (duplicate zh keys removed below)
+  // Services
   "svc.eyebrow": "Service management",
   "svc.title": "Services",
   "svc.desc": "View, edit, and create Services in a namespace.",
@@ -206,7 +206,6 @@ const dictEn = {
   "svc.form.nodePort": "NodePort (external)",
   "svc.form.addPort": "Add port",
 
-  */
   // Quick actions
   "quick.title": "Quick actions",
   "quick.desc": "Common configuration and management tasks",
@@ -991,6 +990,12 @@ const dictZh = {
   "svc.title": "服务列表",
   "svc.desc": "查看、编辑、创建命名空间下的 Service。",
   "svc.new": "新建服务",
+  "svc.editTitle": "编辑服务",
+  "svc.createTitle": "新建服务",
+  "svc.save": "保存",
+  "svc.create": "创建",
+  "svc.tab.form": "WebUI 配置",
+  "svc.tab.yaml": "YAML",
   "svc.meta.total": "服务",
   "svc.meta.total.help": "当前命名空间内数量",
   "svc.filter.namespace": "命名空间",
@@ -1008,6 +1013,21 @@ const dictZh = {
   "svc.yaml.save": "保存 YAML",
   "svc.yaml.createTitle": "创建服务",
   "svc.yaml.create": "创建",
+
+  // Services Web UI form
+  "svc.form.name": "名称",
+  "svc.form.namespace": "命名空间",
+  "svc.form.type": "类型",
+  "svc.form.selector": "容器组选择器（标签）",
+  "svc.form.addSelector": "添加选择器",
+  "svc.form.remove": "移除",
+  "svc.form.ports": "端口",
+  "svc.form.portName": "端口名",
+  "svc.form.protocol": "协议",
+  "svc.form.port": "端口（外部）",
+  "svc.form.targetPort": "目标端口（内部）",
+  "svc.form.nodePort": "节点端口（外部）",
+  "svc.form.addPort": "添加端口",
 
   // Quick actions
   "quick.title": "快捷操作",
@@ -1631,48 +1651,6 @@ const dictZh = {
   "sidebar.policies": "网络策略",
   "sidebar.configmaps": "ConfigMap",
   "sidebar.secrets": "Secret",
-
-  // Services (override + WebUI)
-  "svc.eyebrow": "服务管理",
-  "svc.title": "服务列表",
-  "svc.desc": "查看、编辑、创建命名空间下的服务",
-  "svc.new": "新建服务",
-  "svc.meta.total": "服务",
-  "svc.meta.total.help": "当前命名空间内的服务数量",
-  "svc.filter.namespace": "命名空间",
-  "svc.col.name": "名称",
-  "svc.col.type": "类型",
-  "svc.col.clusterIP": "ClusterIP",
-  "svc.col.ports": "端口",
-  "svc.col.created": "创建时间",
-  "svc.col.actions": "操作",
-  "svc.empty": "暂无服务",
-  "svc.edit": "编辑",
-  "svc.delete": "删除",
-  "svc.confirm.delete": "删除服务 {name}？",
-  "svc.yaml.title": "编辑服务 YAML",
-  "svc.yaml.save": "保存 YAML",
-  "svc.yaml.createTitle": "创建服务",
-  "svc.yaml.create": "创建",
-  "svc.editTitle": "编辑服务",
-  "svc.createTitle": "新建服务",
-  "svc.save": "保存",
-  "svc.create": "创建",
-  "svc.tab.form": "WebUI 配置",
-  "svc.tab.yaml": "YAML",
-  "svc.form.name": "名称",
-  "svc.form.namespace": "命名空间",
-  "svc.form.type": "类型",
-  "svc.form.selector": "容器组选择器（标签）",
-  "svc.form.addSelector": "添加选择器",
-  "svc.form.remove": "移除",
-  "svc.form.ports": "端口",
-  "svc.form.portName": "端口名",
-  "svc.form.protocol": "协议",
-  "svc.form.port": "端口（外部）",
-  "svc.form.targetPort": "目标端口（内部）",
-  "svc.form.nodePort": "节点端口（外部）",
-  "svc.form.addPort": "添加端口"
 } as const;
 
 export type I18nKey = keyof typeof dictEn;
