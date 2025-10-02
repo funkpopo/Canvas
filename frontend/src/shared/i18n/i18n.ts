@@ -800,6 +800,10 @@ const dictEn = {
   "audit.col.name": "Name",
   "audit.col.user": "User",
   "audit.col.success": "Status",
+  "sidebar.ingresses": "Ingresses",
+  "sidebar.policies": "NetworkPolicies",
+  "sidebar.configmaps": "ConfigMaps",
+  "sidebar.secrets": "Secrets",
 } as const;
 
 const dictZh = {
@@ -1601,6 +1605,10 @@ const dictZh = {
   "audit.col.name": "名称",
   "audit.col.user": "用户",
   "audit.col.success": "状态",
+  "sidebar.ingresses": "Ingress",
+  "sidebar.policies": "网络策略",
+  "sidebar.configmaps": "ConfigMap",
+  "sidebar.secrets": "Secret",
 } as const;
 
 export type I18nKey = keyof typeof dictEn;

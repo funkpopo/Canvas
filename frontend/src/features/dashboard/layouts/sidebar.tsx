@@ -244,10 +244,10 @@ export function Sidebar() {
                                   ? "bg-accent text-accent-foreground"
                                   : "text-text-muted hover:bg-muted hover:text-text-primary",
                               )}
-                              title="Ingresses"
+                              title={t("sidebar.ingresses")}
                             >
                               <FolderTree className="h-4 w-4" />
-                              <span>Ingresses</span>
+                              <span>{t("sidebar.ingresses")}</span>
                             </Link>
                             <Link
                               href="/network/policies"
@@ -257,10 +257,10 @@ export function Sidebar() {
                                   ? "bg-accent text-accent-foreground"
                                   : "text-text-muted hover:bg-muted hover:text-text-primary",
                               )}
-                              title="NetworkPolicies"
+                              title={t("sidebar.policies")}
                             >
                               <FolderTree className="h-4 w-4" />
-                              <span>NetworkPolicies</span>
+                              <span>{t("sidebar.policies")}</span>
                             </Link>
                             <Link
                               href="/config/configmaps"
@@ -270,10 +270,10 @@ export function Sidebar() {
                                   ? "bg-accent text-accent-foreground"
                                   : "text-text-muted hover:bg-muted hover:text-text-primary",
                               )}
-                              title="ConfigMaps"
+                              title={t("sidebar.configmaps")}
                             >
                               <FolderTree className="h-4 w-4" />
-                              <span>ConfigMaps</span>
+                              <span>{t("sidebar.configmaps")}</span>
                             </Link>
                             <Link
                               href="/config/secrets"
@@ -283,10 +283,10 @@ export function Sidebar() {
                                   ? "bg-accent text-accent-foreground"
                                   : "text-text-muted hover:bg-muted hover:text-text-primary",
                               )}
-                              title="Secrets"
+                              title={t("sidebar.secrets")}
                             >
                               <FolderTree className="h-4 w-4" />
-                              <span>Secrets</span>
+                              <span>{t("sidebar.secrets")}</span>
                             </Link>
                             <Link
                               href="/events"
