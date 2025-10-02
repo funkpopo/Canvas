@@ -7,6 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/features/dashboard/layouts/page-header";
 import { Card, CardContent } from "@/shared/ui/card";
 import { useI18n } from "@/shared/i18n/i18n";
+import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 import { badgePresets } from "@/shared/ui/badge";
 import { YamlEditor } from "@/shared/ui/yaml-editor";
 import {
@@ -45,6 +46,7 @@ export default function CrdResourcesPage() {
     enabled: Boolean(crdName),
   });
   const items = data ?? [];
+  const [deleteTarget, setDeleteTarget] = useState<{ name: string; namespace?: string | null } | null>(null);
 
   const [editing, setEditing] = useState<{ name: string; namespace?: string | null } | null>(null);
   const [yaml, setYaml] = useState<string>("");
@@ -115,13 +117,7 @@ export default function CrdResourcesPage() {
                         <button className="text-xs underline" onClick={() => setEditing({ name: it.name, namespace: it.namespace })}>{t("deploy.yaml.edit")}</button>
                         <button
                           className="text-xs text-error underline"
-                          onClick={async () => {
-                            if (!crd) return;
-                            if (confirm(t("crds.confirm.delete"))) {
-                              await deleteGenericResource(crd.group, preferredVersion, crd.plural, it.name, it.namespace ?? undefined);
-                              await refetch();
-                            }
-                          }}
+                          onClick={() => setDeleteTarget({ name: it.name, namespace: it.namespace })}
                         >
                           {t("actions.delete")}
                         </button>
@@ -148,7 +144,27 @@ export default function CrdResourcesPage() {
           alert(t("alert.yaml.applied"));
         }}
       />
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(o) => { if (!o) setDeleteTarget(null); }}
+        title={t("crds.confirm.delete")}
+        confirmText={t("actions.delete")}
+        cancelText={t("actions.cancel")}
+        confirmVariant="destructive"
+        onConfirm={async () => {
+          if (!deleteTarget || !crd) return;
+          await deleteGenericResource(
+            crd.group,
+            preferredVersion,
+            crd.plural,
+            deleteTarget.name,
+            deleteTarget.namespace ?? undefined,
+          );
+          setDeleteTarget(null);
+          await refetch();
+        }}
+      />
     </div>
   );
 }
-

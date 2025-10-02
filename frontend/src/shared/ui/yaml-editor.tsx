@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import { Modal } from "./modal";
 import { Button } from "./button";
+import { ConfirmDialog } from "./confirm-dialog";
+import { useI18n } from "@/shared/i18n/i18n";
 
 export type YamlEditorProps = {
   open: boolean;
@@ -16,9 +18,11 @@ export type YamlEditorProps = {
 };
 
 export function YamlEditor({ open, title, description, initialYaml = "", onClose, onSave, validateKind }: YamlEditorProps) {
+  const { t, language } = useI18n();
   const [text, setText] = useState<string>(initialYaml);
   const [dirty, setDirty] = useState(false);
   const [error, setError] = useState<string>("");
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
 
   useEffect(() => {
     setText(initialYaml);
@@ -67,11 +71,27 @@ export function YamlEditor({ open, title, description, initialYaml = "", onClose
     }
   }
 
+  const discardTitle = (() => {
+    const k = t("yaml.discard.title" as any);
+    return k === "yaml.discard.title" ? "Discard unsaved changes?" : k;
+  })();
+  const discardDesc = (() => {
+    const k = t("yaml.discard.desc" as any);
+    return k === "yaml.discard.desc" ? "You have unsaved changes that will be lost." : k;
+  })();
+
+  const continueText = (() => {
+    const k = t("actions.continue" as any);
+    if (k === "actions.continue") return language === "zh" ? "继续" : "Continue";
+    return k;
+  })();
+
   return (
     <Modal
       open={open}
       onClose={() => {
-        if (!dirty || confirm("Discard unsaved changes?")) onClose();
+        if (!dirty) return onClose();
+        setConfirmDiscard(true);
       }}
       title={title}
       description={description}
@@ -91,7 +111,16 @@ export function YamlEditor({ open, title, description, initialYaml = "", onClose
           setDirty(true);
         }}
       />
+      <ConfirmDialog
+        open={confirmDiscard}
+        onOpenChange={(o) => { if (!o) setConfirmDiscard(false); }}
+        title={discardTitle}
+        description={discardDesc}
+        confirmText={continueText}
+        cancelText={t("actions.cancel")}
+        confirmVariant="destructive"
+        onConfirm={async () => { setConfirmDiscard(false); onClose(); }}
+      />
     </Modal>
   );
 }
-

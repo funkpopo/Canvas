@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -14,13 +15,16 @@ import {
   queryKeys,
   selectActiveClusterByName,
   fetchClusterHealth,
+  deleteClusterConfig,
 } from "@/lib/api";
 import { StatusBadge } from "@/shared/ui/status-badge";
+import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 
 export default function ClustersPage() {
   const { t } = useI18n();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const [deleteTarget, setDeleteTarget] = React.useState<string | null>(null);
 
   const { data: active } = useQuery({
     queryKey: queryKeys.clusterConfig,
@@ -36,6 +40,21 @@ export default function ClustersPage() {
     mutationFn: async (name: string) => selectActiveClusterByName(name),
     onSuccess: async () => {
       await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.clusterConfig }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.clusterOverview }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.events }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.workloads }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.clusterCapacity }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.metricsStatus }),
+      ]);
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (name: string) => deleteClusterConfig(name),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.clusterConfigsAll }),
         queryClient.invalidateQueries({ queryKey: queryKeys.clusterConfig }),
         queryClient.invalidateQueries({ queryKey: queryKeys.clusterOverview }),
         queryClient.invalidateQueries({ queryKey: queryKeys.events }),
@@ -107,6 +126,14 @@ export default function ClustersPage() {
                     >
                       {t("clusters.btn.edit")}
                     </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      disabled={deleteMutation.isPending}
+                      onClick={() => setDeleteTarget(c.name)}
+                    >
+                      {deleteMutation.isPending ? t("clusters.btn.deleting") : t("clusters.btn.delete")}
+                    </Button>
                   </div>
                 </div>
               );
@@ -116,6 +143,18 @@ export default function ClustersPage() {
           )}
         </CardContent>
       </Card>
+      {deleteTarget && (
+        <DeleteClusterDialog
+          name={deleteTarget}
+          loading={deleteMutation.isPending}
+          onConfirm={async () => {
+            if (!deleteTarget) return;
+            await deleteMutation.mutateAsync(deleteTarget);
+            setDeleteTarget(null);
+          }}
+          onClose={() => setDeleteTarget(null)}
+        />
+      )}
     </div>
   );
 }
@@ -129,4 +168,31 @@ function ClusterHealthChip({ name }: { name: string }) {
     : "critical";
   const label = status === "healthy" ? t("topbar.health.healthy") : status === "warning" ? t("topbar.health.degraded") : t("topbar.health.offline");
   return <StatusBadge status={status} label={label} size="sm" />;
+}
+
+// Render dialog at page bottom to avoid multiple per-row overlays
+function DeleteClusterDialog({
+  name,
+  loading,
+  onConfirm,
+  onClose,
+}: { name: string; loading: boolean; onConfirm: () => Promise<void>; onClose: () => void }) {
+  const { t } = useI18n();
+  return (
+    <ConfirmDialog
+      open={!!name}
+      onOpenChange={(o) => { if (!o && !loading) onClose(); }}
+      title={t("clusters.confirm.delete", { name } as any)}
+      description={t("clusters.saved.help")}
+      confirmText={t("actions.continue")}
+      cancelText={t("actions.cancel")}
+      confirmVariant="destructive"
+      onConfirm={onConfirm}
+      loading={loading}
+      doubleConfirm
+      secondTitle={t("clusters.confirm.delete", { name } as any)}
+      secondDescription={t("clusters.confirm.delete2", { name } as any)}
+      secondConfirmText={t("clusters.btn.delete")}
+    />
+  );
 }

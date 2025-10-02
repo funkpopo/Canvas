@@ -57,11 +57,18 @@ export function VirtualTable<T = any>({
   const virtualRows = rowVirtualizer.getVirtualItems();
   const totalSize = rowVirtualizer.getTotalSize();
 
-  // Calculate total table width to prevent compression
+  // Calculate minimum table width based on fixed-width columns and min-width columns
   const tableMinWidth = columns.reduce((sum, col) => {
-    if (typeof col.width === 'number') return sum + col.width;
-    if (typeof col.width === 'string' && col.width.endsWith('px')) {
-      return sum + parseInt(col.width);
+    if (col.width) {
+      if (typeof col.width === 'number') return sum + col.width;
+      if (typeof col.width === 'string' && col.width.endsWith('px')) {
+        return sum + parseInt(col.width);
+      }
+    } else if (col.minWidth) {
+      if (typeof col.minWidth === 'number') return sum + col.minWidth;
+      if (typeof col.minWidth === 'string' && col.minWidth.endsWith('px')) {
+        return sum + parseInt(col.minWidth);
+      }
     }
     return sum;
   }, 0);

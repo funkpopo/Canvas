@@ -242,7 +242,7 @@ export default function PodsPage() {
     {
       key: "name",
       header: t("pods.col.name"),
-      width: 280,
+      minWidth: 200,
       sortable: true,
       sortDirection: sortKey === "name" ? sortDir : null,
       onSort: () => toggleSort("name"),
@@ -263,7 +263,7 @@ export default function PodsPage() {
     {
       key: "containers",
       header: t("pods.col.containers"),
-      width: 200,
+      minWidth: 150,
       sortable: true,
       sortDirection: sortKey === "containers" ? sortDir : null,
       onSort: () => toggleSort("containers"),
@@ -273,7 +273,7 @@ export default function PodsPage() {
     {
       key: "ready",
       header: t("pods.col.ready"),
-      width: 80,
+      width: 70,
       align: "center",
       sortable: true,
       sortDirection: sortKey === "ready" ? sortDir : null,
@@ -287,7 +287,7 @@ export default function PodsPage() {
     {
       key: "node",
       header: t("pods.col.node"),
-      width: 180,
+      minWidth: 140,
       sortable: true,
       sortDirection: sortKey === "node" ? sortDir : null,
       onSort: () => toggleSort("node"),
@@ -302,7 +302,7 @@ export default function PodsPage() {
     {
       key: "pod_ip",
       header: t("pods.col.podIP"),
-      width: 140,
+      minWidth: 120,
       sortable: true,
       sortDirection: sortKey === "pod_ip" ? sortDir : null,
       onSort: () => toggleSort("pod_ip"),
@@ -312,7 +312,7 @@ export default function PodsPage() {
     {
       key: "phase",
       header: t("pods.col.phase"),
-      width: 100,
+      width: 90,
       align: "center",
       sortable: true,
       sortDirection: sortKey === "phase" ? sortDir : null,
@@ -326,7 +326,7 @@ export default function PodsPage() {
     {
       key: "created_at",
       header: t("pods.col.created"),
-      width: 180,
+      minWidth: 150,
       sortable: true,
       sortDirection: sortKey === "created_at" ? sortDir : null,
       onSort: () => toggleSort("created_at"),
@@ -336,7 +336,7 @@ export default function PodsPage() {
     {
       key: "actions",
       header: t("svc.col.actions"),
-      minWidth: 180,
+      minWidth: 160,
       render: (p) => {
         const key = `${p.namespace}/${p.name}`;
         const disabledLogs = ns !== "all" && !canViewLogs;

@@ -247,6 +247,11 @@ export function listClusterConfigs(): Promise<ClusterConfigResponse[]> {
   return request<ClusterConfigResponse[]>("/cluster/config/all");
 }
 
+export function deleteClusterConfig(name: string): Promise<void> {
+  const nm = encodeURIComponent(name);
+  return request<void>(`/cluster/config/${nm}`, { method: "DELETE" });
+}
+
 export function selectActiveClusterByName(name: string): Promise<ClusterConfigResponse> {
   return request<ClusterConfigResponse>("/cluster/config/select", {
     method: "POST",

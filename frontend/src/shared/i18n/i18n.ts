@@ -40,6 +40,7 @@ const dictEn = {
   "actions.save": "Save",
   "actions.cancel": "Cancel",
   "actions.delete": "Delete",
+  "actions.continue": "Continue",
 
   // Sidebar
   "sidebar.brand": "Canvas",
@@ -405,7 +406,14 @@ const dictEn = {
   "clusters.btn.open": "Open",
   "clusters.btn.opening": "Opening...",
   "clusters.btn.edit": "Edit settings",
+  "clusters.btn.delete": "Delete",
+  "clusters.btn.deleting": "Deleting...",
+  "clusters.confirm.delete": "Delete cluster \"{name}\"?",
+  "clusters.confirm.delete2": "This will remove saved credentials. Confirm again to delete.",
   "clusters.empty": "No clusters saved yet. Click \"Add cluster\" to create one.",
+  // YAML editor confirm
+  "yaml.discard.title": "Discard unsaved changes?",
+  "yaml.discard.desc": "You have unsaved changes that will be lost.",
 
   // Nodes page
   "nodes.eyebrow": "Node management",
@@ -828,6 +836,13 @@ const dictEn = {
 } as const;
 
 const dictZh = {
+  // Actions (shared)
+  "actions.continue": "继续",
+  // Clusters (additional keys)
+  "clusters.btn.delete": "删除",
+  "clusters.btn.deleting": "正在删除...",
+  "clusters.confirm.delete": "删除集群“{name}”？",
+  "clusters.confirm.delete2": "此操作将移除已保存的凭证。请再次确认。",
   // Node sections
   "nodes.section.masters": "主节点",
   "nodes.section.workers": "工作节点",

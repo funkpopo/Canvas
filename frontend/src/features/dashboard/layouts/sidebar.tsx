@@ -83,7 +83,7 @@ export function Sidebar() {
       <div className="flex h-full flex-col">
         <div className="flex h-16 items-center justify-between px-3">
           <Link
-            href="/"
+            href="/clusters"
             className={`flex items-center gap-3 text-sm font-semibold ${badgePresets.tag} text-text-primary`}
           >
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">

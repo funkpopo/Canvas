@@ -16,6 +16,7 @@ import {
 import { Badge, badgePresets } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { Modal } from "@/shared/ui/modal";
+import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 import { createNamespace, deleteNamespaceByName, fetchNamespaces, queryKeys, type OperationResultResponse } from "@/lib/api";
 import { useI18n } from "@/shared/i18n/i18n";
 
@@ -60,6 +61,9 @@ export default function NamespacesPage() {
       alert(err?.message || t("namespaces.error.delete"));
     },
   });
+
+  // Delete confirm dialog state
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
   function handleCardClick(name: string) {
     router.push(`/namespaces/${encodeURIComponent(name)}`);
@@ -145,8 +149,7 @@ export default function NamespacesPage() {
                         variant="destructive"
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (!confirm(t("namespaces.confirm.delete", { name: ns.name } as any))) return;
-                          delMut.mutate(ns.name);
+                          setDeleteTarget(ns.name);
                         }}
                       >
                         {t("namespaces.delete")}
@@ -188,6 +191,21 @@ export default function NamespacesPage() {
           </div>
         </div>
       </Modal>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(o) => { if (!o && !delMut.isPending) setDeleteTarget(null); }}
+        title={t("namespaces.confirm.delete", { name: deleteTarget ?? "" } as any)}
+        confirmText={t("actions.delete")}
+        cancelText={t("actions.cancel")}
+        confirmVariant="destructive"
+        onConfirm={async () => {
+          if (!deleteTarget) return;
+          await delMut.mutateAsync(deleteTarget);
+          setDeleteTarget(null);
+        }}
+        loading={delMut.isPending}
+      />
     </div>
   );
 }

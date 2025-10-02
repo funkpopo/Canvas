@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import yaml
 from kubernetes import client, config
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
 from app.dependencies import get_kubernetes_service, provide_cluster_config_service
 from app.core.crypto import decrypt_if_encrypted
@@ -206,3 +206,16 @@ async def get_cluster_health(
             )
 
     return await _probe()
+
+
+@router.delete("/{name}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete a saved cluster by name")
+async def delete_cluster_config(
+    name: str,
+    config_service: ClusterConfigService = Depends(provide_cluster_config_service),
+    kube_service: KubernetesService = Depends(get_kubernetes_service),
+) -> Response:
+    deleted = await config_service.delete_by_name(name)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Cluster configuration not found")
+    await kube_service.invalidate()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

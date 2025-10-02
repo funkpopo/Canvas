@@ -142,3 +142,28 @@ class ClusterConfigService:
             .where(ClusterConfig.id != cfg.id)
             .values(is_default=False)
         )
+
+    async def delete_by_name(self, name: str) -> bool:
+        async with self._session_factory() as session:
+            result = await session.execute(
+                select(ClusterConfig).where(ClusterConfig.name == name)
+            )
+            config = result.scalar_one_or_none()
+            if not config:
+                return False
+
+            was_default = bool(config.is_default)
+            await session.delete(config)
+            await session.flush()
+
+            if was_default:
+                # Select the earliest created as new default if any remain
+                res_any = await session.execute(
+                    select(ClusterConfig).order_by(ClusterConfig.created_at.asc()).limit(1)
+                )
+                next_cfg = res_any.scalar_one_or_none()
+                if next_cfg:
+                    await self._set_default(session, next_cfg)
+
+            await session.commit()
+            return True
