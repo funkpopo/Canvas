@@ -15,6 +15,7 @@ import { formatBytes, formatMillicores } from "@/lib/utils";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import { useI18n } from "@/shared/i18n/i18n";
 import { useDeploymentUpdates } from "@/hooks/useDeploymentUpdates";
+import { useConfirm } from "@/hooks/useConfirm";
 import {
   fetchDeploymentPods,
   fetchWorkloads,
@@ -44,6 +45,7 @@ import {
 
 export default function DeploymentDetailPage() {
   const { t } = useI18n();
+  const { confirm, ConfirmDialogComponent } = useConfirm();
   const params = useParams<{ namespace: string; name: string }>();
   const router = useRouter();
   const ns = decodeURIComponent(params.namespace);
@@ -109,7 +111,7 @@ export default function DeploymentDetailPage() {
     setSelectedForDelete((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
   }
 
-  function handleDeleteContainers(targets: string[]) {
+  async function handleDeleteContainers(targets: string[]) {
     // Use actual pod containers instead of yaml parsing for more reliable validation
     if (!yaml || !containersForSelectedPod || containersForSelectedPod.length === 0) {
       alert(t("error.cont.notFound"));
@@ -124,7 +126,8 @@ export default function DeploymentDetailPage() {
     const containers = extractContainersFromYaml(yaml);
     const next = containers.filter((c) => !uniqueTargets.includes(c.name));
     const names = uniqueTargets.join(", ");
-    if (!confirm(t("confirm.cont.deleteMany", { names }))) return;
+    const confirmed = await confirm({ title: t("confirm.cont.deleteMany", { names }) });
+    if (!confirmed) return;
     const newYaml = replaceContainersInYaml(yaml, next);
     updateDeploymentYaml(ns, name, newYaml)
       .then(() => {
@@ -502,13 +505,14 @@ export default function DeploymentDetailPage() {
     setMetrics(next);
   }
 
-  function handleDeleteContainer(target: string) {
+  async function handleDeleteContainer(target: string) {
     // Use actual pod containers instead of yaml parsing for more reliable validation
     if (!yaml || !containersForSelectedPod || containersForSelectedPod.length <= 1) {
       alert(t("error.cont.onlyOne"));
       return;
     }
-    if (!confirm(t("confirm.cont.delete", { name: target }))) return;
+    const confirmed = await confirm({ title: t("confirm.cont.delete", { name: target }) });
+    if (!confirmed) return;
     const containers = extractContainersFromYaml(yaml);
     const next = containers.filter((c) => c.name !== target);
     const newYaml = replaceContainersInYaml(yaml, next);
@@ -611,7 +615,10 @@ export default function DeploymentDetailPage() {
             </Button>
           </div>
 
-          <Button type="button" variant="destructive" onClick={() => { if (confirm(t("deploy.manage.deleteConfirm"))) delMut.mutate(); }} disabled={delMut.isPending}>
+          <Button type="button" variant="destructive" onClick={async () => { 
+            const confirmed = await confirm({ title: t("deploy.manage.deleteConfirm") });
+            if (confirmed) delMut.mutate(); 
+          }} disabled={delMut.isPending}>
             {t("deploy.manage.delete")}
           </Button>
         </CardContent>
@@ -1143,6 +1150,7 @@ export default function DeploymentDetailPage() {
           )}
         </CardContent>
       </Card>
+      <ConfirmDialogComponent />
     </div>
   );
 }

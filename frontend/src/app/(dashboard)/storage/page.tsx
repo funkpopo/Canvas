@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/sha
 import { badgePresets, Badge } from "@/shared/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
 import { useI18n } from "@/shared/i18n/i18n";
+import { useConfirm } from "@/hooks/useConfirm";
 import {
   createStorageClass,
   deleteStorageClass,
@@ -185,6 +186,7 @@ function CreateStorageClassForm({ onSubmit, onCancel }: { onSubmit: (p: StorageC
 
 function VolumeBrowser({ ns, pvc, onClose }: { ns: string; pvc: string; onClose: () => void }) {
   const { t } = useI18n();
+  const { confirm, ConfirmDialogComponent } = useConfirm();
   const [path, setPath] = useState<string>("/");
   const [editPath, setEditPath] = useState<string | null>(null);
   const [editText, setEditText] = useState<string>("");
@@ -251,6 +253,11 @@ function VolumeBrowser({ ns, pvc, onClose }: { ns: string; pvc: string; onClose:
   };
 
   const deleteSelected = async () => {
+    const confirmed = await confirm({
+      title: t("storage.browser.deleteSelected"),
+      description: `${selectedPaths.length} items will be deleted`,
+    });
+    if (!confirmed) return;
     for (const p of selectedPaths) {
       await deleteVolumePath(ns, pvc, p, true);
     }
@@ -327,7 +334,10 @@ function VolumeBrowser({ ns, pvc, onClose }: { ns: string; pvc: string; onClose:
                           <span className="mx-2">•</span>
                           <button className="text-xs text-primary" onClick={() => doRename(e.path)}>{t("storage.rename")}</button>
                           <span className="mx-2">•</span>
-                          <button className="text-xs text-error" onClick={() => deleteVolumePath(ns, pvc, e.path, true).then(reload)}>{t("storage.delete")}</button>
+                          <button className="text-xs text-error" onClick={async () => {
+                            const confirmed = await confirm({ title: `${t("storage.delete")} ${e.name}?` });
+                            if (confirmed) await deleteVolumePath(ns, pvc, e.path, true).then(reload);
+                          }}>{t("storage.delete")}</button>
                         </td>
                       </tr>
                     ))}
@@ -345,7 +355,10 @@ function VolumeBrowser({ ns, pvc, onClose }: { ns: string; pvc: string; onClose:
                           <span className="mx-2">•</span>
                           <button className="text-xs text-primary" onClick={() => doRename(e.path)}>{t("storage.rename")}</button>
                           <span className="mx-2">•</span>
-                          <button className="text-xs text-error" onClick={() => deleteVolumePath(ns, pvc, e.path, false).then(reload)}>{t("storage.delete")}</button>
+                          <button className="text-xs text-error" onClick={async () => {
+                            const confirmed = await confirm({ title: `${t("storage.delete")} ${e.name}?` });
+                            if (confirmed) await deleteVolumePath(ns, pvc, e.path, false).then(reload);
+                          }}>{t("storage.delete")}</button>
                         </td>
                       </tr>
                     ))}
@@ -372,12 +385,14 @@ function VolumeBrowser({ ns, pvc, onClose }: { ns: string; pvc: string; onClose:
       >
         <textarea value={editText} onChange={(e) => setEditText(e.target.value)} className="h-80 w-full rounded-md border border-border bg-surface p-2 font-mono text-sm" />
       </Modal>
+      <ConfirmDialogComponent />
     </Modal>
   );
 }
 
 export default function StoragePage() {
   const { t } = useI18n();
+  const { confirm, ConfirmDialogComponent } = useConfirm();
   const queryClient = useQueryClient();
   const { data: classes } = useQuery({ queryKey: queryKeys.storageClasses, queryFn: fetchStorageClasses });
   const { data: pvcs } = useQuery({ queryKey: queryKeys.pvcs(), queryFn: () => fetchPvcs() });
@@ -463,7 +478,10 @@ export default function StoragePage() {
                           <td className="px-2 py-1">{sc.volume_binding_mode ?? ""}</td>
                           <td className="px-2 py-1">{String(Boolean(sc.allow_volume_expansion))}</td>
                           <td className="px-2 py-1">
-                            <button className="text-xs text-error" onClick={() => deleteMut.mutate(sc.name)}>{t("storage.delete")}</button>
+                            <button className="text-xs text-error" onClick={async () => {
+                              const confirmed = await confirm({ title: `${t("storage.delete")} ${sc.name}?` });
+                              if (confirmed) deleteMut.mutate(sc.name);
+                            }}>{t("storage.delete")}</button>
                           </td>
                         </tr>
                       ))
@@ -526,6 +544,7 @@ export default function StoragePage() {
         <CreateStorageClassForm onSubmit={onCreate} onCancel={() => setCreating(false)} />
       }</Modal>
       {browser && <VolumeBrowser ns={browser.ns} pvc={browser.pvc} onClose={() => setBrowser(null)} />}
+      <ConfirmDialogComponent />
     </div>
   );
 }

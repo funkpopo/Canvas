@@ -13,6 +13,7 @@ import { SimpleLineChart } from "@/shared/ui/line-chart";
 import { StatusBadge } from "@/shared/ui/status-badge";
 import { useI18n } from "@/shared/i18n/i18n";
 import { Modal } from "@/shared/ui/modal";
+import { useConfirm } from "@/hooks/useConfirm";
 import { cn, formatBytes, formatMillicores } from "@/lib/utils";
 import { ScrollArea } from "@/shared/ui/scroll-area";
 import {
@@ -49,6 +50,7 @@ function formatDuration(seconds?: number | null): string {
 
 export default function NodeDetailPage() {
   const { t } = useI18n();
+  const { confirm, ConfirmDialogComponent } = useConfirm();
   const params = useParams<{ name: string }>();
   const router = useRouter();
   const name = decodeURIComponent(params.name);
@@ -226,7 +228,10 @@ export default function NodeDetailPage() {
             {detail?.schedulable ? t("node.manage.unschedulable") : t("node.manage.schedulable")}
           </Button>
           <Button type="button" variant="outline" onClick={() => drainMut.mutate()} disabled={drainMut.isPending}>{t("node.manage.drain")}</Button>
-          <Button type="button" variant="destructive" onClick={() => { if (confirm(t("node.manage.deleteConfirm"))) deleteMut.mutate(); }} disabled={deleteMut.isPending}>{t("node.manage.delete")}</Button>
+          <Button type="button" variant="destructive" onClick={async () => { 
+            const confirmed = await confirm({ title: t("node.manage.deleteConfirm") });
+            if (confirmed) deleteMut.mutate(); 
+          }} disabled={deleteMut.isPending}>{t("node.manage.delete")}</Button>
 
           {/* Edit actions open modals */}
           <div className="w-px h-6 bg-border mx-2" />
@@ -501,6 +506,7 @@ export default function NodeDetailPage() {
           )}
         </CardContent>
       </Card>
+      <ConfirmDialogComponent />
     </div>
   );
 }

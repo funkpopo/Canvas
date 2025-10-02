@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/shared/ui/card";
 import { useI18n } from "@/shared/i18n/i18n";
 import { badgePresets } from "@/shared/ui/badge";
 import { YamlEditor } from "@/shared/ui/yaml-editor";
+import { useConfirm } from "@/hooks/useConfirm";
 import {
   fetchNamespaces,
   queryKeys,
@@ -27,6 +28,7 @@ function useNamespaces() {
 
 export default function SecretsPage() {
   const { t } = useI18n();
+  const { confirm, ConfirmDialogComponent } = useConfirm();
   const namespaces = useNamespaces();
   const [ns, setNs] = useState<string>("all");
 
@@ -97,7 +99,10 @@ export default function SecretsPage() {
                       <td className="px-3 py-2">{it.created_at ? new Date(it.created_at).toLocaleString() : "-"}</td>
                       <td className="px-3 py-2 flex gap-2">
                         <button className="text-xs underline" onClick={() => setEditing({ ns: it.namespace, name: it.name })}>{t("deploy.yaml.edit")}</button>
-                        <button className="text-xs text-error underline" onClick={async () => { if (confirm(t("secrets.confirm.delete"))) { await deleteSecret(it.namespace, it.name); location.reload(); } }}>{t("actions.delete")}</button>
+                        <button className="text-xs text-error underline" onClick={async () => { 
+                          const confirmed = await confirm({ title: t("secrets.confirm.delete") });
+                          if (confirmed) { await deleteSecret(it.namespace, it.name); location.reload(); }
+                        }}>{t("actions.delete")}</button>
                       </td>
                     </tr>
                   ))
@@ -121,6 +126,7 @@ export default function SecretsPage() {
           alert(t("alert.yaml.applied"));
         }}
       />
+      <ConfirmDialogComponent />
     </div>
   );
 }

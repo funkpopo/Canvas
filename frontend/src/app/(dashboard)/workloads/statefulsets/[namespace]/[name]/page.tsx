@@ -11,6 +11,7 @@ import { Badge, badgePresets } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { YamlEditor } from "@/shared/ui/yaml-editor";
 import { useI18n } from "@/shared/i18n/i18n";
+import { useConfirm } from "@/hooks/useConfirm";
 import {
   fetchWorkloads,
   fetchStatefulSetPods,
@@ -26,6 +27,7 @@ import {
 
 export default function StatefulSetDetailPage() {
   const { t } = useI18n();
+  const { confirm, ConfirmDialogComponent } = useConfirm();
   const params = useParams<{ namespace: string; name: string }>();
   const router = useRouter();
   const ns = decodeURIComponent(params.namespace);
@@ -122,7 +124,10 @@ export default function StatefulSetDetailPage() {
             </Button>
           </div>
 
-          <Button type="button" variant="destructive" onClick={() => { if (confirm(t("deploy.manage.deleteConfirm"))) delMut.mutate(); }}>{t("deploy.manage.delete")}</Button>
+          <Button type="button" variant="destructive" onClick={async () => { 
+            const confirmed = await confirm({ title: t("deploy.manage.deleteConfirm") });
+            if (confirmed) delMut.mutate(); 
+          }}>{t("deploy.manage.delete")}</Button>
         </CardContent>
       </Card>
 
@@ -170,6 +175,7 @@ export default function StatefulSetDetailPage() {
         onClose={() => setYamlOpen(false)}
         onSave={async (y) => { await updateStatefulSetYaml(ns, name, y); alert(t("alert.yaml.applied")); }}
       />
+      <ConfirmDialogComponent />
     </div>
   );
 }

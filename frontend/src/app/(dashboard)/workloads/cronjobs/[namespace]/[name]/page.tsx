@@ -10,6 +10,7 @@ import { Badge, badgePresets } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { YamlEditor } from "@/shared/ui/yaml-editor";
 import { useI18n } from "@/shared/i18n/i18n";
+import { useConfirm } from "@/hooks/useConfirm";
 import {
   fetchWorkloads,
   fetchCronJobYaml,
@@ -24,6 +25,7 @@ import { useMemo, useState, useEffect } from "react";
 
 export default function CronJobDetailPage() {
   const { t } = useI18n();
+  const { confirm, ConfirmDialogComponent } = useConfirm();
   const params = useParams<{ namespace: string; name: string }>();
   const router = useRouter();
   const ns = decodeURIComponent(params.namespace);
@@ -87,7 +89,10 @@ export default function CronJobDetailPage() {
         <CardContent className="flex flex-wrap items-center gap-3">
           <Button type="button" variant="outline" onClick={() => setYamlOpen(true)}>{t("deploy.yaml.edit")}</Button>
           <Button type="button" variant="default" disabled={runMut.isPending} onClick={() => runMut.mutate()}>{t("cron.manage.runNow")}</Button>
-          <Button type="button" variant="destructive" onClick={() => { if (confirm(t("cron.manage.deleteConfirm"))) delMut.mutate(); }}>{t("deploy.manage.delete")}</Button>
+          <Button type="button" variant="destructive" onClick={async () => { 
+            const confirmed = await confirm({ title: t("cron.manage.deleteConfirm") });
+            if (confirmed) delMut.mutate(); 
+          }}>{t("deploy.manage.delete")}</Button>
         </CardContent>
       </Card>
 
@@ -100,6 +105,7 @@ export default function CronJobDetailPage() {
         onClose={() => setYamlOpen(false)}
         onSave={async (y) => { await updateCronJobYaml(ns, name, y); alert(t("alert.yaml.applied")); }}
       />
+      <ConfirmDialogComponent />
     </div>
   );
 }

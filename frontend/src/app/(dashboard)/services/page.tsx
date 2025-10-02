@@ -7,6 +7,7 @@ import { PageHeader } from "@/features/dashboard/layouts/page-header";
 import { Card, CardContent } from "@/shared/ui/card";
 import { Badge, badgePresets } from "@/shared/ui/badge";
 import { useI18n } from "@/shared/i18n/i18n";
+import { useConfirm } from "@/hooks/useConfirm";
 import {
   createServiceFromYaml,
   deleteService,
@@ -35,6 +36,7 @@ type ServiceForm = {
 export default function ServicesPage() {
   const { t } = useI18n();
   const queryClient = useQueryClient();
+  const { confirm, ConfirmDialogComponent } = useConfirm();
   const { data: namespaces } = useQuery<NamespaceSummaryResponse[]>({ queryKey: queryKeys.namespaces, queryFn: fetchNamespaces });
 
   const [ns, setNs] = useState<string>("default");
@@ -121,7 +123,10 @@ export default function ServicesPage() {
   };
 
   const onDelete = async (n: string) => {
-    if (!confirm(t("svc.confirm.delete", { name: n }))) return;
+    const confirmed = await confirm({
+      title: t("svc.confirm.delete", { name: n }),
+    });
+    if (!confirmed) return;
     await deleteService(ns, n);
     reload();
   };
@@ -351,6 +356,7 @@ export default function ServicesPage() {
           </div>
         </Modal>
       )}
+      <ConfirmDialogComponent />
     </div>
   );
 }

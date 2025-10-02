@@ -11,6 +11,7 @@ import { Badge, badgePresets } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { YamlEditor } from "@/shared/ui/yaml-editor";
 import { useI18n } from "@/shared/i18n/i18n";
+import { useConfirm } from "@/hooks/useConfirm";
 import {
   fetchWorkloads,
   fetchDaemonSetPods,
@@ -25,6 +26,7 @@ import {
 
 export default function DaemonSetDetailPage() {
   const { t } = useI18n();
+  const { confirm, ConfirmDialogComponent } = useConfirm();
   const params = useParams<{ namespace: string; name: string }>();
   const router = useRouter();
   const ns = decodeURIComponent(params.namespace);
@@ -81,7 +83,10 @@ export default function DaemonSetDetailPage() {
         </CardHeader>
         <CardContent className="flex flex-wrap items-center gap-3">
           <Button type="button" variant="outline" onClick={() => setYamlOpen(true)}>{t("deploy.yaml.edit")}</Button>
-          <Button type="button" variant="destructive" onClick={() => { if (confirm(t("daemon.manage.deleteConfirm"))) delMut.mutate(); }}>{t("deploy.manage.delete")}</Button>
+          <Button type="button" variant="destructive" onClick={async () => { 
+            const confirmed = await confirm({ title: t("daemon.manage.deleteConfirm") });
+            if (confirmed) delMut.mutate(); 
+          }}>{t("deploy.manage.delete")}</Button>
         </CardContent>
       </Card>
 
@@ -129,6 +134,7 @@ export default function DaemonSetDetailPage() {
         onClose={() => setYamlOpen(false)}
         onSave={async (y) => { await updateDaemonSetYaml(ns, name, y); alert(t("alert.yaml.applied")); }}
       />
+      <ConfirmDialogComponent />
     </div>
   );
 }
