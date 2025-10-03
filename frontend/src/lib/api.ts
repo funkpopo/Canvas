@@ -58,18 +58,74 @@ export const queryKeys = {
   auditLogs: ["audit", "logs"] as const,
   crds: ["crds", "list"] as const,
   crdResources: (crd: string, ns?: string) => ["crds", crd, ns ?? "all"] as const,
+  alerts: ["alerts", "list"] as const,
+  alertTrends: (window: string) => ["alerts", "trends", window] as const,
 } as const;
 
+function getAccessToken(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return localStorage.getItem("canvas.access_token");
+  } catch {
+    return null;
+  }
+}
+
+async function tryRefresh(): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  const rt = localStorage.getItem("canvas.refresh_token");
+  if (!rt) return false;
+  try {
+    const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: rt }),
+    });
+    if (!res.ok) return false;
+    const data = (await res.json()) as TokenPairResponse;
+    localStorage.setItem("canvas.access_token", data.access_token);
+    localStorage.setItem("canvas.refresh_token", data.refresh_token);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const auth = getAccessToken();
+  let response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
+      ...(auth ? { Authorization: `Bearer ${auth}` } : {}),
       ...(init?.headers ?? {}),
     },
   });
 
   if (!response.ok) {
+    if (response.status === 401 && typeof window !== "undefined") {
+      const refreshed = await tryRefresh();
+      if (refreshed) {
+        const retryAuth = getAccessToken();
+        response = await fetch(`${API_BASE_URL}${path}`, {
+          ...init,
+          headers: {
+            "Content-Type": "application/json",
+            ...(retryAuth ? { Authorization: `Bearer ${retryAuth}` } : {}),
+            ...(init?.headers ?? {}),
+          },
+        });
+      }
+      if (!response.ok) {
+        try {
+          localStorage.removeItem("canvas.access_token");
+          localStorage.removeItem("canvas.refresh_token");
+        } catch {}
+        if (!window.location.pathname.startsWith("/login")) {
+          window.location.href = "/login";
+        }
+      }
+    }
     const message = await response.text();
     throw new Error(message || `Request failed with status ${response.status}`);
   }
@@ -224,6 +280,17 @@ export function fetchClusterOverview(): Promise<ClusterOverviewResponse> {
   return request<ClusterOverviewResponse>("/cluster/overview");
 }
 
+// --- Auth ---
+export interface TokenPairResponse { access_token: string; refresh_token: string; token_type: "bearer"; expires_in: number }
+export interface LoginRequest { username: string; password: string }
+export function loginApi(body: LoginRequest): Promise<TokenPairResponse> {
+  return request<TokenPairResponse>("/auth/login", { method: "POST", body: JSON.stringify(body) });
+}
+export interface MeResponse { id: number; username: string; display_name?: string | null; email?: string | null; roles: string[]; tenant_id?: number | null; created_at: string; updated_at: string; last_login_at?: string | null }
+export function fetchMe(): Promise<MeResponse> {
+  return request<MeResponse>("/auth/me");
+}
+
 export function fetchWorkloads(): Promise<WorkloadSummaryResponse[]> {
   return request<WorkloadSummaryResponse[]>("/cluster/workloads");
 }
@@ -329,6 +396,37 @@ export interface StorageSummaryResponse {
 
 export function fetchStorageSummary(): Promise<StorageSummaryResponse> {
   return request<StorageSummaryResponse>("/cluster/storage");
+}
+
+// Alerts
+export interface AlertEntryResponse {
+  received_at: string;
+  status: string;
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  starts_at?: string | null;
+  ends_at?: string | null;
+  generator_url?: string | null;
+  fingerprint?: string | null;
+  acked?: boolean | null;
+  silenced_until?: string | null;
+}
+export function fetchAlerts(limit = 100): Promise<AlertEntryResponse[]> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  return request<AlertEntryResponse[]>(`/alerts/?${params.toString()}`);
+}
+export interface TrendPoint { ts: string; firing: number; resolved: number }
+export function fetchAlertTrends(window: string): Promise<TrendPoint[]> {
+  const params = new URLSearchParams({ window });
+  return request<TrendPoint[]>(`/alerts/trends?${params.toString()}`);
+}
+export function ackAlert(fingerprint: string): Promise<{ status: string }> {
+  const fp = encodeURIComponent(fingerprint);
+  return request<{ status: string }>(`/alerts/${fp}/ack`, { method: "POST" });
+}
+export function silenceAlert(fingerprint: string, minutes: number): Promise<{ status: string }> {
+  const fp = encodeURIComponent(fingerprint);
+  return request<{ status: string }>(`/alerts/${fp}/silence`, { method: "POST", body: JSON.stringify({ minutes }) });
 }
 
 // CRDs & generic resources

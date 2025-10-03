@@ -8,6 +8,7 @@ from app.dependencies import get_kubernetes_service
 from app.services.audit import AuditService
 from app.db import get_session_factory
 from app.schemas.audit import AuditLogEntry
+from app.core.auth import get_current_user, CurrentUser
 
 
 def get_audit_service() -> AuditService:
@@ -25,10 +26,15 @@ async def list_audit_logs(
     namespace: str | None = Query(default=None),
     name: str | None = Query(default=None),
     audit: AuditService = Depends(get_audit_service),
+    current: CurrentUser = Depends(get_current_user),
 ) -> list[AuditLogEntry]:
     rows = await audit.list(limit=limit, action=action, resource=resource, namespace=namespace, name=name)
     items: list[AuditLogEntry] = []
     for r in rows:
+        # Permission filter: non-admin users can only see their own entries
+        if "admin" not in current.roles:
+            if r.username != current.username:
+                continue
         details: dict[str, Any] | None = None
         if r.details:
             try:
@@ -51,4 +57,3 @@ async def list_audit_logs(
             )
         )
     return items
-

@@ -18,7 +18,7 @@ from app.api.routes import (
 )
 from app.api.routes import statefulsets, daemonsets, jobs, cronjobs
 from app.api.routes import audit, authz
-from app.api.routes import crds, resources, alerts, helm
+from app.api.routes import crds, resources, alerts, helm, auth
 
 api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(cluster.router)
@@ -45,3 +45,4 @@ api_router.include_router(crds.router)
 api_router.include_router(resources.router)
 api_router.include_router(alerts.router)
 api_router.include_router(helm.router)
+api_router.include_router(auth.router)

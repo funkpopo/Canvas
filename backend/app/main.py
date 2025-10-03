@@ -14,6 +14,7 @@ from app.dependencies import get_kubernetes_service
 from app.workers.scheduler import PeriodicTask
 from app.websocket import ConnectionManager, K8sWatcher
 from app.schemas.websocket import WebSocketMessage
+from app.core.bootstrap import ensure_bootstrap
 
 
 @asynccontextmanager
@@ -25,6 +26,12 @@ async def lifespan(app: FastAPI):
 
     # Ensure database schema is initialized
     await init_db()
+    # Ensure baseline roles and admin user
+    try:
+        await ensure_bootstrap(get_session_factory())
+    except Exception:
+        # best-effort bootstrap; continue even if failed
+        pass
 
     service = get_kubernetes_service()
     

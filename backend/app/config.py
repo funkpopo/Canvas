@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     exec_session_max_seconds: int = 1800
     allowed_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
     database_url: str = "sqlite+aiosqlite:///./canvas.db"
+    # Auth/JWT settings
+    jwt_secret: str = Field(default="changeme-in-prod", description="Secret key for signing JWTs")
+    jwt_algorithm: str = Field(default="HS256", description="JWT signing algorithm")
+    access_token_exp_minutes: int = Field(default=60, description="Access token expiration in minutes")
+    refresh_token_exp_days: int = Field(default=30, description="Refresh token expiration in days")
     # Optional Fernet key for encrypting sensitive fields (ClusterConfig)
     # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
     fernet_key: str | None = None
