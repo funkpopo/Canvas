@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     jwt_algorithm: str = Field(default="HS256", description="JWT signing algorithm")
     access_token_exp_minutes: int = Field(default=60, description="Access token expiration in minutes")
     refresh_token_exp_days: int = Field(default=30, description="Refresh token expiration in days")
+    allow_self_registration: bool = Field(default=False, description="Allow anonymous users to self-register")
     # Optional Fernet key for encrypting sensitive fields (ClusterConfig)
     # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
     fernet_key: str | None = None
@@ -38,6 +39,19 @@ class Settings(BaseSettings):
     # Optional Helm integration (server-side). Disabled by default.
     helm_enabled: bool = Field(default=False, description="Enable server-side Helm CLI integration")
     helm_binary: str = Field(default="helm", description="Path to Helm binary")
+    # Alerting notifications
+    alert_notify_enabled: bool = Field(default=False, description="Enable outgoing alert notifications")
+    alert_webhook_secret: str | None = Field(default=None, description="Optional shared secret for /alerts/webhook")
+    # Slack notifications
+    alert_notify_slack_webhook: str | None = Field(default=None, description="Slack Incoming Webhook URL")
+    # Email (SMTP) notifications
+    smtp_host: str | None = Field(default=None, description="SMTP host for email alerts")
+    smtp_port: int = Field(default=587, description="SMTP port")
+    smtp_username: str | None = Field(default=None, description="SMTP username")
+    smtp_password: str | None = Field(default=None, description="SMTP password")
+    smtp_use_tls: bool = Field(default=True, description="Use STARTTLS for SMTP")
+    alert_email_from: str | None = Field(default=None, description="From address for alert emails")
+    alert_email_to: list[str] = Field(default_factory=list, description="Recipient list for alert emails")
 
     @computed_field
     @property

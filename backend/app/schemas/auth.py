@@ -55,3 +55,20 @@ class ApiKeyCreated(BaseModel):
     name: str
     created_at: datetime
 
+
+class RegisterRequest(BaseModel):
+    username: str
+    password: str
+    display_name: str | None = None
+    email: str | None = None
+    tenant_slug: str | None = None
+
+
+class RoleInfo(BaseModel):
+    id: int
+    name: str
+
+
+class UpdateUserRequest(BaseModel):
+    is_active: bool | None = None
+    roles: list[str] | None = None

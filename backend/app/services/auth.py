@@ -92,6 +92,16 @@ class AuthService:
             await session.commit()
         return access, refresh, int(access_ttl.total_seconds())
 
+    async def set_last_login(self, user_id: int) -> None:
+        now = datetime.now(timezone.utc)
+        async with self._session_factory() as session:
+            row = await session.execute(select(User).where(User.id == user_id))
+            u = row.scalars().first()
+            if u:
+                u.last_login_at = now
+                u.updated_at = now
+                await session.commit()
+
     async def rotate_refresh(self, refresh_jti: str, user: User) -> tuple[str, str, int]:
         # revoke old jti
         settings = get_settings()
@@ -137,3 +147,43 @@ class AuthService:
             await session.commit()
             return ak, full
 
+    async def list_roles(self) -> list[Role]:
+        async with self._session_factory() as session:
+            rows = (await session.execute(select(Role))).scalars().all()
+            return list(rows)
+
+    async def update_user(self, user_id: int, *, is_active: bool | None = None) -> User | None:
+        async with self._session_factory() as session:
+            row = await session.execute(select(User).where(User.id == user_id))
+            user = row.scalars().first()
+            if not user:
+                return None
+            changed = False
+            if is_active is not None:
+                user.is_active = is_active
+                changed = True
+            if changed:
+                user.updated_at = datetime.now(timezone.utc)
+                await session.commit()
+            return (await session.execute(select(User).where(User.id == user_id))).scalars().first()
+
+    async def set_user_roles(self, user_id: int, role_names: list[str]) -> User | None:
+        async with self._session_factory() as session:
+            row = await session.execute(select(User).where(User.id == user_id))
+            user = row.scalars().first()
+            if not user:
+                return None
+            # ensure roles exist
+            ensured = await self.ensure_roles(role_names)
+            # clear existing
+            await session.execute(
+                select(UserRole).where(UserRole.user_id == user_id)
+            )
+            # The above select doesn't delete; need to delete via delete() in SQLAlchemy 2.0
+            from sqlalchemy import delete as sqla_delete
+
+            await session.execute(sqla_delete(UserRole).where(UserRole.user_id == user_id))
+            for r in ensured:
+                session.add(UserRole(user_id=user_id, role_id=r.id))
+            await session.commit()
+            return (await session.execute(select(User).where(User.id == user_id))).scalars().first()

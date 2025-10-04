@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import structlog
 from kubernetes.stream import stream
 
-from app.api.router import api_router
+from app.api.router import api_router, public_router
 from app.config import get_settings
 from app.db import init_db, get_session_factory
 from app.core.logging import configure_logging
@@ -166,6 +166,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    app.include_router(public_router)
     app.include_router(api_router)
 
     @app.get("/healthz", tags=["health"])

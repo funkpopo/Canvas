@@ -75,6 +75,25 @@ Backend is configured via environment variables (see defaults in `backend/app/co
 - Optional Helm integration:
   - `HELM_ENABLED=true` and `HELM_BINARY=helm`
 
+Authentication & Authorization:
+
+- JWT is enabled by default. Configure:
+  - `JWT_SECRET` and `JWT_ALGORITHM` (default HS256)
+  - `ACCESS_TOKEN_EXP_MINUTES` (default 60) and `REFRESH_TOKEN_EXP_DAYS` (default 30)
+  - `ALLOW_SELF_REGISTRATION` (default false) to enable `/api/v1/auth/register`
+- Roles: `viewer`, `operator`, `admin` (bootstrap creates an `admin` user: admin/admin123). Most API routes require authentication. Sensitive routes (cluster config writes, alert ack/silence) require `admin` or `operator` as appropriate.
+
+Alerting:
+
+- Ingests Alertmanager webhooks at `/api/v1/alerts/webhook`. Optionally protect with `ALERT_WEBHOOK_SECRET` passed via `X-Alert-Secret` header or `?token=` query.
+- Enable outgoing notifications by configuring:
+  - `ALERT_NOTIFY_ENABLED=true`
+  - Slack: `ALERT_NOTIFY_SLACK_WEBHOOK=https://hooks.slack.com/...`
+  - Email: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_USE_TLS` (true/false), `ALERT_EMAIL_FROM`, `ALERT_EMAIL_TO` (comma-separated list)
+- API endpoints:
+  - `/api/v1/alerts/` recent events, `/api/v1/alerts/active` latest per fingerprint, `/api/v1/alerts/trends` time buckets
+  - `/api/v1/alerts/{fp}/ack` and `/api/v1/alerts/{fp}/silence` (operator/admin)
+
 Frontend:
 
 - `NEXT_PUBLIC_API_BASE_URL` — default `http://localhost:8000/api/v1`
@@ -102,4 +121,3 @@ Update `ALLOWED_ORIGINS` and TLS/headers at the proxy. The backend exposes WebSo
 - Set `FERNET_KEY` in production to encrypt tokens and kubeconfig data at rest.
 - Limit exec and log streaming via the provided env limits.
 - Carefully enable Helm only if the server host is trusted.
-

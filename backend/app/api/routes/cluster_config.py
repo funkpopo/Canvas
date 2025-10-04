@@ -17,6 +17,7 @@ from app.schemas.config import (
 )
 from app.services.cluster_config import ClusterConfigService
 from app.services.kube_client import KubernetesService
+from app.core.auth import require_roles
 
 router = APIRouter(prefix="/cluster/config", tags=["cluster-config"])
 
@@ -53,7 +54,12 @@ async def get_cluster_config(
     return _to_detail(config)
 
 
-@router.put("/", response_model=ClusterConfigDetail, summary="Save cluster configuration")
+@router.put(
+    "/",
+    response_model=ClusterConfigDetail,
+    summary="Save cluster configuration",
+    dependencies=[Depends(require_roles("admin"))],
+)
 async def upsert_cluster_config(
     payload: ClusterConfigPayload,
     config_service: ClusterConfigService = Depends(provide_cluster_config_service),
@@ -68,6 +74,7 @@ async def upsert_cluster_config(
     "/all",
     response_model=list[ClusterConfigResponse],
     summary="List all saved cluster configurations",
+    dependencies=[Depends(require_roles("admin"))],
 )
 async def list_cluster_configs(
     config_service: ClusterConfigService = Depends(provide_cluster_config_service),
@@ -95,6 +102,7 @@ async def list_cluster_configs(
     "/select",
     response_model=ClusterConfigDetail,
     summary="Select active cluster by name or id",
+    dependencies=[Depends(require_roles("admin"))],
 )
 async def select_active_cluster(
     payload: SelectClusterRequest,
@@ -208,7 +216,12 @@ async def get_cluster_health(
     return await _probe()
 
 
-@router.delete("/{name}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete a saved cluster by name")
+@router.delete(
+    "/{name}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a saved cluster by name",
+    dependencies=[Depends(require_roles("admin"))],
+)
 async def delete_cluster_config(
     name: str,
     config_service: ClusterConfigService = Depends(provide_cluster_config_service),

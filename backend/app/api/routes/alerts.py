@@ -14,17 +14,19 @@ from app.models.alert_event import AlertEvent
 from app.models.alert_status import AlertStatus
 from app.services.audit import AuditService
 from app.db import get_session_factory
-from app.core.auth import get_current_user, CurrentUser
+from app.core.auth import get_current_user, CurrentUser, require_roles
+from app.services.alert_notify import send_email_notification, send_slack_notification, render_alert_markdown
 
 
 router = APIRouter(prefix="/alerts", tags=["alerts"])
+public_router = APIRouter(prefix="/alerts", tags=["alerts"])  # webhook only
 
 
 def get_audit_service() -> AuditService:
     return AuditService(get_session_factory())
 
 
-@router.post("/webhook", summary="Alertmanager webhook receiver")
+@public_router.post("/webhook", summary="Alertmanager webhook receiver")
 async def alertmanager_webhook(
     payload: dict[str, Any],
     request: Request,
@@ -32,6 +34,12 @@ async def alertmanager_webhook(
     audit: AuditService = Depends(get_audit_service),
 ) -> dict[str, str]:
     try:
+        # Optional shared secret enforcement
+        settings = get_settings()
+        if settings.alert_webhook_secret:
+            token = request.headers.get("X-Alert-Secret") or request.query_params.get("token")
+            if token != settings.alert_webhook_secret:
+                raise HTTPException(status_code=401, detail="Unauthorized webhook request")
         alerts = payload.get("alerts") or []
         if not isinstance(alerts, list):
             raise HTTPException(status_code=400, detail="alerts must be a list")
@@ -59,6 +67,37 @@ async def alertmanager_webhook(
         if objects:
             session.add_all(objects)
             await session.commit()
+        # Notification fan-out (best-effort)
+        try:
+            if get_settings().alert_notify_enabled:
+                # pre-fetch statuses
+                fps = [str(a.get("fingerprint") or "") for a in alerts if a.get("fingerprint")]
+                statuses: dict[str, AlertStatus] = {}
+                if fps:
+                    st_rows = (await session.execute(select(AlertStatus).where(AlertStatus.fingerprint.in_(fps)))).scalars().all()
+                    statuses = {s.fingerprint: s for s in st_rows if s.fingerprint}
+                tasks = []
+                for a in alerts:
+                    fp = str(a.get("fingerprint") or "")
+                    if not fp:
+                        continue
+                    status = str(a.get("status", "firing"))
+                    labels = a.get("labels") or {}
+                    annotations = a.get("annotations") or {}
+                    st = statuses.get(fp)
+                    # Skip notifications if silenced
+                    if st and st.silenced_until and st.silenced_until > now:
+                        continue
+                    title = f"[{labels.get('severity', 'info').upper()}] {labels.get('alertname', 'Alert')} - {status}"
+                    text, html = render_alert_markdown(title, labels, annotations)
+                    # Slack payload (simple text)
+                    tasks.append(send_slack_notification({"text": text}))
+                    # Email payload
+                    tasks.append(send_email_notification(title, html, text))
+                if tasks:
+                    await asyncio.gather(*tasks, return_exceptions=True)
+        except Exception:
+            pass
         await audit.log(
             action="alert_webhook",
             resource="alert",
@@ -74,7 +113,7 @@ async def alertmanager_webhook(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/", summary="List recent alerts")
+@router.get("/", summary="List recent alerts", dependencies=[Depends(get_current_user)])
 async def list_alerts(limit: int = Query(default=50, ge=1, le=500), session: AsyncSession = Depends(get_session)) -> list[dict[str, Any]]:
     stmt: Select[tuple[AlertEvent]] = select(AlertEvent).order_by(AlertEvent.received_at.desc()).limit(limit)
     rows: list[AlertEvent] = (await session.execute(stmt)).scalars().all()
@@ -112,7 +151,55 @@ async def list_alerts(limit: int = Query(default=50, ge=1, le=500), session: Asy
     return out
 
 
-@router.post("/{fingerprint}/ack")
+@router.get("/active", summary="List latest alert per fingerprint", dependencies=[Depends(get_current_user)])
+async def list_active_alerts(limit: int = Query(default=200, ge=1, le=1000), session: AsyncSession = Depends(get_session)) -> list[dict[str, Any]]:
+    stmt: Select[tuple[AlertEvent]] = select(AlertEvent).order_by(AlertEvent.received_at.desc()).limit(limit)
+    rows: list[AlertEvent] = (await session.execute(stmt)).scalars().all()
+    seen: set[str] = set()
+    picked: list[AlertEvent] = []
+    for r in rows:
+        fp = r.fingerprint or ""
+        if not fp:
+            continue
+        if fp in seen:
+            continue
+        seen.add(fp)
+        picked.append(r)
+    # fetch statuses
+    status_map: dict[str, AlertStatus] = {}
+    fps = [r.fingerprint for r in picked if r.fingerprint]
+    if fps:
+        st_rows = (await session.execute(select(AlertStatus).where(AlertStatus.fingerprint.in_(fps)))).scalars().all()
+        status_map = {s.fingerprint: s for s in st_rows if s.fingerprint}
+    out: list[dict[str, Any]] = []
+    for r in picked:
+        try:
+            labels = json.loads(r.labels)
+        except Exception:
+            labels = {}
+        try:
+            anns = json.loads(r.annotations)
+        except Exception:
+            anns = {}
+        st = status_map.get(r.fingerprint or "")
+        out.append(
+            {
+                "received_at": r.received_at.isoformat() if r.received_at else None,
+                "status": r.status,
+                "labels": labels,
+                "annotations": anns,
+                "starts_at": r.starts_at,
+                "ends_at": r.ends_at,
+                "generator_url": r.generator_url,
+                "fingerprint": r.fingerprint,
+                "acked": bool(st.acked_at) if st else None,
+                "silenced_until": st.silenced_until.isoformat() if st and st.silenced_until else None,
+            }
+        )
+    return out
+
+
+@router.post("/{fingerprint}/ack", dependencies=[Depends(require_roles("operator", "admin"))])
 async def ack_alert(fingerprint: str, session: AsyncSession = Depends(get_session), audit: AuditService = Depends(get_audit_service), current: CurrentUser = Depends(get_current_user)) -> dict[str, str]:
     try:
         now = datetime.now(timezone.utc)
@@ -130,7 +217,7 @@ async def ack_alert(fingerprint: str, session: AsyncSession = Depends(get_sessio
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/{fingerprint}/silence")
+@router.post("/{fingerprint}/silence", dependencies=[Depends(require_roles("operator", "admin"))])
 async def silence_alert_ep(fingerprint: str, payload: dict[str, Any], session: AsyncSession = Depends(get_session), audit: AuditService = Depends(get_audit_service), current: CurrentUser = Depends(get_current_user)) -> dict[str, str]:
     try:
         minutes = int(payload.get("minutes") or 60)
@@ -150,7 +237,7 @@ async def silence_alert_ep(fingerprint: str, payload: dict[str, Any], session: A
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/trends")
+@router.get("/trends", dependencies=[Depends(get_current_user)])
 async def alert_trends(window: str = Query(default="1h"), session: AsyncSession = Depends(get_session)) -> list[dict[str, Any]]:
     # Return counts over time buckets for firing vs resolved
     # window supports: 1h, 6h, 24h
