@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     alert_webhook_secret: str | None = Field(default=None, description="Optional shared secret for /alerts/webhook")
     # Slack notifications
     alert_notify_slack_webhook: str | None = Field(default=None, description="Slack Incoming Webhook URL")
+    alert_notify_slack_webhook_critical: str | None = Field(default=None, description="Slack webhook for critical severity")
+    alert_notify_slack_webhook_warning: str | None = Field(default=None, description="Slack webhook for warning severity")
+    alert_notify_slack_webhook_info: str | None = Field(default=None, description="Slack webhook for info severity")
+    alert_notify_min_interval_seconds: int = Field(default=60, description="Throttle notifications at this min interval per severity")
     # Email (SMTP) notifications
     smtp_host: str | None = Field(default=None, description="SMTP host for email alerts")
     smtp_port: int = Field(default=587, description="SMTP port")

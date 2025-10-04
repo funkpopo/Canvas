@@ -147,6 +147,24 @@ class AuthService:
             await session.commit()
             return ak, full
 
+    async def list_api_keys(self, *, user_id: int | None = None) -> list[ApiKey]:
+        async with self._session_factory() as session:
+            stmt = select(ApiKey)
+            if user_id is not None:
+                stmt = stmt.where(ApiKey.user_id == user_id)
+            rows = (await session.execute(stmt.order_by(ApiKey.created_at.desc()))).scalars().all()
+            return list(rows)
+
+    async def revoke_api_key(self, *, key_id: int) -> bool:
+        async with self._session_factory() as session:
+            row = await session.execute(select(ApiKey).where(ApiKey.id == key_id))
+            ak = row.scalars().first()
+            if not ak:
+                return False
+            ak.is_active = False
+            await session.commit()
+            return True
+
     async def list_roles(self) -> list[Role]:
         async with self._session_factory() as session:
             rows = (await session.execute(select(Role))).scalars().all()

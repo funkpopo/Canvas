@@ -29,6 +29,7 @@ class UserInfo(BaseModel):
     email: str | None = None
     roles: list[str] = []
     tenant_id: int | None = None
+    is_active: bool = True
     created_at: datetime
     updated_at: datetime
     last_login_at: datetime | None = None
@@ -54,6 +55,15 @@ class ApiKeyCreated(BaseModel):
     key: str  # full token returned once
     name: str
     created_at: datetime
+
+
+class ApiKeyInfo(BaseModel):
+    id: int
+    name: str
+    created_at: datetime
+    last_used_at: datetime | None = None
+    expires_at: datetime | None = None
+    is_active: bool
 
 
 class RegisterRequest(BaseModel):

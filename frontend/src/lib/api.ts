@@ -60,6 +60,10 @@ export const queryKeys = {
   crdResources: (crd: string, ns?: string) => ["crds", crd, ns ?? "all"] as const,
   alerts: ["alerts", "list"] as const,
   alertTrends: (window: string) => ["alerts", "trends", window] as const,
+  users: ["auth", "users"] as const,
+  roles: ["auth", "roles"] as const,
+  apiKeys: (userId?: number) => ["auth", "apikeys", userId ?? "me"] as const,
+  rbacSummary: (ns?: string) => ["rbac", "summary", ns ?? "all"] as const,
 } as const;
 
 function getAccessToken(): string | null {
@@ -291,6 +295,26 @@ export function fetchMe(): Promise<MeResponse> {
   return request<MeResponse>("/auth/me");
 }
 
+export interface RegisterRequest { username: string; password: string; display_name?: string | null; email?: string | null; tenant_slug?: string | null }
+export interface UserInfoResponse extends MeResponse { is_active: boolean }
+export function registerApi(body: RegisterRequest): Promise<UserInfoResponse> {
+  return request<UserInfoResponse>("/auth/register", { method: "POST", body: JSON.stringify(body) });
+}
+
+export function fetchUsers(): Promise<UserInfoResponse[]> {
+  return request<UserInfoResponse[]>("/auth/users");
+}
+
+export interface RoleInfoResponse { id: number; name: string }
+export function fetchRoles(): Promise<RoleInfoResponse[]> {
+  return request<RoleInfoResponse[]>("/auth/roles");
+}
+
+export interface UpdateUserRequest { is_active?: boolean | null; roles?: string[] | null }
+export function updateUser(userId: number, body: UpdateUserRequest): Promise<UserInfoResponse> {
+  return request<UserInfoResponse>(`/auth/users/${userId}`, { method: "PATCH", body: JSON.stringify(body) });
+}
+
 export function fetchWorkloads(): Promise<WorkloadSummaryResponse[]> {
   return request<WorkloadSummaryResponse[]>("/cluster/workloads");
 }
@@ -427,6 +451,36 @@ export function ackAlert(fingerprint: string): Promise<{ status: string }> {
 export function silenceAlert(fingerprint: string, minutes: number): Promise<{ status: string }> {
   const fp = encodeURIComponent(fingerprint);
   return request<{ status: string }>(`/alerts/${fp}/silence`, { method: "POST", body: JSON.stringify({ minutes }) });
+}
+
+// API Keys
+export interface ApiKeyInfoResponse { id: number; name: string; created_at: string; last_used_at?: string | null; expires_at?: string | null; is_active: boolean }
+export interface ApiKeyCreatedResponse { id: number; key: string; name: string; created_at: string }
+export function fetchApiKeys(userId?: number): Promise<ApiKeyInfoResponse[]> {
+  const params = new URLSearchParams();
+  if (userId != null) params.set("user_id", String(userId));
+  const qs = params.toString();
+  return request<ApiKeyInfoResponse[]>(`/auth/apikeys${qs ? `?${qs}` : ""}`);
+}
+export function createApiKey(name: string, scopes: string[] = [], expiresDays?: number): Promise<ApiKeyCreatedResponse> {
+  return request<ApiKeyCreatedResponse>("/auth/apikeys", { method: "POST", body: JSON.stringify({ name, scopes, expires_days: expiresDays ?? null }) });
+}
+export function revokeApiKey(id: number): Promise<{ status: string }> {
+  return request<{ status: string }>(`/auth/apikeys/${id}`, { method: "DELETE" });
+}
+
+// RBAC
+export interface SubjectEntryResponse { kind: string; name: string; namespace?: string | null }
+export interface RoleEntryResponse { namespace?: string | null; name: string; rules?: number | null }
+export interface RoleBindingEntryResponse { namespace?: string | null; name: string; role_kind: string; role_name: string; subjects: SubjectEntryResponse[] }
+export interface ClusterRoleEntryResponse { name: string; rules?: number | null }
+export interface ClusterRoleBindingEntryResponse { name: string; role_name: string; subjects: SubjectEntryResponse[] }
+export interface RbacSummaryResponse { roles: RoleEntryResponse[]; role_bindings: RoleBindingEntryResponse[]; cluster_roles: ClusterRoleEntryResponse[]; cluster_role_bindings: ClusterRoleBindingEntryResponse[] }
+export function fetchRbacSummary(namespace?: string): Promise<RbacSummaryResponse> {
+  const params = new URLSearchParams();
+  if (namespace && namespace !== "all") params.set("namespace", namespace);
+  const qs = params.toString();
+  return request<RbacSummaryResponse>(`/rbac/summary${qs ? `?${qs}` : ""}`);
 }
 
 // CRDs & generic resources

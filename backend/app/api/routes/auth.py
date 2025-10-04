@@ -10,10 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import CurrentUser, get_current_user, require_roles
 from app.core.security import decode_jwt_token
 from app.db import get_session
-from app.schemas.auth import ApiKeyCreated, ApiKeyCreateRequest, CreateUserRequest, LoginRequest, RefreshRequest, TokenPair, UserInfo, RegisterRequest, RoleInfo, UpdateUserRequest
+from app.schemas.auth import ApiKeyCreated, ApiKeyCreateRequest, CreateUserRequest, LoginRequest, RefreshRequest, TokenPair, UserInfo, RegisterRequest, RoleInfo, UpdateUserRequest, ApiKeyInfo
 from app.services.auth import AuthService
 from app.db import get_session_factory
-from app.models.user import Role, User
+from app.models.user import Role, User, ApiKey
 from app.config import get_settings
 from app.services.audit import AuditService
 
@@ -98,6 +98,7 @@ async def whoami(current: CurrentUser = Depends(get_current_user)) -> UserInfo:
         email=u.email,
         roles=[r.name for r in u.roles],
         tenant_id=u.tenant_id,
+        is_active=u.is_active,
         created_at=u.created_at,
         updated_at=u.updated_at,
         last_login_at=u.last_login_at,
@@ -130,6 +131,7 @@ async def register(body: RegisterRequest, service: AuthService = Depends(get_aut
         email=user.email,
         roles=[r.name for r in user.roles],
         tenant_id=user.tenant_id,
+        is_active=user.is_active,
         created_at=user.created_at,
         updated_at=user.updated_at,
         last_login_at=user.last_login_at,
@@ -174,6 +176,7 @@ async def list_users(session: AsyncSession = Depends(get_session)) -> list[UserI
             email=u.email,
             roles=[r.name for r in u.roles],
             tenant_id=u.tenant_id,
+            is_active=u.is_active,
             created_at=u.created_at,
             updated_at=u.updated_at,
             last_login_at=u.last_login_at,
@@ -186,6 +189,39 @@ async def list_users(session: AsyncSession = Depends(get_session)) -> list[UserI
 async def create_api_key(body: ApiKeyCreateRequest, current: CurrentUser = Depends(get_current_user), service: AuthService = Depends(get_auth_service)) -> ApiKeyCreated:
     ak, full = await service.create_api_key(current.user, body.name, body.scopes, body.expires_days)
     return ApiKeyCreated(id=ak.id, key=full, name=ak.name, created_at=ak.created_at)
+
+
+@router.get("/apikeys", response_model=list[ApiKeyInfo])
+async def list_api_keys(current: CurrentUser = Depends(get_current_user), service: AuthService = Depends(get_auth_service), user_id: int | None = None) -> list[ApiKeyInfo]:
+    # Admin can list other users' keys; otherwise force own user_id
+    target_user_id = user_id if (user_id is not None and "admin" in current.roles) else current.id
+    rows = await service.list_api_keys(user_id=target_user_id)
+    return [
+        ApiKeyInfo(
+            id=r.id,
+            name=r.name,
+            created_at=r.created_at,
+            last_used_at=r.last_used_at,
+            expires_at=r.expires_at,
+            is_active=r.is_active,
+        )
+        for r in rows
+    ]
+
+
+@router.delete("/apikeys/{key_id}")
+async def revoke_api_key(key_id: int, current: CurrentUser = Depends(get_current_user), service: AuthService = Depends(get_auth_service), session: AsyncSession = Depends(get_session)) -> dict[str, str]:
+    # Only owner or admin can revoke
+    row = await session.execute(select(ApiKey).where(ApiKey.id == key_id))
+    ak = row.scalars().first()
+    if not ak:
+        raise HTTPException(status_code=404, detail="API key not found")
+    if ak.user_id != current.id and "admin" not in current.roles:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    ok = await service.revoke_api_key(key_id=key_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="API key not found")
+    return {"status": "ok"}
 
 
 @router.get("/roles", response_model=list[RoleInfo], dependencies=[Depends(require_roles("admin"))])
@@ -213,6 +249,7 @@ async def update_user(user_id: int, body: UpdateUserRequest, service: AuthServic
         email=user.email,
         roles=[r.name for r in user.roles],
         tenant_id=user.tenant_id,
+        is_active=user.is_active,
         created_at=user.created_at,
         updated_at=user.updated_at,
         last_login_at=user.last_login_at,

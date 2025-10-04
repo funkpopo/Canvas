@@ -46,6 +46,14 @@ from app.schemas.kubernetes import (
     CRDSummary,
     GenericResourceEntry,
 )
+from app.schemas.rbac import (
+    RoleEntry,
+    RoleBindingEntry,
+    ClusterRoleEntry,
+    ClusterRoleBindingEntry,
+    SubjectEntry,
+    RbacSummary,
+)
 from app.services.cluster_config import ClusterConfigService
 
 logger = structlog.get_logger(__name__)
@@ -2290,6 +2298,103 @@ class KubernetesService:
                 self._logs_sema.release()
 
         return _gen()
+
+    async def list_rbac_summary(self, namespace: str | None = None) -> RbacSummary:
+        await self._rate_limiter.acquire()
+        try:
+            await self._ensure_clients()
+
+            def _collect() -> RbacSummary:
+                rbac = client.RbacAuthorizationV1Api(self._api_client)
+                roles = []
+                role_bindings = []
+                cluster_roles = []
+                cluster_role_bindings = []
+
+                if namespace:
+                    rs = rbac.list_namespaced_role(namespace=namespace).items
+                    rbs = rbac.list_namespaced_role_binding(namespace=namespace).items
+                else:
+                    rs = rbac.list_role_for_all_namespaces(limit=500).items
+                    rbs = rbac.list_role_binding_for_all_namespaces(limit=500).items
+
+                crs = rbac.list_cluster_role(limit=500).items
+                crbs = rbac.list_cluster_role_binding(limit=500).items
+
+                for r in rs:
+                    md = getattr(r, "metadata", None)
+                    rules = getattr(r, "rules", None) or []
+                    roles.append(
+                        RoleEntry(
+                            namespace=getattr(md, "namespace", None),
+                            name=getattr(md, "name", None),
+                            rules=len(rules) if isinstance(rules, list) else None,
+                        )
+                    )
+
+                for rb in rbs:
+                    md = getattr(rb, "metadata", None)
+                    role_ref = getattr(rb, "role_ref", None)
+                    subs = []
+                    for s in getattr(rb, "subjects", None) or []:
+                        subs.append(
+                            SubjectEntry(
+                                kind=getattr(s, "kind", None),
+                                name=getattr(s, "name", None),
+                                namespace=getattr(s, "namespace", None),
+                            )
+                        )
+                    role_bindings.append(
+                        RoleBindingEntry(
+                            namespace=getattr(md, "namespace", None),
+                            name=getattr(md, "name", None),
+                            role_kind=getattr(role_ref, "kind", None),
+                            role_name=getattr(role_ref, "name", None),
+                            subjects=subs,
+                        )
+                    )
+
+                for cr in crs:
+                    md = getattr(cr, "metadata", None)
+                    rules = getattr(cr, "rules", None) or []
+                    cluster_roles.append(
+                        ClusterRoleEntry(
+                            name=getattr(md, "name", None),
+                            rules=len(rules) if isinstance(rules, list) else None,
+                        )
+                    )
+
+                for crb in crbs:
+                    md = getattr(crb, "metadata", None)
+                    role_ref = getattr(crb, "role_ref", None)
+                    subs = []
+                    for s in getattr(crb, "subjects", None) or []:
+                        subs.append(
+                            SubjectEntry(
+                                kind=getattr(s, "kind", None),
+                                name=getattr(s, "name", None),
+                                namespace=getattr(s, "namespace", None),
+                            )
+                        )
+                    cluster_role_bindings.append(
+                        ClusterRoleBindingEntry(
+                            name=getattr(md, "name", None),
+                            role_name=getattr(role_ref, "name", None),
+                            subjects=subs,
+                        )
+                    )
+
+                return RbacSummary(
+                    roles=roles,
+                    role_bindings=role_bindings,
+                    cluster_roles=cluster_roles,
+                    cluster_role_bindings=cluster_role_bindings,
+                )
+
+            return await asyncio.to_thread(_collect)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("kubernetes.rbac_list_error", error=str(exc))
+            return RbacSummary(roles=[], role_bindings=[], cluster_roles=[], cluster_role_bindings=[])
 
     async def check_access(
         self,

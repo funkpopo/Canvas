@@ -70,6 +70,12 @@ async def get_current_user(request: Request, session: AsyncSession = Depends(get
                 user = (await session.execute(select(User).where(User.id == ak.user_id))).scalars().first()
                 if not user or not user.is_active:
                     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User disabled")
+                # best-effort update last_used_at
+                try:
+                    ak.last_used_at = datetime.now(timezone.utc)
+                    await session.commit()
+                except Exception:
+                    pass
                 return CurrentUser(user)
         except HTTPException:
             raise
@@ -86,4 +92,3 @@ def require_roles(*allowed: str):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
 
     return _dep
-

@@ -15,7 +15,7 @@ from app.models.alert_status import AlertStatus
 from app.services.audit import AuditService
 from app.db import get_session_factory
 from app.core.auth import get_current_user, CurrentUser, require_roles
-from app.services.alert_notify import send_email_notification, send_slack_notification, render_alert_markdown
+from app.services.alert_notify import send_email_notification, send_slack_notification, render_alert_markdown, should_send_for_severity
 
 
 router = APIRouter(prefix="/alerts", tags=["alerts"])
@@ -76,23 +76,35 @@ async def alertmanager_webhook(
                 if fps:
                     st_rows = (await session.execute(select(AlertStatus).where(AlertStatus.fingerprint.in_(fps)))).scalars().all()
                     statuses = {s.fingerprint: s for s in st_rows if s.fingerprint}
-                tasks = []
+                # group by severity
+                groups: dict[str, list[dict[str, Any]]] = {}
                 for a in alerts:
-                    fp = str(a.get("fingerprint") or "")
-                    if not fp:
-                        continue
-                    status = str(a.get("status", "firing"))
                     labels = a.get("labels") or {}
-                    annotations = a.get("annotations") or {}
-                    st = statuses.get(fp)
-                    # Skip notifications if silenced
-                    if st and st.silenced_until and st.silenced_until > now:
+                    sev = str(labels.get("severity", "info")).lower()
+                    groups.setdefault(sev, []).append(a)
+                tasks = []
+                for sev, items in groups.items():
+                    # throttle per severity
+                    if not await should_send_for_severity(sev):
                         continue
-                    title = f"[{labels.get('severity', 'info').upper()}] {labels.get('alertname', 'Alert')} - {status}"
-                    text, html = render_alert_markdown(title, labels, annotations)
-                    # Slack payload (simple text)
-                    tasks.append(send_slack_notification({"text": text}))
-                    # Email payload
+                    # filter out silenced
+                    effective: list[dict[str, Any]] = []
+                    for a in items:
+                        fp = str(a.get("fingerprint") or "")
+                        if not fp:
+                            continue
+                        st = statuses.get(fp)
+                        if st and st.silenced_until and st.silenced_until > now:
+                            continue
+                        effective.append(a)
+                    if not effective:
+                        continue
+                    names = [str((a.get("labels") or {}).get("alertname", "Alert")) for a in effective]
+                    # Build a grouped message
+                    title = f"[{sev.upper()}] {len(effective)} alerts"
+                    text = title + "\n" + "\n".join(f"- {n}" for n in names[:5])
+                    html = f"<h3>{title}</h3>" + "<ul>" + "".join([f"<li>{n}</li>" for n in names[:10]]) + "</ul>"
+                    tasks.append(send_slack_notification({"text": text}, severity=sev))
                     tasks.append(send_email_notification(title, html, text))
                 if tasks:
                     await asyncio.gather(*tasks, return_exceptions=True)
