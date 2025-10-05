@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import CurrentUser, get_current_user, require_roles
 from app.core.security import decode_jwt_token
 from app.db import get_session
-from app.schemas.auth import ApiKeyCreated, ApiKeyCreateRequest, CreateUserRequest, LoginRequest, RefreshRequest, TokenPair, UserInfo, RegisterRequest, RoleInfo, UpdateUserRequest, ApiKeyInfo
+from app.schemas.auth import ApiKeyCreated, ApiKeyCreateRequest, CreateUserRequest, LoginRequest, RefreshRequest, TokenPair, UserInfo, RegisterRequest, RoleInfo, UpdateUserRequest, ApiKeyInfo, SessionInfo
 from app.services.auth import AuthService
 from app.db import get_session_factory
 from app.models.user import Role, User, ApiKey
@@ -254,3 +254,20 @@ async def update_user(user_id: int, body: UpdateUserRequest, service: AuthServic
         updated_at=user.updated_at,
         last_login_at=user.last_login_at,
     )
+
+
+@router.get("/sessions", response_model=list[SessionInfo])
+async def list_sessions(current: CurrentUser = Depends(get_current_user), service: AuthService = Depends(get_auth_service)) -> list[SessionInfo]:
+    rows = await service.list_sessions(user_id=current.id)
+    return [
+        SessionInfo(id=r.id, jti=r.jti, created_at=r.created_at, expires_at=r.expires_at, revoked=r.revoked)
+        for r in rows
+    ]
+
+
+@router.delete("/sessions/{session_id}")
+async def revoke_session(session_id: int, current: CurrentUser = Depends(get_current_user), service: AuthService = Depends(get_auth_service)) -> dict[str, str]:
+    ok = await service.revoke_session(session_id=session_id, actor=current.user)
+    if not ok:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    return {"status": "ok"}

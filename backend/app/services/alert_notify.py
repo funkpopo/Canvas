@@ -87,6 +87,38 @@ async def send_email_notification(subject: str, html_body: str, text_body: str |
         pass
 
 
+async def send_dingtalk_notification(text: str) -> None:
+    settings = get_settings()
+    if not settings.alert_notify_enabled:
+        return
+    url = settings.alert_notify_dingtalk_webhook
+    if not url:
+        return
+    # DingTalk robot: text message format
+    payload = {"msgtype": "text", "text": {"content": text}}
+    async with httpx.AsyncClient(timeout=10) as client:
+        try:
+            await client.post(url, json=payload)
+        except Exception:
+            pass
+
+
+async def send_wecom_notification(text: str) -> None:
+    settings = get_settings()
+    if not settings.alert_notify_enabled:
+        return
+    url = settings.alert_notify_wecom_webhook
+    if not url:
+        return
+    # WeCom robot: text message format
+    payload = {"msgtype": "text", "text": {"content": text}}
+    async with httpx.AsyncClient(timeout=10) as client:
+        try:
+            await client.post(url, json=payload)
+        except Exception:
+            pass
+
+
 def render_alert_markdown(title: str, labels: dict[str, Any], annotations: dict[str, Any]) -> tuple[str, str]:
     # text and html bodies
     kv = "\n".join([f"- {k}: {v}" for k, v in (labels or {}).items()])

@@ -9,10 +9,12 @@ import { badgePresets } from "@/shared/ui/badge";
 import { StatusBadge } from "@/shared/ui/status-badge";
 import { queryKeys, fetchClusterConfig, fetchClusterOverview } from "@/lib/api";
 import { useI18n } from "@/shared/i18n/i18n";
+import { useAuth } from "@/features/auth/hooks/use-auth";
 
 export function TopBar() {
   const { t } = useI18n();
   const { language, setLanguage } = useLanguage();
+  const { logout } = useAuth();
   const { data: config } = useQuery({
     queryKey: queryKeys.clusterConfig,
     queryFn: fetchClusterConfig,
@@ -79,6 +81,13 @@ export function TopBar() {
           <option value="zh">{t("language.zh")}</option>
         </select>
         <ThemeToggle />
+        <button
+          onClick={() => { logout(); if (typeof window !== "undefined") window.location.href = "/login"; }}
+          className="rounded-md border border-border bg-surface px-3 py-1 text-sm text-text-primary hover:bg-hover"
+          aria-label="Sign out"
+        >
+          Sign out
+        </button>
       </div>
     </header>
   );

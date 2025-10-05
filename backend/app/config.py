@@ -56,6 +56,11 @@ class Settings(BaseSettings):
     smtp_use_tls: bool = Field(default=True, description="Use STARTTLS for SMTP")
     alert_email_from: str | None = Field(default=None, description="From address for alert emails")
     alert_email_to: list[str] = Field(default_factory=list, description="Recipient list for alert emails")
+    # DingTalk (钉钉) notifications
+    alert_notify_dingtalk_webhook: str | None = Field(default=None, description="DingTalk robot webhook URL")
+    alert_notify_dingtalk_secret: str | None = Field(default=None, description="DingTalk robot secret for signature (optional)")
+    # WeCom (企业微信) notifications
+    alert_notify_wecom_webhook: str | None = Field(default=None, description="WeCom robot webhook URL")
 
     @computed_field
     @property

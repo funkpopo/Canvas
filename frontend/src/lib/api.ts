@@ -63,7 +63,9 @@ export const queryKeys = {
   users: ["auth", "users"] as const,
   roles: ["auth", "roles"] as const,
   apiKeys: (userId?: number) => ["auth", "apikeys", userId ?? "me"] as const,
+  sessions: ["auth", "sessions"] as const,
   rbacSummary: (ns?: string) => ["rbac", "summary", ns ?? "all"] as const,
+  alertRules: ["alerts", "rules"] as const,
 } as const;
 
 function getAccessToken(): string | null {
@@ -315,6 +317,15 @@ export function updateUser(userId: number, body: UpdateUserRequest): Promise<Use
   return request<UserInfoResponse>(`/auth/users/${userId}`, { method: "PATCH", body: JSON.stringify(body) });
 }
 
+// Sessions
+export interface SessionInfoResponse { id: number; jti: string; created_at: string; expires_at: string; revoked: boolean }
+export function fetchSessions(): Promise<SessionInfoResponse[]> {
+  return request<SessionInfoResponse[]>("/auth/sessions");
+}
+export function revokeSession(sessionId: number): Promise<{ status: string }> {
+  return request<{ status: string }>(`/auth/sessions/${sessionId}`, { method: "DELETE" });
+}
+
 export function fetchWorkloads(): Promise<WorkloadSummaryResponse[]> {
   return request<WorkloadSummaryResponse[]>("/cluster/workloads");
 }
@@ -451,6 +462,22 @@ export function ackAlert(fingerprint: string): Promise<{ status: string }> {
 export function silenceAlert(fingerprint: string, minutes: number): Promise<{ status: string }> {
   const fp = encodeURIComponent(fingerprint);
   return request<{ status: string }>(`/alerts/${fp}/silence`, { method: "POST", body: JSON.stringify({ minutes }) });
+}
+
+// Alert Rule Templates
+export interface AlertRuleTemplateIn { name: string; severity: string; expr: string; summary?: string | null; description?: string | null; labels?: Record<string, string> | null; annotations?: Record<string, string> | null; enabled: boolean }
+export interface AlertRuleTemplateOut extends AlertRuleTemplateIn { id: number; created_at: string; updated_at: string }
+export function fetchAlertRules(): Promise<AlertRuleTemplateOut[]> {
+  return request<AlertRuleTemplateOut[]>("/alert-rules/");
+}
+export function createAlertRule(body: AlertRuleTemplateIn): Promise<AlertRuleTemplateOut> {
+  return request<AlertRuleTemplateOut>("/alert-rules/", { method: "POST", body: JSON.stringify(body) });
+}
+export function updateAlertRule(id: number, body: AlertRuleTemplateIn): Promise<AlertRuleTemplateOut> {
+  return request<AlertRuleTemplateOut>(`/alert-rules/${id}`, { method: "PUT", body: JSON.stringify(body) });
+}
+export function deleteAlertRule(id: number): Promise<{ status: string }> {
+  return request<{ status: string }>(`/alert-rules/${id}`, { method: "DELETE" });
 }
 
 // API Keys

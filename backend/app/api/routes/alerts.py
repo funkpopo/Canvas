@@ -15,7 +15,7 @@ from app.models.alert_status import AlertStatus
 from app.services.audit import AuditService
 from app.db import get_session_factory
 from app.core.auth import get_current_user, CurrentUser, require_roles
-from app.services.alert_notify import send_email_notification, send_slack_notification, render_alert_markdown, should_send_for_severity
+from app.services.alert_notify import send_email_notification, send_slack_notification, render_alert_markdown, should_send_for_severity, send_dingtalk_notification, send_wecom_notification
 
 
 router = APIRouter(prefix="/alerts", tags=["alerts"])
@@ -105,6 +105,8 @@ async def alertmanager_webhook(
                     text = title + "\n" + "\n".join(f"- {n}" for n in names[:5])
                     html = f"<h3>{title}</h3>" + "<ul>" + "".join([f"<li>{n}</li>" for n in names[:10]]) + "</ul>"
                     tasks.append(send_slack_notification({"text": text}, severity=sev))
+                    tasks.append(send_dingtalk_notification(text))
+                    tasks.append(send_wecom_notification(text))
                     tasks.append(send_email_notification(title, html, text))
                 if tasks:
                     await asyncio.gather(*tasks, return_exceptions=True)

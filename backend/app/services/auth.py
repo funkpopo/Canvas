@@ -185,6 +185,26 @@ class AuthService:
                 await session.commit()
             return (await session.execute(select(User).where(User.id == user_id))).scalars().first()
 
+    async def list_sessions(self, *, user_id: int) -> list[RefreshToken]:
+        async with self._session_factory() as session:
+            rows = (await session.execute(select(RefreshToken).where(RefreshToken.user_id == user_id))).scalars().all()
+            return list(rows)
+
+    async def revoke_session(self, *, session_id: int, actor: User) -> bool:
+        async with self._session_factory() as session:
+            row = await session.execute(select(RefreshToken).where(RefreshToken.id == session_id))
+            rt = row.scalars().first()
+            if not rt:
+                return False
+            # only owner or admin can revoke
+            if rt.user_id != actor.id:
+                # check admin
+                if not any(r.name == "admin" for r in actor.roles):
+                    return False
+            rt.revoked = True
+            await session.commit()
+            return True
+
     async def set_user_roles(self, user_id: int, role_names: list[str]) -> User | None:
         async with self._session_factory() as session:
             row = await session.execute(select(User).where(User.id == user_id))

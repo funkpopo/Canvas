@@ -5,6 +5,7 @@ from app.models.audit_log import AuditLog
 from app.models.alert_event import AlertEvent
 from app.models.user import User, Role, UserRole, Tenant, ApiKey, RefreshToken
 from app.models.alert_status import AlertStatus
+from app.models.alert_rule import AlertRuleTemplate
 
 __all__ = [
     "ClusterConfig",
@@ -19,5 +20,6 @@ __all__ = [
     "ApiKey",
     "RefreshToken",
     "AlertStatus",
+    "AlertRuleTemplate",
 ]
 

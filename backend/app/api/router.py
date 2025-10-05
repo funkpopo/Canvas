@@ -19,6 +19,7 @@ from app.api.routes import (
 from app.api.routes import statefulsets, daemonsets, jobs, cronjobs
 from app.api.routes import audit, authz
 from app.api.routes import crds, resources, alerts, helm, auth
+from app.api.routes import alert_rules
 from app.api.routes import rbac
 from app.core.auth import get_current_user
 
@@ -52,5 +53,6 @@ api_router.include_router(authz.router)
 api_router.include_router(crds.router)
 api_router.include_router(resources.router)
 api_router.include_router(alerts.router)
+api_router.include_router(alert_rules.router)
 api_router.include_router(helm.router)
 api_router.include_router(rbac.router)

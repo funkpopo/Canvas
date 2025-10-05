@@ -82,3 +82,11 @@ class RoleInfo(BaseModel):
 class UpdateUserRequest(BaseModel):
     is_active: bool | None = None
     roles: list[str] | None = None
+
+
+class SessionInfo(BaseModel):
+    id: int
+    jti: str
+    created_at: datetime
+    expires_at: datetime
+    revoked: bool

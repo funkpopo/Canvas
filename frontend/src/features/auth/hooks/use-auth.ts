@@ -21,6 +21,8 @@ export function useAuth() {
   const [me, setMe] = useState<MeResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const idleMinutes = Number(process.env.NEXT_PUBLIC_IDLE_TIMEOUT_MIN ?? 30);
+  const [lastActive, setLastActive] = useState<number>(() => Date.now());
 
   const loadMe = useCallback(async () => {
     setLoading(true);
@@ -39,6 +41,34 @@ export function useAuth() {
     loadMe();
   }, [loadMe]);
 
+  // Inactivity auto-logout
+  useEffect(() => {
+    function bump() { setLastActive(Date.now()); }
+    if (typeof window !== "undefined") {
+      window.addEventListener("mousemove", bump);
+      window.addEventListener("keydown", bump);
+      window.addEventListener("click", bump);
+    }
+    const t = setInterval(() => {
+      if (!me) return;
+      if (idleMinutes <= 0) return;
+      const diffMin = (Date.now() - lastActive) / 60000;
+      if (diffMin > idleMinutes) {
+        clearTokens();
+        setMe(null);
+        if (typeof window !== "undefined") window.location.href = "/login";
+      }
+    }, 30_000);
+    return () => {
+      clearInterval(t);
+      if (typeof window !== "undefined") {
+        window.removeEventListener("mousemove", bump);
+        window.removeEventListener("keydown", bump);
+        window.removeEventListener("click", bump);
+      }
+    };
+  }, [me, idleMinutes, lastActive]);
+
   const login = useCallback(async (cred: LoginRequest) => {
     const t = await loginApi(cred);
     saveTokens(t);
@@ -53,4 +83,3 @@ export function useAuth() {
 
   return { me, loading, error, login, logout };
 }
-
