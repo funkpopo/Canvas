@@ -6,6 +6,7 @@ from app.models.alert_event import AlertEvent
 from app.models.user import User, Role, UserRole, Tenant, ApiKey, RefreshToken
 from app.models.alert_status import AlertStatus
 from app.models.alert_rule import AlertRuleTemplate
+from app.models.notify_config import AlertNotifyConfig
 
 __all__ = [
     "ClusterConfig",
@@ -21,5 +22,6 @@ __all__ = [
     "RefreshToken",
     "AlertStatus",
     "AlertRuleTemplate",
+    "AlertNotifyConfig",
 ]
 

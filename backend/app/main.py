@@ -15,6 +15,7 @@ from app.workers.scheduler import PeriodicTask
 from app.websocket import ConnectionManager, K8sWatcher
 from app.schemas.websocket import WebSocketMessage
 from app.core.bootstrap import ensure_bootstrap
+from app.core.auth import get_current_user_ws
 
 
 @asynccontextmanager
@@ -175,8 +176,21 @@ def create_app() -> FastAPI:
 
     @app.websocket("/ws/deployments")
     async def websocket_endpoint(websocket: WebSocket):
-        """WebSocket endpoint for real-time deployment updates"""
+        """WebSocket endpoint for real-time deployment updates (auth required)."""
         logger = structlog.get_logger()
+        # Authenticate first
+        try:
+            sf = get_session_factory()
+            async with sf() as session:
+                await get_current_user_ws(websocket, session)
+        except Exception:
+            try:
+                await websocket.accept()
+                await websocket.close(code=1008)
+            except Exception:
+                pass
+            return
+
         manager: ConnectionManager = app.state.ws_manager
         await manager.connect(websocket)
         try:
@@ -194,10 +208,36 @@ def create_app() -> FastAPI:
 
     @app.websocket("/ws/pods/{namespace}/{name}/exec")
     async def websocket_pod_exec(websocket: WebSocket, namespace: str, name: str):
-        """WebSocket bridge for `kubectl exec`-like interactive sessions."""
+        """WebSocket bridge for `kubectl exec`-like interactive sessions (auth + RBAC)."""
         logger = structlog.get_logger()
-        await websocket.accept()
         service = get_kubernetes_service()
+        # Authenticate and authorize
+        try:
+            sf = get_session_factory()
+            async with sf() as session:
+                await get_current_user_ws(websocket, session)
+        except Exception:
+            try:
+                await websocket.accept()
+                await websocket.close(code=1008)
+            except Exception:
+                pass
+            return
+        # Namespace-level RBAC: require permission to exec
+        try:
+            allowed = await service.check_access(verb="create", resource="pods", namespace=namespace, group="", subresource="exec")
+            if not allowed:
+                await websocket.accept()
+                await websocket.close(code=1008)
+                return
+        except Exception:
+            try:
+                await websocket.accept()
+                await websocket.close(code=1011)
+            except Exception:
+                pass
+            return
+        await websocket.accept()
         # Parse query params
         qp = dict(websocket.query_params)
         container = qp.get("container")

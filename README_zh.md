@@ -93,6 +93,30 @@ python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --app-dir backend
 - `/ws/deployments` — 实时部署更新
 - `/ws/pods/{namespace}/{name}/exec` — 交互式终端会话
 
+WebSocket 需要认证：通过 `token` 查询参数传递 JWT access token（前端已自动附加）。例如：
+
+- `ws://host:8000/ws/deployments?token=<ACCESS_TOKEN>`
+
+## 认证与授权
+
+- 默认启用 JWT 认证，可配置：
+  - `JWT_SECRET`、`JWT_ALGORITHM`（默认 HS256）
+  - `ACCESS_TOKEN_EXP_MINUTES`、`REFRESH_TOKEN_EXP_DAYS`
+  - `ALLOW_SELF_REGISTRATION` 是否开放 `/api/v1/auth/register`
+- 角色：`viewer`、`operator`、`admin`（启动时自动创建管理员 admin/admin123）。大多数 API 需要登录；敏感操作（如集群配置写入、告警确认/静默）需要 `operator` 或 `admin`。
+- 支持个人 API Key：在「Profile → API Keys」生成与吊销；后端 `Authorization: Bearer <API_KEY>` 访问。
+
+## 告警
+
+- 在 `/api/v1/alerts/webhook` 接收 Alertmanager webhook；可设置 `ALERT_WEBHOOK_SECRET`（通过 `X-Alert-Secret` 或 `?token=` 校验）。
+- 支持通知通道（可按严重级别节流）：
+  - Slack: `ALERT_NOTIFY_SLACK_WEBHOOK`（以及分级 webhooks）
+  - 邮件（SMTP）: `SMTP_HOST`、`SMTP_PORT`、`SMTP_USERNAME`、`SMTP_PASSWORD`、`SMTP_USE_TLS`、`ALERT_EMAIL_FROM`、`ALERT_EMAIL_TO`
+  - 钉钉/企业微信：`ALERT_NOTIFY_DINGTALK_WEBHOOK`、`ALERT_NOTIFY_WECOM_WEBHOOK`
+- API：
+  - `/api/v1/alerts/` 最近事件；`/api/v1/alerts/active` 按指纹去重；`/api/v1/alerts/trends` 趋势
+  - `/api/v1/alerts/{fp}/ack`、`/api/v1/alerts/{fp}/silence`（需要 `operator`/`admin`）
+
 ## 数据存储
 
 - 默认 SQLite 位于 `./canvas.db`（相对当前工作目录）。若希望固定在仓库根目录，请从根目录启动并使用 `--app-dir backend`。
@@ -102,4 +126,3 @@ python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --app-dir backend
 - 生产环境务必设置 `FERNET_KEY` 以加密保存的凭据。
 - 使用环境变量限制 exec 与日志流的并发和持续时间。
 - 启用 Helm 集成前请确保后端主机受信任。
-

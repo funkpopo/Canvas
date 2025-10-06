@@ -4,6 +4,7 @@ import json
 from datetime import datetime, timezone, timedelta
 from typing import Any
 
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +17,7 @@ from app.services.audit import AuditService
 from app.db import get_session_factory
 from app.core.auth import get_current_user, CurrentUser, require_roles
 from app.services.alert_notify import send_email_notification, send_slack_notification, render_alert_markdown, should_send_for_severity, send_dingtalk_notification, send_wecom_notification
+from app.services.notify_config import NotifyConfigService
 
 
 router = APIRouter(prefix="/alerts", tags=["alerts"])
@@ -69,7 +71,9 @@ async def alertmanager_webhook(
             await session.commit()
         # Notification fan-out (best-effort)
         try:
-            if get_settings().alert_notify_enabled:
+            cfg_svc = NotifyConfigService(get_session_factory())
+            cfg = await cfg_svc.get_effective()
+            if cfg.get("enabled"):
                 # pre-fetch statuses
                 fps = [str(a.get("fingerprint") or "") for a in alerts if a.get("fingerprint")]
                 statuses: dict[str, AlertStatus] = {}

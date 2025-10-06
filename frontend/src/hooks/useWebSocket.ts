@@ -41,7 +41,22 @@ export function useWebSocket(config: WebSocketConfig): UseWebSocketReturn {
 
     try {
       setStatus('connecting');
-      const ws = new WebSocket(url);
+      // Attach bearer access token via query param for auth
+      let fullUrl = url;
+      try {
+        const u = new URL(url, typeof window !== 'undefined' ? window.location.href : 'http://localhost');
+        // Try to read access token from localStorage (same key as REST client)
+        if (typeof window !== 'undefined') {
+          const token = window.localStorage.getItem('canvas.access_token');
+          if (token) {
+            u.searchParams.set('token', token);
+          }
+        }
+        fullUrl = u.toString();
+      } catch {
+        // keep original url
+      }
+      const ws = new WebSocket(fullUrl);
 
       ws.onopen = () => {
         if (isUnmountedRef.current) {

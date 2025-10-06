@@ -35,6 +35,10 @@ export function PodTerminal({ wsBase, namespace, name, container, cmd = "/bin/sh
     const u = new URL(`${wsBase}/ws/pods/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}/exec`);
     if (container) u.searchParams.set("container", container);
     if (cmd) u.searchParams.set("cmd", cmd);
+    try {
+      const token = typeof window !== "undefined" ? window.localStorage.getItem("canvas.access_token") : null;
+      if (token) u.searchParams.set("token", token);
+    } catch {}
     return u.toString().replace(/^http/, "ws").replace(/^https/, "wss");
   }, [wsBase, namespace, name, container, cmd]);
 

@@ -66,6 +66,7 @@ export const queryKeys = {
   sessions: ["auth", "sessions"] as const,
   rbacSummary: (ns?: string) => ["rbac", "summary", ns ?? "all"] as const,
   alertRules: ["alerts", "rules"] as const,
+  notifyConfig: ["alerts", "notify-config"] as const,
 } as const;
 
 function getAccessToken(): string | null {
@@ -1297,4 +1298,50 @@ export function updateCronJobYaml(ns: string, name: string, yaml: string): Promi
   const en = encodeURIComponent(ns);
   const nm = encodeURIComponent(name);
   return request<OperationResultResponse>(`/workloads/cronjobs/${en}/${nm}/yaml`, { method: "PUT", body: JSON.stringify({ yaml }) });
+}
+
+// --- Notification config (DB-backed) ---
+export interface NotifyConfigOut {
+  enabled: boolean;
+  min_interval_seconds: number;
+  slack_webhook?: string | null;
+  slack_webhook_critical?: string | null;
+  slack_webhook_warning?: string | null;
+  slack_webhook_info?: string | null;
+  smtp_host?: string | null;
+  smtp_port: number;
+  smtp_username?: string | null;
+  smtp_use_tls: boolean;
+  alert_email_from?: string | null;
+  alert_email_to: string[];
+  smtp_password_set: boolean;
+  dingtalk_webhook?: string | null;
+  wecom_webhook?: string | null;
+  updated_at?: string | null;
+}
+
+export interface NotifyConfigUpdate {
+  enabled: boolean;
+  min_interval_seconds: number;
+  slack_webhook?: string | null;
+  slack_webhook_critical?: string | null;
+  slack_webhook_warning?: string | null;
+  slack_webhook_info?: string | null;
+  smtp_host?: string | null;
+  smtp_port?: number | null;
+  smtp_username?: string | null;
+  smtp_password?: string | null; // null: keep, "": clear, value: set
+  smtp_use_tls?: boolean | null;
+  alert_email_from?: string | null;
+  alert_email_to?: string[] | null;
+  dingtalk_webhook?: string | null;
+  wecom_webhook?: string | null;
+}
+
+export function fetchNotifyConfig(): Promise<NotifyConfigOut> {
+  return request<NotifyConfigOut>(`/notifications/config`);
+}
+
+export function saveNotifyConfig(body: NotifyConfigUpdate): Promise<NotifyConfigOut> {
+  return request<NotifyConfigOut>(`/notifications/config`, { method: "PUT", body: JSON.stringify(body) });
 }

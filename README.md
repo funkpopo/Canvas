@@ -86,10 +86,7 @@ Authentication & Authorization:
 Alerting:
 
 - Ingests Alertmanager webhooks at `/api/v1/alerts/webhook`. Optionally protect with `ALERT_WEBHOOK_SECRET` passed via `X-Alert-Secret` header or `?token=` query.
-- Enable outgoing notifications by configuring:
-  - `ALERT_NOTIFY_ENABLED=true`
-  - Slack: `ALERT_NOTIFY_SLACK_WEBHOOK=https://hooks.slack.com/...`
-  - Email: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_USE_TLS` (true/false), `ALERT_EMAIL_FROM`, `ALERT_EMAIL_TO` (comma-separated list)
+- Outgoing notifications are configured in-app (Admin → Alert Notifications). Settings are stored in SQLite; environment variables for channels are not used.
 - API endpoints:
   - `/api/v1/alerts/` recent events, `/api/v1/alerts/active` latest per fingerprint, `/api/v1/alerts/trends` time buckets
   - `/api/v1/alerts/{fp}/ack` and `/api/v1/alerts/{fp}/silence` (operator/admin)
@@ -109,8 +106,10 @@ python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --app-dir backend
 
 Update `ALLOWED_ORIGINS` and TLS/headers at the proxy. The backend exposes WebSockets at:
 
-- `/ws/deployments` — live deployment updates
-- `/ws/pods/{namespace}/{name}/exec` — interactive exec sessions
+- `/ws/deployments` – live deployment updates
+- `/ws/pods/{namespace}/{name}/exec` – interactive exec sessions
+
+WebSockets require authentication: pass the access token as a `token` query parameter (the frontend does this automatically). For example: `ws://host:8000/ws/deployments?token=<ACCESS_TOKEN>`.
 
 ## Data Storage
 
