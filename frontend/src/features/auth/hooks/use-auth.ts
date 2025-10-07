@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { fetchMe, loginApi, type LoginRequest, type MeResponse, type TokenPairResponse } from "@/lib/api";
+import { fetchMe, loginApi, startTokenRefreshTimer, stopTokenRefreshTimer, type LoginRequest, type MeResponse, type TokenPairResponse } from "@/lib/api";
 
 function saveTokens(t: TokenPairResponse) {
   try {
     localStorage.setItem("canvas.access_token", t.access_token);
     localStorage.setItem("canvas.refresh_token", t.refresh_token);
+    startTokenRefreshTimer(); // Auto-refresh token before expiry
   } catch {}
 }
 
@@ -14,6 +15,7 @@ function clearTokens() {
   try {
     localStorage.removeItem("canvas.access_token");
     localStorage.removeItem("canvas.refresh_token");
+    stopTokenRefreshTimer();
   } catch {}
 }
 

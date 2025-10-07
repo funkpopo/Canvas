@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AuthGate } from "@/features/auth/components/auth-gate";
-import { fetchRoles, fetchUsers, queryKeys, updateUser, type RoleInfoResponse, type UserInfoResponse } from "@/lib/api";
+import { CreateUserModal } from "@/features/auth/components/create-user-modal";
+import { fetchRoles, fetchUsers, queryKeys, updateUser, createUser, type RoleInfoResponse, type UserInfoResponse } from "@/lib/api";
 import { PageHeader } from "@/features/dashboard/layouts/page-header";
 import { Button } from "@/shared/ui/button";
 import { Badge } from "@/shared/ui/badge";
@@ -21,6 +22,7 @@ function UsersInner() {
   const { data: users } = useQuery({ queryKey: queryKeys.users, queryFn: fetchUsers });
   const { data: roles } = useQuery({ queryKey: queryKeys.roles, queryFn: fetchRoles });
   const [editing, setEditing] = useState<Record<number, { is_active: boolean; roles: string[] }>>({});
+  const [createModalOpen, setCreateModalOpen] = useState(false);
 
   useEffect(() => {
     if (!users) return;
@@ -32,6 +34,14 @@ function UsersInner() {
   const mut = useMutation({
     mutationFn: async (u: { id: number; is_active: boolean; roles: string[] }) => updateUser(u.id, { is_active: u.is_active, roles: u.roles }),
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.users }),
+  });
+
+  const createMut = useMutation({
+    mutationFn: createUser,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.users });
+      setCreateModalOpen(false);
+    },
   });
 
   function toggleRole(uid: number, role: string) {
@@ -48,7 +58,13 @@ function UsersInner() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="Users" description="Manage user roles and access" />
+      <PageHeader 
+        title="Users" 
+        description="Manage user roles and access"
+        actions={
+          <Button onClick={() => setCreateModalOpen(true)}>Create User</Button>
+        }
+      />
       <div className="overflow-hidden rounded-xl border border-[var(--canvas-border)]">
         <table className="w-full text-sm">
           <thead className="bg-black/40 text-text-muted">
@@ -95,6 +111,13 @@ function UsersInner() {
           </tbody>
         </table>
       </div>
+
+      <CreateUserModal
+        open={createModalOpen}
+        onClose={() => setCreateModalOpen(false)}
+        onSubmit={async (data) => createMut.mutateAsync(data)}
+        availableRoles={roles ?? []}
+      />
     </div>
   );
 }

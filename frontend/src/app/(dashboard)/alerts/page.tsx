@@ -6,6 +6,7 @@ import { ackAlert, fetchAlertTrends, fetchAlerts, queryKeys, silenceAlert, type 
 import { PageHeader } from "@/features/dashboard/layouts/page-header";
 import { Button } from "@/shared/ui/button";
 import { Badge } from "@/shared/ui/badge";
+import { SimpleLineChart } from "@/shared/ui/line-chart";
 
 function formatTs(ts?: string | null) {
   if (!ts) return "";
@@ -21,6 +22,7 @@ export default function AlertsPage() {
   const { data: alerts } = useQuery({ queryKey: queryKeys.alerts, queryFn: () => fetchAlerts(200), refetchInterval: 15_000 });
   const { data: trends } = useQuery({ queryKey: queryKeys.alertTrends("1h"), queryFn: () => fetchAlertTrends("1h") });
   const [groupBy, setGroupBy] = useState<"none" | "severity" | "alertname">("severity");
+  const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
 
   const grouped = useMemo(() => {
     if (!alerts) return {} as Record<string, AlertEntryResponse[]>;
@@ -47,6 +49,23 @@ export default function AlertsPage() {
     qc.invalidateQueries({ queryKey: queryKeys.alerts });
   }
 
+  function toggleRow(idx: number) {
+    setExpandedRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(idx)) {
+        next.delete(idx);
+      } else {
+        next.add(idx);
+      }
+      return next;
+    });
+  }
+
+  const trendsChartData = (trends ?? []).map((t) => ({
+    ts: t.ts,
+    value: t.firing,
+  }));
+
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
@@ -70,6 +89,21 @@ export default function AlertsPage() {
       >
       </PageHeader>
 
+      {/* Trend Chart */}
+      {trendsChartData.length > 0 && (
+        <div className="rounded-xl border border-[var(--canvas-border)] bg-[var(--canvas-surface)] p-4">
+          <h3 className="text-sm font-semibold text-[var(--canvas-text-primary)] mb-3">
+            Alert Trends (Firing - Last Hour)
+          </h3>
+          <SimpleLineChart
+            data={trendsChartData}
+            height={160}
+            stroke="#ef4444"
+            formatY={(v) => v.toFixed(0)}
+          />
+        </div>
+      )}
+
       {Object.entries(grouped).map(([k, items]) => (
         <div key={k} className="space-y-3">
           {groupBy !== "none" ? (
@@ -91,29 +125,85 @@ export default function AlertsPage() {
                 </tr>
               </thead>
               <tbody>
-                {items.map((a, idx) => (
-                  <tr key={idx} className="border-t border-[var(--canvas-border)]">
-                    <td className="px-4 py-2">
-                      <Badge variant={a.status === "firing" ? "destructive" : "success-light"} size="sm">{a.status}</Badge>
-                    </td>
-                    <td className="px-4 py-2">{a.labels?.alertname || ""}</td>
-                    <td className="px-4 py-2">
-                      <div className="flex flex-wrap gap-1">
-                        {Object.entries(a.labels || {}).map(([lk, lv]) => (
-                          <Badge key={lk} variant="neutral-light" size="sm">{lk}:{lv}</Badge>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="px-4 py-2">{formatTs(a.starts_at)}</td>
-                    <td className="px-4 py-2">{formatTs(a.ends_at)}</td>
-                    <td className="px-4 py-2">
-                      <div className="flex items-center gap-2">
-                        <Button size="sm" variant="outline" onClick={() => onAck(a.fingerprint || "")} disabled={!a.fingerprint}>Ack</Button>
-                        <Button size="sm" variant="outline" onClick={() => onSilence(a.fingerprint || "")} disabled={!a.fingerprint}>Silence 60m</Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {items.map((a, idx) => {
+                  const globalIdx = alerts?.indexOf(a) ?? idx;
+                  const isExpanded = expandedRows.has(globalIdx);
+                  return (
+                    <>
+                      <tr key={idx} className="border-t border-[var(--canvas-border)] hover:bg-black/20 cursor-pointer" onClick={() => toggleRow(globalIdx)}>
+                        <td className="px-4 py-2">
+                          <Badge variant={a.status === "firing" ? "destructive" : "success-light"} size="sm">{a.status}</Badge>
+                        </td>
+                        <td className="px-4 py-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-[var(--canvas-text-muted)]">{isExpanded ? "▼" : "▶"}</span>
+                            <span>{a.labels?.alertname || ""}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-2">
+                          <div className="flex flex-wrap gap-1">
+                            {Object.entries(a.labels || {}).slice(0, 3).map(([lk, lv]) => (
+                              <Badge key={lk} variant="neutral-light" size="sm">{lk}:{lv}</Badge>
+                            ))}
+                            {Object.keys(a.labels || {}).length > 3 && (
+                              <Badge variant="neutral-light" size="sm">+{Object.keys(a.labels || {}).length - 3}</Badge>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-2">{formatTs(a.starts_at)}</td>
+                        <td className="px-4 py-2">{formatTs(a.ends_at)}</td>
+                        <td className="px-4 py-2" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center gap-2">
+                            <Button size="sm" variant="outline" onClick={() => onAck(a.fingerprint || "")} disabled={!a.fingerprint}>Ack</Button>
+                            <Button size="sm" variant="outline" onClick={() => onSilence(a.fingerprint || "")} disabled={!a.fingerprint}>Silence 60m</Button>
+                          </div>
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr key={`${idx}-detail`} className="border-t border-[var(--canvas-border)] bg-black/10">
+                          <td colSpan={6} className="px-4 py-3">
+                            <div className="space-y-3 text-sm">
+                              <div>
+                                <h4 className="font-semibold text-[var(--canvas-text-primary)] mb-1">All Labels:</h4>
+                                <div className="flex flex-wrap gap-1">
+                                  {Object.entries(a.labels || {}).map(([lk, lv]) => (
+                                    <Badge key={lk} variant="neutral-light" size="sm">{lk}: {lv}</Badge>
+                                  ))}
+                                </div>
+                              </div>
+                              {a.annotations && Object.keys(a.annotations).length > 0 && (
+                                <div>
+                                  <h4 className="font-semibold text-[var(--canvas-text-primary)] mb-1">Annotations:</h4>
+                                  <div className="space-y-1">
+                                    {Object.entries(a.annotations).map(([ak, av]) => (
+                                      <div key={ak} className="text-[var(--canvas-text-muted)]">
+                                        <span className="font-medium text-[var(--canvas-text-primary)]">{ak}:</span> {String(av)}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                              {a.fingerprint && (
+                                <div>
+                                  <h4 className="font-semibold text-[var(--canvas-text-primary)] mb-1">Fingerprint:</h4>
+                                  <code className="text-xs text-[var(--canvas-text-muted)] bg-black/20 px-2 py-1 rounded">{a.fingerprint}</code>
+                                </div>
+                              )}
+                              {a.generator_url && (
+                                <div>
+                                  <h4 className="font-semibold text-[var(--canvas-text-primary)] mb-1">Generator URL:</h4>
+                                  <a href={a.generator_url} target="_blank" rel="noopener noreferrer" className="text-[var(--canvas-primary)] hover:underline text-xs">
+                                    {a.generator_url}
+                                  </a>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  );
+                })}
               </tbody>
             </table>
           </div>

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AuthGate } from "@/features/auth/components/auth-gate";
+import { AlertRuleModal } from "@/features/dashboard/components/alert-rule-modal";
 import { PageHeader } from "@/features/dashboard/layouts/page-header";
 import { Button } from "@/shared/ui/button";
 import { fetchAlertRules, createAlertRule, updateAlertRule, deleteAlertRule, type AlertRuleTemplateOut, type AlertRuleTemplateIn, queryKeys } from "@/lib/api";
@@ -19,15 +20,24 @@ function RulesInner() {
   const qc = useQueryClient();
   const { data } = useQuery({ queryKey: queryKeys.alertRules, queryFn: fetchAlertRules });
   const rules = data ?? [];
-  const [editing, setEditing] = useState<AlertRuleTemplateOut | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<"create" | "edit">("create");
+  const [editingRule, setEditingRule] = useState<AlertRuleTemplateOut | null>(null);
 
   const createMut = useMutation({
     mutationFn: async (body: AlertRuleTemplateIn) => createAlertRule(body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.alertRules }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.alertRules });
+      setModalOpen(false);
+    },
   });
   const updateMut = useMutation({
     mutationFn: async ({ id, body }: { id: number; body: AlertRuleTemplateIn }) => updateAlertRule(id, body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.alertRules }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.alertRules });
+      setModalOpen(false);
+      setEditingRule(null);
+    },
   });
   const deleteMut = useMutation({
     mutationFn: async (id: number) => deleteAlertRule(id),
@@ -35,28 +45,28 @@ function RulesInner() {
   });
 
   function onCreate() {
-    const name = prompt("Rule name")?.trim();
-    if (!name) return;
-    const severity = prompt("Severity (info|warning|critical)")?.trim() || "warning";
-    const expr = prompt("PromQL expression")?.trim();
-    if (!expr) return;
-    createMut.mutate({ name, severity, expr, summary: name, description: "", labels: {}, annotations: {}, enabled: true });
+    setModalMode("create");
+    setEditingRule(null);
+    setModalOpen(true);
   }
 
   function onEdit(r: AlertRuleTemplateOut) {
-    setEditing(r);
-    const name = prompt("Rule name", r.name)?.trim();
-    if (!name) return setEditing(null);
-    const severity = prompt("Severity (info|warning|critical)", r.severity)?.trim() || r.severity;
-    const expr = prompt("PromQL expression", r.expr)?.trim();
-    if (!expr) return setEditing(null);
-    updateMut.mutate({ id: r.id, body: { name, severity, expr, summary: r.summary, description: r.description, labels: r.labels || {}, annotations: r.annotations || {}, enabled: r.enabled } });
-    setEditing(null);
+    setModalMode("edit");
+    setEditingRule(r);
+    setModalOpen(true);
   }
 
   function onDelete(id: number) {
     if (!confirm("Delete this rule?")) return;
     deleteMut.mutate(id);
+  }
+
+  async function handleModalSubmit(data: AlertRuleTemplateIn) {
+    if (modalMode === "create") {
+      await createMut.mutateAsync(data);
+    } else if (editingRule) {
+      await updateMut.mutateAsync({ id: editingRule.id, body: data });
+    }
   }
 
   return (
@@ -93,6 +103,17 @@ function RulesInner() {
           </tbody>
         </table>
       </div>
+
+      <AlertRuleModal
+        open={modalOpen}
+        onClose={() => {
+          setModalOpen(false);
+          setEditingRule(null);
+        }}
+        onSubmit={handleModalSubmit}
+        initialData={editingRule}
+        mode={modalMode}
+      />
     </div>
   );
 }

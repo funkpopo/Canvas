@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.core.auth import require_roles
 from app.db import get_session_factory
 from app.schemas.notifications import NotifyConfigOut, NotifyConfigUpdate
 from app.services.notify_config import NotifyConfigService
+from app.services.alert_notify import send_email_notification, send_slack_notification, send_dingtalk_notification, send_wecom_notification
 
 
 router = APIRouter(prefix="/notifications", tags=["alerts"], dependencies=[Depends(require_roles("admin"))])
@@ -80,4 +82,66 @@ async def put_notify_config(body: NotifyConfigUpdate, service: NotifyConfigServi
         )
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/test")
+async def test_notifications(service: NotifyConfigService = Depends(get_service)) -> dict[str, str]:
+    """Send test notifications to all configured channels."""
+    try:
+        cfg = await service.get_effective()
+        if not cfg.get("enabled"):
+            raise HTTPException(status_code=400, detail="Notifications are disabled")
+        
+        title = "[TEST] Canvas Alert Notification Test"
+        text_body = "This is a test notification from Canvas Kubernetes Dashboard. If you see this, your notification channel is configured correctly."
+        html_body = f"<h3>{title}</h3><p>{text_body}</p>"
+        
+        tasks = []
+        sent_channels = []
+        
+        # Test Slack
+        if cfg.get("slack_webhook"):
+            tasks.append(send_slack_notification({"text": text_body}, severity="info"))
+            sent_channels.append("slack")
+        
+        # Test Email
+        if cfg.get("smtp_host") and cfg.get("alert_email_to"):
+            tasks.append(send_email_notification(title, html_body, text_body))
+            sent_channels.append("email")
+        
+        # Test DingTalk
+        if cfg.get("dingtalk_webhook"):
+            tasks.append(send_dingtalk_notification(text_body))
+            sent_channels.append("dingtalk")
+        
+        # Test WeCom
+        if cfg.get("wecom_webhook"):
+            tasks.append(send_wecom_notification(text_body))
+            sent_channels.append("wecom")
+        
+        if not tasks:
+            raise HTTPException(status_code=400, detail="No notification channels configured")
+        
+        # Send all notifications
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # Check for errors
+        errors = [str(r) for r in results if isinstance(r, Exception)]
+        if errors:
+            return {
+                "status": "partial",
+                "message": f"Sent to {len(sent_channels)} channels with some errors",
+                "channels": ", ".join(sent_channels),
+                "errors": "; ".join(errors)
+            }
+        
+        return {
+            "status": "ok",
+            "message": f"Test notifications sent successfully to {len(sent_channels)} channels",
+            "channels": ", ".join(sent_channels)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 

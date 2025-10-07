@@ -1,5 +1,66 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
+let _tokenRefreshTimer: NodeJS.Timeout | null = null;
+
+/**
+ * Parse JWT payload without verification (client-side only for expiry check)
+ */
+function parseJwtPayload(token: string): { exp?: number; sub?: string } | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    const payload = JSON.parse(atob(parts[1]));
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Start automatic token refresh timer (call after login/refresh)
+ */
+export function startTokenRefreshTimer(): void {
+  if (typeof window === "undefined") return;
+  stopTokenRefreshTimer();
+  
+  const token = getAccessToken();
+  if (!token) return;
+  
+  const payload = parseJwtPayload(token);
+  if (!payload?.exp) return;
+  
+  const expiresAt = payload.exp * 1000; // convert to ms
+  const now = Date.now();
+  const timeUntilExpiry = expiresAt - now;
+  const refreshBeforeExpiry = 5 * 60 * 1000; // 5 minutes before expiry
+  
+  if (timeUntilExpiry <= refreshBeforeExpiry) {
+    // Already close to expiry, refresh immediately
+    tryRefresh().then((success) => {
+      if (success) startTokenRefreshTimer();
+    });
+    return;
+  }
+  
+  const delay = timeUntilExpiry - refreshBeforeExpiry;
+  _tokenRefreshTimer = setTimeout(async () => {
+    const success = await tryRefresh();
+    if (success) {
+      startTokenRefreshTimer(); // Schedule next refresh
+    }
+  }, delay);
+}
+
+/**
+ * Stop automatic token refresh timer
+ */
+export function stopTokenRefreshTimer(): void {
+  if (_tokenRefreshTimer) {
+    clearTimeout(_tokenRefreshTimer);
+    _tokenRefreshTimer = null;
+  }
+}
+
 export const queryKeys = {
   clusterOverview: ["cluster", "overview"] as const,
   workloads: ["cluster", "workloads"] as const,
@@ -92,6 +153,7 @@ async function tryRefresh(): Promise<boolean> {
     const data = (await res.json()) as TokenPairResponse;
     localStorage.setItem("canvas.access_token", data.access_token);
     localStorage.setItem("canvas.refresh_token", data.refresh_token);
+    startTokenRefreshTimer(); // Schedule next auto-refresh
     return true;
   } catch {
     return false;
@@ -308,6 +370,18 @@ export function fetchUsers(): Promise<UserInfoResponse[]> {
   return request<UserInfoResponse[]>("/auth/users");
 }
 
+export interface CreateUserRequest { 
+  username: string; 
+  password: string; 
+  display_name?: string | null; 
+  email?: string | null; 
+  tenant_slug?: string | null;
+  roles: string[];
+}
+export function createUser(body: CreateUserRequest): Promise<UserInfoResponse> {
+  return request<UserInfoResponse>("/auth/users", { method: "POST", body: JSON.stringify(body) });
+}
+
 export interface RoleInfoResponse { id: number; name: string }
 export function fetchRoles(): Promise<RoleInfoResponse[]> {
   return request<RoleInfoResponse[]>("/auth/roles");
@@ -450,6 +524,10 @@ export interface AlertEntryResponse {
 export function fetchAlerts(limit = 100): Promise<AlertEntryResponse[]> {
   const params = new URLSearchParams({ limit: String(limit) });
   return request<AlertEntryResponse[]>(`/alerts/?${params.toString()}`);
+}
+export function fetchActiveAlerts(limit = 200): Promise<AlertEntryResponse[]> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  return request<AlertEntryResponse[]>(`/alerts/active?${params.toString()}`);
 }
 export interface TrendPoint { ts: string; firing: number; resolved: number }
 export function fetchAlertTrends(window: string): Promise<TrendPoint[]> {
@@ -1344,4 +1422,7 @@ export function fetchNotifyConfig(): Promise<NotifyConfigOut> {
 
 export function saveNotifyConfig(body: NotifyConfigUpdate): Promise<NotifyConfigOut> {
   return request<NotifyConfigOut>(`/notifications/config`, { method: "PUT", body: JSON.stringify(body) });
+}
+export function testNotifications(): Promise<{ status: string; message: string; channels?: string; errors?: string }> {
+  return request(`/notifications/test`, { method: "POST" });
 }

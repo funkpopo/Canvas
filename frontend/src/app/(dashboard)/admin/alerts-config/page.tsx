@@ -7,7 +7,7 @@ import { PageHeader } from "@/features/dashboard/layouts/page-header";
 import { Button } from "@/shared/ui/button";
 import { Card, CardContent } from "@/shared/ui/card";
 import { badgePresets } from "@/shared/ui/badge";
-import { fetchNotifyConfig, queryKeys, saveNotifyConfig, type NotifyConfigOut } from "@/lib/api";
+import { fetchNotifyConfig, queryKeys, saveNotifyConfig, testNotifications, type NotifyConfigOut } from "@/lib/api";
 
 const inputCls = "w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-text-primary focus:outline-none";
 
@@ -96,6 +96,20 @@ function AlertsConfigInner() {
     },
   });
 
+  const testMut = useMutation({
+    mutationFn: testNotifications,
+    onSuccess: (data) => {
+      if (data.status === "ok") {
+        alert(`✅ ${data.message}\nChannels: ${data.channels || "N/A"}`);
+      } else {
+        alert(`⚠️ ${data.message}\nChannels: ${data.channels || "N/A"}\nErrors: ${data.errors || "N/A"}`);
+      }
+    },
+    onError: (error: any) => {
+      alert(`❌ Test failed: ${error?.message || String(error)}`);
+    },
+  });
+
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
@@ -108,7 +122,14 @@ function AlertsConfigInner() {
             <p className="text-xs text-text-muted">Throttle: {minInterval}s per severity</p>
           </div>
         </>}
-        actions={<Button onClick={() => saveMut.mutate()} disabled={saveMut.isPending}>Save</Button>}
+        actions={
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => testMut.mutate()} disabled={testMut.isPending || !enabled}>
+              {testMut.isPending ? "Testing..." : "Test Notifications"}
+            </Button>
+            <Button onClick={() => saveMut.mutate()} disabled={saveMut.isPending}>Save</Button>
+          </div>
+        }
       />
 
       <Card className="border-border bg-surface text-text-primary">
