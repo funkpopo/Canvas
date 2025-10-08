@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import CurrentUser, get_current_user, require_roles
 from app.core.security import decode_jwt_token
 from app.db import get_session
-from app.schemas.auth import ApiKeyCreated, ApiKeyCreateRequest, CreateUserRequest, LoginRequest, RefreshRequest, TokenPair, UserInfo, RegisterRequest, RoleInfo, UpdateUserRequest, ApiKeyInfo, SessionInfo
+from app.schemas.auth import ApiKeyCreated, ApiKeyCreateRequest, CreateUserRequest, LoginRequest, RefreshRequest, TokenPair, UserInfo, RegisterRequest, RoleInfo, UpdateUserRequest, ApiKeyInfo, SessionInfo, ChangePasswordRequest, AdminSetPasswordRequest
 from app.services.auth import AuthService
 from app.db import get_session_factory
 from app.models.user import Role, User, ApiKey
@@ -271,3 +271,32 @@ async def revoke_session(session_id: int, current: CurrentUser = Depends(get_cur
     if not ok:
         raise HTTPException(status_code=403, detail="Forbidden")
     return {"status": "ok"}
+
+
+@router.patch("/me/password")
+async def change_my_password(body: ChangePasswordRequest, current: CurrentUser = Depends(get_current_user), service: AuthService = Depends(get_auth_service), audit: AuditService = Depends(get_audit_service)) -> dict[str, str]:
+    if not body.new_password or len(body.new_password) < 8:
+        raise HTTPException(status_code=400, detail="New password must be at least 8 characters")
+    ok = await service.change_own_password(user=current.user, current_password=body.current_password, new_password=body.new_password)
+    if not ok:
+        raise HTTPException(status_code=400, detail="Current password incorrect")
+    try:
+        await audit.log(action="password_change", resource="auth", success=True, username=current.username)
+    except Exception:
+        pass
+    return {"status": "ok"}
+
+
+@router.patch("/users/{user_id}/password", dependencies=[Depends(require_roles("admin"))])
+async def admin_set_user_password(user_id: int, body: AdminSetPasswordRequest, service: AuthService = Depends(get_auth_service), audit: AuditService = Depends(get_audit_service)) -> dict[str, str]:
+    if not body.new_password or len(body.new_password) < 8:
+        raise HTTPException(status_code=400, detail="New password must be at least 8 characters")
+    ok = await service.set_user_password(user_id=user_id, new_password=body.new_password)
+    if not ok:
+        raise HTTPException(status_code=404, detail="User not found")
+    try:
+        await audit.log(action="password_set", resource="auth", success=True, details={"user_id": user_id})
+    except Exception:
+        pass
+    return {"status": "ok"}
+

@@ -401,6 +401,17 @@ export function revokeSession(sessionId: number): Promise<{ status: string }> {
   return request<{ status: string }>(`/auth/sessions/${sessionId}`, { method: "DELETE" });
 }
 
+// Password management
+export interface ChangePasswordRequest { current_password: string; new_password: string }
+export function changeMyPassword(body: ChangePasswordRequest): Promise<{ status: string }> {
+  return request<{ status: string }>("/auth/me/password", { method: "PATCH", body: JSON.stringify(body) });
+}
+
+export interface AdminSetPasswordRequest { new_password: string }
+export function adminSetUserPassword(userId: number, body: AdminSetPasswordRequest): Promise<{ status: string }> {
+  return request<{ status: string }>(`/auth/users/${userId}/password`, { method: "PATCH", body: JSON.stringify(body) });
+}
+
 export function fetchWorkloads(): Promise<WorkloadSummaryResponse[]> {
   return request<WorkloadSummaryResponse[]>("/cluster/workloads");
 }

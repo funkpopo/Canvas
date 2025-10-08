@@ -5,12 +5,41 @@ import { useAuth } from "@/features/auth/hooks/use-auth";
 
 export type Role = "viewer" | "operator" | "admin";
 
+// 角色层级：admin(3) > operator(2) > viewer(1)
+const ROLE_HIERARCHY: Record<Role, number> = {
+  viewer: 1,
+  operator: 2,
+  admin: 3,
+};
+
+/**
+ * 检查用户角色是否满足权限要求
+ * 高级别角色自动拥有低级别权限（例如：admin可以访问所有页面）
+ */
+function hasPermission(userRoles: string[], allowedRoles: Role[]): boolean {
+  if (!userRoles || userRoles.length === 0) return false;
+  
+  // 获取用户的最高角色等级
+  const userMaxLevel = Math.max(
+    ...userRoles
+      .filter((role): role is Role => role in ROLE_HIERARCHY)
+      .map((role) => ROLE_HIERARCHY[role])
+  );
+  
+  // 获取所需的最低角色等级
+  const requiredMinLevel = Math.min(
+    ...allowedRoles.map((role) => ROLE_HIERARCHY[role])
+  );
+  
+  // 用户的最高等级 >= 所需的最低等级即可通过
+  return userMaxLevel >= requiredMinLevel;
+}
+
 export function AuthGate({ allow = ["viewer"], children }: PropsWithChildren<{ allow?: Role[] }>) {
   const { me, loading } = useAuth();
   const authorized = useMemo(() => {
     if (!me) return false;
-    if (!me.roles || me.roles.length === 0) return false;
-    return allow.some((role) => me.roles.includes(role));
+    return hasPermission(me.roles, allow);
   }, [me, allow]);
 
   useEffect(() => {

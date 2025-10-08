@@ -90,3 +90,11 @@ class SessionInfo(BaseModel):
     created_at: datetime
     expires_at: datetime
     revoked: bool
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
+class AdminSetPasswordRequest(BaseModel):
+    new_password: str

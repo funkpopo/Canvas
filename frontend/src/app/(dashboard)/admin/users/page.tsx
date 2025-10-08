@@ -4,10 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AuthGate } from "@/features/auth/components/auth-gate";
 import { CreateUserModal } from "@/features/auth/components/create-user-modal";
-import { fetchRoles, fetchUsers, queryKeys, updateUser, createUser, type RoleInfoResponse, type UserInfoResponse } from "@/lib/api";
+import { fetchRoles, fetchUsers, queryKeys, updateUser, createUser, adminSetUserPassword, type RoleInfoResponse, type UserInfoResponse } from "@/lib/api";
 import { PageHeader } from "@/features/dashboard/layouts/page-header";
 import { Button } from "@/shared/ui/button";
 import { Badge } from "@/shared/ui/badge";
+import { Modal } from "@/shared/ui/modal";
 
 export default function UsersPage() {
   return (
@@ -23,6 +24,13 @@ function UsersInner() {
   const { data: roles } = useQuery({ queryKey: queryKeys.roles, queryFn: fetchRoles });
   const [editing, setEditing] = useState<Record<number, { is_active: boolean; roles: string[] }>>({});
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  
+  // Reset password state
+  const [resetPasswordUser, setResetPasswordUser] = useState<UserInfoResponse | null>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [passwordSuccess, setPasswordSuccess] = useState(false);
 
   useEffect(() => {
     if (!users) return;
@@ -44,6 +52,24 @@ function UsersInner() {
     },
   });
 
+  const passwordMut = useMutation({
+    mutationFn: async ({ userId, password }: { userId: number; password: string }) =>
+      adminSetUserPassword(userId, { new_password: password }),
+    onSuccess: () => {
+      setPasswordSuccess(true);
+      setTimeout(() => {
+        setResetPasswordUser(null);
+        setNewPassword("");
+        setConfirmPassword("");
+        setPasswordError(null);
+        setPasswordSuccess(false);
+      }, 2000);
+    },
+    onError: (error: any) => {
+      setPasswordError(error.message || "Failed to reset password");
+    },
+  });
+
   function toggleRole(uid: number, role: string) {
     setEditing((prev) => {
       const curr = prev[uid] || { is_active: true, roles: [] };
@@ -54,6 +80,38 @@ function UsersInner() {
 
   function setActive(uid: number, active: boolean) {
     setEditing((prev) => ({ ...prev, [uid]: { ...(prev[uid] || { roles: [] }), is_active: active } }));
+  }
+
+  function handleResetPassword() {
+    if (!resetPasswordUser) return;
+
+    setPasswordError(null);
+    setPasswordSuccess(false);
+
+    if (!newPassword || !confirmPassword) {
+      setPasswordError("Both password fields are required");
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      setPasswordError("Password must be at least 8 characters");
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setPasswordError("Passwords do not match");
+      return;
+    }
+
+    passwordMut.mutate({ userId: resetPasswordUser.id, password: newPassword });
+  }
+
+  function openResetPasswordModal(user: UserInfoResponse) {
+    setResetPasswordUser(user);
+    setNewPassword("");
+    setConfirmPassword("");
+    setPasswordError(null);
+    setPasswordSuccess(false);
   }
 
   return (
@@ -103,7 +161,10 @@ function UsersInner() {
                     </button>
                   </td>
                   <td className="px-3 py-2">
-                    <Button size="sm" variant="outline" onClick={() => mut.mutate({ id: u.id, is_active: state.is_active, roles: state.roles })} disabled={mut.isPending}>Save</Button>
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="outline" onClick={() => mut.mutate({ id: u.id, is_active: state.is_active, roles: state.roles })} disabled={mut.isPending}>Save</Button>
+                      <Button size="sm" variant="outline" onClick={() => openResetPasswordModal(u)}>Reset Password</Button>
+                    </div>
                   </td>
                 </tr>
               );
@@ -118,6 +179,55 @@ function UsersInner() {
         onSubmit={async (data) => createMut.mutateAsync(data)}
         availableRoles={roles ?? []}
       />
+
+      {/* Reset Password Modal */}
+      <Modal
+        open={!!resetPasswordUser}
+        onClose={() => setResetPasswordUser(null)}
+        title={`Reset Password for ${resetPasswordUser?.username}`}
+      >
+        <div className="space-y-4 p-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-text-muted">New Password</label>
+            <input
+              type="password"
+              className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-primary"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="Enter new password (min 8 characters)"
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-text-muted">Confirm Password</label>
+            <input
+              type="password"
+              className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-primary"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Confirm new password"
+            />
+          </div>
+
+          {passwordError && (
+            <div className="rounded-md bg-red-500/10 border border-red-500/20 px-3 py-2 text-sm text-red-500">
+              {passwordError}
+            </div>
+          )}
+
+          {passwordSuccess && (
+            <div className="rounded-md bg-green-500/10 border border-green-500/20 px-3 py-2 text-sm text-green-500">
+              Password reset successfully!
+            </div>
+          )}
+
+          <div className="flex gap-2 justify-end">
+            <Button variant="outline" onClick={() => setResetPasswordUser(null)}>Cancel</Button>
+            <Button onClick={handleResetPassword} disabled={passwordMut.isPending}>
+              {passwordMut.isPending ? "Resetting..." : "Reset Password"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

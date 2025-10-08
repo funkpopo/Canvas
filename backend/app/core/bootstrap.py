@@ -19,15 +19,20 @@ async def ensure_bootstrap(session_factory: async_sessionmaker[AsyncSession]) ->
         await session.commit()
 
     async with session_factory() as session:
-        # Ensure at least one admin user
-        admin = (await session.execute(select(User).join(UserRole, isouter=True).join(Role, isouter=True).where(Role.name == "admin"))).scalars().first()
-        if not admin:
-            now = datetime.now(timezone.utc)
-            # Create default tenant
+        # Ensure there is an 'admin' user and that it has the 'admin' role
+        now = datetime.now(timezone.utc)
+
+        # Ensure default tenant exists (or create if missing)
+        tenant = (await session.execute(select(Tenant).where(Tenant.slug == "default"))).scalars().first()
+        if not tenant:
             tenant = Tenant(name="default", slug="default", created_at=now)
             session.add(tenant)
             await session.flush()
-            user = User(
+
+        # Ensure admin user exists
+        admin_user = (await session.execute(select(User).where(User.username == "admin"))).scalars().first()
+        if not admin_user:
+            admin_user = User(
                 username="admin",
                 display_name="Administrator",
                 email=None,
@@ -38,11 +43,18 @@ async def ensure_bootstrap(session_factory: async_sessionmaker[AsyncSession]) ->
                 updated_at=now,
                 last_login_at=None,
             )
-            session.add(user)
+            session.add(admin_user)
             await session.flush()
-            # assign admin role
-            role = (await session.execute(select(Role).where(Role.name == "admin"))).scalars().first()
-            if role:
-                session.add(UserRole(user_id=user.id, role_id=role.id))
-            await session.commit()
 
+        # Ensure 'admin' role assigned to admin user
+        admin_role = (await session.execute(select(Role).where(Role.name == "admin"))).scalars().first()
+        if admin_role:
+            has_binding = (
+                await session.execute(
+                    select(UserRole).where(UserRole.user_id == admin_user.id, UserRole.role_id == admin_role.id)
+                )
+            ).scalars().first()
+            if not has_binding:
+                session.add(UserRole(user_id=admin_user.id, role_id=admin_role.id))
+
+        await session.commit()

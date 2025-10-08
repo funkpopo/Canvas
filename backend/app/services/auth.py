@@ -225,3 +225,29 @@ class AuthService:
                 session.add(UserRole(user_id=user_id, role_id=r.id))
             await session.commit()
             return (await session.execute(select(User).where(User.id == user_id))).scalars().first()
+
+    async def change_own_password(self, *, user: User, current_password: str, new_password: str) -> bool:
+        # Verify current password
+        if not verify_password(current_password, user.password_hash):
+            return False
+        # Update to new password
+        async with self._session_factory() as session:
+            row = await session.execute(select(User).where(User.id == user.id))
+            u = row.scalars().first()
+            if not u:
+                return False
+            u.password_hash = hash_password(new_password)
+            u.updated_at = datetime.now(timezone.utc)
+            await session.commit()
+            return True
+
+    async def set_user_password(self, *, user_id: int, new_password: str) -> bool:
+        async with self._session_factory() as session:
+            row = await session.execute(select(User).where(User.id == user_id))
+            u = row.scalars().first()
+            if not u:
+                return False
+            u.password_hash = hash_password(new_password)
+            u.updated_at = datetime.now(timezone.utc)
+            await session.commit()
+            return True
