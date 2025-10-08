@@ -1,17 +1,29 @@
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_kubernetes_service
+from app.db import get_session
 from app.schemas.kubernetes import (
     StorageClassSummary,
     StorageClassCreate,
+    StorageClassDetail,
     OperationResult,
     PersistentVolumeClaimSummary,
     VolumeFileEntry,
     FileContent,
     PersistentVolumeDetail,
+    VolumeSnapshotSummary,
+    VolumeSnapshotCreate,
+    VolumeSnapshotDetail,
+    PvcCloneRequest,
+    StorageUsageStats,
+    StorageTrends,
+    StorageMetrics,
+    FilePreview,
 )
 from app.services.kube_client import KubernetesService
+from app.services.storage_stats import StorageStatsService
 
 
 router = APIRouter(prefix="/storage", tags=["storage"])
@@ -184,3 +196,125 @@ async def download_zip(
 
     headers = {"Content-Disposition": f"attachment; filename=\"{pvc}-files.zip\""}
     return StreamingResponse(buf, media_type="application/zip", headers=headers)
+
+
+# ========================================
+# Volume Snapshot Routes
+# ========================================
+@router.get("/snapshots", response_model=list[VolumeSnapshotSummary], summary="List VolumeSnapshots")
+async def list_volume_snapshots(
+    namespace: str | None = Query(default=None),
+    service: KubernetesService = Depends(get_kubernetes_service)
+) -> list[VolumeSnapshotSummary]:
+    return await service.list_volume_snapshots(namespace)
+
+
+@router.get("/snapshots/{namespace}/{name}", response_model=VolumeSnapshotDetail | None, summary="Get VolumeSnapshot detail")
+async def get_volume_snapshot_detail(
+    namespace: str,
+    name: str,
+    service: KubernetesService = Depends(get_kubernetes_service)
+) -> VolumeSnapshotDetail | None:
+    return await service.get_volume_snapshot_detail(namespace, name)
+
+
+@router.post("/snapshots", response_model=OperationResult, summary="Create a VolumeSnapshot")
+async def create_volume_snapshot(
+    payload: VolumeSnapshotCreate,
+    service: KubernetesService = Depends(get_kubernetes_service)
+) -> OperationResult:
+    ok, msg = await service.create_volume_snapshot(payload)
+    return OperationResult(ok=ok, message=msg)
+
+
+@router.delete("/snapshots/{namespace}/{name}", response_model=OperationResult, summary="Delete a VolumeSnapshot")
+async def delete_volume_snapshot(
+    namespace: str,
+    name: str,
+    service: KubernetesService = Depends(get_kubernetes_service)
+) -> OperationResult:
+    ok, msg = await service.delete_volume_snapshot(namespace, name)
+    return OperationResult(ok=ok, message=msg)
+
+
+@router.post("/snapshots/{namespace}/{name}/restore", response_model=OperationResult, summary="Restore from VolumeSnapshot")
+async def restore_from_snapshot(
+    namespace: str,
+    name: str,
+    pvc_name: str = Query(..., description="Name for the new PVC"),
+    service: KubernetesService = Depends(get_kubernetes_service)
+) -> OperationResult:
+    ok, msg = await service.restore_from_snapshot(namespace, name, pvc_name)
+    return OperationResult(ok=ok, message=msg)
+
+
+# ========================================
+# PVC Clone Route
+# ========================================
+@router.post("/pvcs/clone", response_model=OperationResult, summary="Clone a PVC")
+async def clone_pvc(
+    payload: PvcCloneRequest,
+    service: KubernetesService = Depends(get_kubernetes_service)
+) -> OperationResult:
+    ok, msg = await service.clone_pvc(payload)
+    return OperationResult(ok=ok, message=msg)
+
+
+# ========================================
+# StorageClass Detail Route
+# ========================================
+@router.get("/classes/{name}/detail", response_model=StorageClassDetail | None, summary="Get StorageClass detail")
+async def get_storage_class_detail(
+    name: str,
+    service: KubernetesService = Depends(get_kubernetes_service)
+) -> StorageClassDetail | None:
+    return await service.get_storage_class_detail(name)
+
+
+# ========================================
+# Storage Statistics Routes
+# ========================================
+@router.get("/stats", response_model=StorageUsageStats, summary="Get storage usage statistics")
+async def get_storage_stats(
+    hours: int = Query(default=24, description="Lookback period in hours"),
+    service: KubernetesService = Depends(get_kubernetes_service),
+    db: AsyncSession = Depends(get_session)
+) -> StorageUsageStats:
+    stats_service = StorageStatsService(service, db)
+    return await stats_service.get_usage_stats(hours)
+
+
+@router.get("/stats/trends", response_model=StorageTrends, summary="Get storage usage trends")
+async def get_storage_trends(
+    sc_name: str | None = Query(default=None, description="Filter by StorageClass name"),
+    days: int = Query(default=7, description="Trend period in days"),
+    service: KubernetesService = Depends(get_kubernetes_service),
+    db: AsyncSession = Depends(get_session)
+) -> StorageTrends:
+    stats_service = StorageStatsService(service, db)
+    return await stats_service.get_storage_trends(sc_name, days)
+
+
+# ========================================
+# Storage Performance Metrics Route
+# ========================================
+@router.get("/metrics/{namespace}/{pvc}", response_model=StorageMetrics | None, summary="Get PVC performance metrics")
+async def get_storage_metrics(
+    namespace: str,
+    pvc: str,
+    service: KubernetesService = Depends(get_kubernetes_service)
+) -> StorageMetrics | None:
+    return await service.get_storage_metrics(namespace, pvc)
+
+
+# ========================================
+# File Preview Route
+# ========================================
+@router.get("/browser/{namespace}/{pvc}/preview", response_model=FilePreview, summary="Get file preview")
+async def get_file_preview(
+    namespace: str,
+    pvc: str,
+    path: str = Query(..., description="File path to preview"),
+    service: KubernetesService = Depends(get_kubernetes_service)
+) -> FilePreview:
+    return await service.get_file_preview(namespace, pvc, path)

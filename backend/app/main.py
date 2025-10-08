@@ -16,6 +16,7 @@ from app.websocket import ConnectionManager, K8sWatcher
 from app.schemas.websocket import WebSocketMessage
 from app.core.bootstrap import ensure_bootstrap
 from app.core.auth import get_current_user_ws
+from app.services.storage_stats import StorageStatsService
 
 
 @asynccontextmanager
@@ -136,6 +137,25 @@ async def lifespan(app: FastAPI):
         name="node_metrics_collect",
     )
     node_metrics_collect_task.start()
+    
+    # Storage statistics collection every 15 minutes
+    async def _collect_storage_stats() -> None:
+        try:
+            async for session in get_session_factory()():
+                stats_service = StorageStatsService(service, session)
+                await stats_service.collect_storage_stats()
+                break  # Only use first session
+        except Exception:
+            # Best effort
+            pass
+    
+    storage_stats_task = PeriodicTask(
+        interval_seconds=900,  # 15 minutes
+        action=_collect_storage_stats,
+        name="storage_stats_collect",
+    )
+    storage_stats_task.start()
+    
     asyncio.create_task(service.list_workloads())
 
     try:
@@ -148,6 +168,7 @@ async def lifespan(app: FastAPI):
         await cache_warm_task.stop()
         await metrics_collect_task.stop()
         await node_metrics_collect_task.stop()
+        await storage_stats_task.stop()
         logger.info("application.shutdown")
 
 

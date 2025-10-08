@@ -406,3 +406,129 @@ class GenericResourceEntry(BaseModel):
     namespace: str | None = None
     name: str
     created_at: datetime | None = None
+
+
+# Volume Snapshots
+class VolumeSnapshotSummary(BaseModel):
+    namespace: str
+    name: str
+    source_pvc: str | None = None
+    snapshot_class: str | None = None
+    status: str | None = None  # Ready, Pending, Error
+    ready_to_use: bool = False
+    creation_time: datetime | None = None
+    restore_size: str | None = None
+    error_message: str | None = None
+
+
+class VolumeSnapshotCreate(BaseModel):
+    namespace: str
+    name: str
+    source_pvc: str
+    snapshot_class: str | None = None
+    labels: dict[str, str] = Field(default_factory=dict)
+
+
+class VolumeSnapshotDetail(BaseModel):
+    namespace: str
+    name: str
+    source_pvc: str | None = None
+    snapshot_class: str | None = None
+    snapshot_content_name: str | None = None
+    status: str | None = None
+    ready_to_use: bool = False
+    creation_time: datetime | None = None
+    restore_size: str | None = None
+    error_message: str | None = None
+    labels: dict[str, str] = Field(default_factory=dict)
+    annotations: dict[str, str] = Field(default_factory=dict)
+
+
+# PVC Clone
+class PvcCloneRequest(BaseModel):
+    source_namespace: str
+    source_pvc: str | None = None
+    source_snapshot: str | None = None  # Alternative to source_pvc
+    target_namespace: str
+    target_name: str
+    storage_class: str | None = None
+    size: str | None = None  # If not provided, use source size
+    access_modes: list[str] = Field(default_factory=list)
+
+
+# StorageClass Detail (extended)
+class StorageClassDetail(BaseModel):
+    name: str
+    provisioner: str | None = None
+    reclaim_policy: str | None = None
+    volume_binding_mode: str | None = None
+    allow_volume_expansion: bool | None = None
+    parameters: dict[str, str] = Field(default_factory=dict)
+    mount_options: list[str] = Field(default_factory=list)
+    created_at: datetime | None = None
+    # Extended fields
+    pvc_count: int = 0
+    total_capacity_bytes: int = 0
+    used_capacity_bytes: int = 0
+    pvcs: list[PersistentVolumeClaimSummary] = Field(default_factory=list)
+
+
+# Storage Usage Statistics
+class StorageUsageByClass(BaseModel):
+    storage_class: str
+    pvc_count: int
+    total_capacity_bytes: int
+    used_capacity_bytes: int
+    usage_percent: float
+
+
+class StorageUsageStats(BaseModel):
+    total_capacity_bytes: int = 0
+    total_used_bytes: int = 0
+    overall_usage_percent: float = 0.0
+    by_class: list[StorageUsageByClass] = Field(default_factory=list)
+    top_pvcs: list[dict] = Field(default_factory=list)  # Top 5 largest PVCs
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class StorageTrendPoint(BaseModel):
+    timestamp: datetime
+    capacity_bytes: int
+    used_bytes: int
+    pvc_count: int
+
+
+class StorageTrends(BaseModel):
+    storage_class: str | None = None
+    period_days: int
+    data_points: list[StorageTrendPoint] = Field(default_factory=list)
+
+
+# Storage Performance Metrics
+class StorageMetrics(BaseModel):
+    namespace: str
+    pvc_name: str
+    capacity_bytes: int | None = None
+    used_bytes: int | None = None
+    available_bytes: int | None = None
+    usage_percent: float | None = None
+    iops_read: float | None = None
+    iops_write: float | None = None
+    throughput_read_bps: float | None = None
+    throughput_write_bps: float | None = None
+    latency_ms: float | None = None
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+# File Preview
+class FilePreview(BaseModel):
+    path: str
+    name: str
+    mime_type: str | None = None
+    size: int | None = None
+    is_text: bool = False
+    is_image: bool = False
+    content: str | None = None  # Text content or base64 for images
+    encoding: str | None = None
+    preview_available: bool = True
+    error_message: str | None = None

@@ -176,7 +176,9 @@ function UsersInner() {
       <CreateUserModal
         open={createModalOpen}
         onClose={() => setCreateModalOpen(false)}
-        onSubmit={async (data) => createMut.mutateAsync(data)}
+        onSubmit={async (data) => {
+          await createMut.mutateAsync(data);
+        }}
         availableRoles={roles ?? []}
       />
 

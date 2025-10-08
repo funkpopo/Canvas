@@ -30,6 +30,12 @@ import {
   type VolumeFileEntryResponse,
 } from "@/lib/api";
 import { Modal } from "@/shared/ui/modal";
+import { SnapshotsTab } from "./_components/SnapshotsTab";
+import { StatisticsTab } from "./_components/StatisticsTab";
+import { StorageClassDetailModal } from "./_components/StorageClassDetailModal";
+import { ClonePvcModal } from "./_components/ClonePvcModal";
+import { CreateSnapshotModal } from "./_components/CreateSnapshotModal";
+import { FilePreviewModal } from "./_components/FilePreviewModal";
 
 function CreateStorageClassForm({ onSubmit, onCancel }: { onSubmit: (p: StorageClassCreatePayload) => void; onCancel: () => void }) {
   const { t } = useI18n();
@@ -191,6 +197,7 @@ function VolumeBrowser({ ns, pvc, onClose }: { ns: string; pvc: string; onClose:
   const [editPath, setEditPath] = useState<string | null>(null);
   const [editText, setEditText] = useState<string>("");
   const [selected, setSelected] = useState<Record<string, boolean>>({});
+  const [previewPath, setPreviewPath] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   const { data: list } = useQuery({ queryKey: queryKeys.volumeList(ns, pvc, path), queryFn: () => fetchVolumeList(ns, pvc, path) });
@@ -349,6 +356,8 @@ function VolumeBrowser({ ns, pvc, onClose }: { ns: string; pvc: string; onClose:
                         <td className="px-2 py-1">{e.size ?? ""}</td>
                         <td className="px-2 py-1">{e.mtime ?? ""}</td>
                         <td className="px-2 py-1">
+                          <button className="text-xs text-primary" onClick={() => setPreviewPath(e.path)}>{t("storage.preview.text")}</button>
+                          <span className="mx-2">•</span>
                           <button className="text-xs text-primary" onClick={() => openEdit(e.path)}>{t("storage.edit")}</button>
                           <span className="mx-2">•</span>
                           <a className="text-xs text-primary" href={downloadVolumePath(ns, pvc, e.path)} target="_blank" rel="noreferrer">{t("storage.download")}</a>
@@ -385,6 +394,15 @@ function VolumeBrowser({ ns, pvc, onClose }: { ns: string; pvc: string; onClose:
       >
         <textarea value={editText} onChange={(e) => setEditText(e.target.value)} className="h-80 w-full rounded-md border border-border bg-surface p-2 font-mono text-sm" />
       </Modal>
+
+      {/* File Preview */}
+      <FilePreviewModal
+        namespace={ns}
+        pvc={pvc}
+        path={previewPath}
+        onClose={() => setPreviewPath(null)}
+      />
+
       <ConfirmDialogComponent />
     </Modal>
   );
@@ -399,6 +417,10 @@ export default function StoragePage() {
 
   const [creating, setCreating] = useState(false);
   const [browser, setBrowser] = useState<{ ns: string; pvc: string } | null>(null);
+  const [scDetailName, setScDetailName] = useState<string | null>(null);
+  const [clonePvcOpen, setClonePvcOpen] = useState(false);
+  const [clonePvcInitial, setClonePvcInitial] = useState<{ ns?: string; pvc?: string }>({});
+  const [createSnapshotOpen, setCreateSnapshotOpen] = useState(false);
 
   const createMut = useMutation({
     mutationFn: createStorageClass,
@@ -446,6 +468,8 @@ export default function StoragePage() {
             <TabsList>
               <TabsTrigger value="classes">{t("storage.tab.classes")}</TabsTrigger>
               <TabsTrigger value="volumes">{t("storage.tab.volumes")}</TabsTrigger>
+              <TabsTrigger value="snapshots">{t("storage.tab.snapshots")}</TabsTrigger>
+              <TabsTrigger value="statistics">{t("storage.stats.title")}</TabsTrigger>
             </TabsList>
             <TabsContent value="classes" className="pt-2">
               <div className="mb-2 flex items-center justify-between">
@@ -478,6 +502,8 @@ export default function StoragePage() {
                           <td className="px-2 py-1">{sc.volume_binding_mode ?? ""}</td>
                           <td className="px-2 py-1">{String(Boolean(sc.allow_volume_expansion))}</td>
                           <td className="px-2 py-1">
+                            <button className="text-xs text-primary" onClick={() => setScDetailName(sc.name)}>{t("pods.detail")}</button>
+                            <span className="mx-2">•</span>
                             <button className="text-xs text-error" onClick={async () => {
                               const confirmed = await confirm({ title: `${t("storage.delete")} ${sc.name}?` });
                               if (confirmed) deleteMut.mutate(sc.name);
@@ -522,6 +548,11 @@ export default function StoragePage() {
                           <td className="px-2 py-1">
                             <button className="text-xs text-primary" onClick={() => setBrowser({ ns: p.namespace, pvc: p.name })}>{t("storage.browse")}</button>
                             <span className="mx-2">•</span>
+                            <button className="text-xs text-primary" onClick={() => {
+                              setClonePvcInitial({ ns: p.namespace, pvc: p.name });
+                              setClonePvcOpen(true);
+                            }}>{t("storage.clone.button")}</button>
+                            <span className="mx-2">•</span>
                             <button className="text-xs text-primary" onClick={async () => {
                               const size = prompt(t("storage.expand.prompt"));
                               if (!size) return;
@@ -536,6 +567,14 @@ export default function StoragePage() {
                 </table>
               </div>
             </TabsContent>
+
+            <TabsContent value="snapshots">
+              <SnapshotsTab onCreateSnapshot={() => setCreateSnapshotOpen(true)} />
+            </TabsContent>
+
+            <TabsContent value="statistics">
+              <StatisticsTab />
+            </TabsContent>
           </Tabs>
         </CardContent>
       </Card>
@@ -543,7 +582,29 @@ export default function StoragePage() {
       <Modal open={creating} onClose={() => setCreating(false)} title={t("storage.sc.new")}>{
         <CreateStorageClassForm onSubmit={onCreate} onCancel={() => setCreating(false)} />
       }</Modal>
+      
       {browser && <VolumeBrowser ns={browser.ns} pvc={browser.pvc} onClose={() => setBrowser(null)} />}
+      
+      <StorageClassDetailModal
+        name={scDetailName}
+        onClose={() => setScDetailName(null)}
+      />
+      
+      <ClonePvcModal
+        open={clonePvcOpen}
+        onClose={() => {
+          setClonePvcOpen(false);
+          setClonePvcInitial({});
+        }}
+        initialNamespace={clonePvcInitial.ns}
+        initialPvc={clonePvcInitial.pvc}
+      />
+      
+      <CreateSnapshotModal
+        open={createSnapshotOpen}
+        onClose={() => setCreateSnapshotOpen(false)}
+      />
+      
       <ConfirmDialogComponent />
     </div>
   );

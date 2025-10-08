@@ -45,6 +45,13 @@ from app.schemas.kubernetes import (
     ServicePort,
     CRDSummary,
     GenericResourceEntry,
+    VolumeSnapshotSummary,
+    VolumeSnapshotDetail,
+    VolumeSnapshotCreate,
+    PvcCloneRequest,
+    StorageClassDetail,
+    StorageMetrics,
+    FilePreview,
 )
 from app.schemas.rbac import (
     RoleEntry,
@@ -3876,3 +3883,469 @@ class KubernetesService:
         except Exception as exc:  # pragma: no cover
             logger.warning("kubernetes.generic_delete_error", error=str(exc))
             return False, str(exc)
+
+    # ========================================
+    # Volume Snapshot Management
+    # ========================================
+    async def list_volume_snapshots(self, namespace: str | None = None) -> list[VolumeSnapshotSummary]:
+        """List VolumeSnapshots across namespaces or in a specific namespace"""
+        async def _fetch() -> list[VolumeSnapshotSummary]:
+            def _collect() -> list[VolumeSnapshotSummary]:
+                co = client.CustomObjectsApi(self.api_client)
+                group = "snapshot.storage.k8s.io"
+                version = "v1"
+                plural = "volumesnapshots"
+                
+                try:
+                    if namespace:
+                        resp = co.list_namespaced_custom_object(group, version, namespace, plural)
+                    else:
+                        resp = co.list_cluster_custom_object(group, version, plural)
+                    
+                    items = resp.get("items", [])
+                    result: list[VolumeSnapshotSummary] = []
+                    
+                    for item in items:
+                        meta = item.get("metadata", {})
+                        spec = item.get("spec", {})
+                        status = item.get("status", {})
+                        
+                        snapshot = VolumeSnapshotSummary(
+                            namespace=meta.get("namespace", ""),
+                            name=meta.get("name", ""),
+                            source_pvc=spec.get("source", {}).get("persistentVolumeClaimName"),
+                            snapshot_class=spec.get("volumeSnapshotClassName"),
+                            status="Ready" if status.get("readyToUse") else "Pending",
+                            ready_to_use=status.get("readyToUse", False),
+                            creation_time=self._parse_time(meta.get("creationTimestamp")),
+                            restore_size=status.get("restoreSize"),
+                            error_message=status.get("error", {}).get("message") if status.get("error") else None,
+                        )
+                        result.append(snapshot)
+                    
+                    return result
+                except Exception as e:
+                    logger.warning("kubernetes.list_snapshots_error", error=str(e))
+                    return []
+            
+            return await asyncio.to_thread(_collect)
+        
+        return await self._cached_call("list_volume_snapshots", _fetch, ttl=30)
+
+    async def get_volume_snapshot_detail(self, namespace: str, name: str) -> VolumeSnapshotDetail | None:
+        """Get detailed information about a VolumeSnapshot"""
+        async def _fetch() -> VolumeSnapshotDetail | None:
+            def _collect() -> VolumeSnapshotDetail | None:
+                co = client.CustomObjectsApi(self.api_client)
+                group = "snapshot.storage.k8s.io"
+                version = "v1"
+                plural = "volumesnapshots"
+                
+                try:
+                    item = co.get_namespaced_custom_object(group, version, namespace, plural, name)
+                    meta = item.get("metadata", {})
+                    spec = item.get("spec", {})
+                    status = item.get("status", {})
+                    
+                    return VolumeSnapshotDetail(
+                        namespace=meta.get("namespace", ""),
+                        name=meta.get("name", ""),
+                        source_pvc=spec.get("source", {}).get("persistentVolumeClaimName"),
+                        snapshot_class=spec.get("volumeSnapshotClassName"),
+                        snapshot_content_name=status.get("boundVolumeSnapshotContentName"),
+                        status="Ready" if status.get("readyToUse") else "Pending",
+                        ready_to_use=status.get("readyToUse", False),
+                        creation_time=self._parse_time(meta.get("creationTimestamp")),
+                        restore_size=status.get("restoreSize"),
+                        error_message=status.get("error", {}).get("message") if status.get("error") else None,
+                        labels=meta.get("labels", {}),
+                        annotations=meta.get("annotations", {}),
+                    )
+                except Exception as e:
+                    logger.warning("kubernetes.get_snapshot_detail_error", error=str(e))
+                    return None
+            
+            return await asyncio.to_thread(_collect)
+        
+        return await _fetch()
+
+    async def create_volume_snapshot(self, payload: VolumeSnapshotCreate) -> tuple[bool, str | None]:
+        """Create a VolumeSnapshot from a PVC"""
+        def _create() -> tuple[bool, str | None]:
+            co = client.CustomObjectsApi(self.api_client)
+            group = "snapshot.storage.k8s.io"
+            version = "v1"
+            plural = "volumesnapshots"
+            
+            body = {
+                "apiVersion": f"{group}/{version}",
+                "kind": "VolumeSnapshot",
+                "metadata": {
+                    "name": payload.name,
+                    "namespace": payload.namespace,
+                    "labels": payload.labels,
+                },
+                "spec": {
+                    "source": {
+                        "persistentVolumeClaimName": payload.source_pvc
+                    }
+                }
+            }
+            
+            if payload.snapshot_class:
+                body["spec"]["volumeSnapshotClassName"] = payload.snapshot_class
+            
+            try:
+                co.create_namespaced_custom_object(group, version, payload.namespace, plural, body)
+                return True, None
+            except Exception as e:
+                logger.warning("kubernetes.create_snapshot_error", error=str(e))
+                return False, str(e)
+        
+        return await asyncio.to_thread(_create)
+
+    async def delete_volume_snapshot(self, namespace: str, name: str) -> tuple[bool, str | None]:
+        """Delete a VolumeSnapshot"""
+        def _delete() -> tuple[bool, str | None]:
+            co = client.CustomObjectsApi(self.api_client)
+            group = "snapshot.storage.k8s.io"
+            version = "v1"
+            plural = "volumesnapshots"
+            
+            try:
+                co.delete_namespaced_custom_object(group, version, namespace, plural, name)
+                return True, None
+            except Exception as e:
+                logger.warning("kubernetes.delete_snapshot_error", error=str(e))
+                return False, str(e)
+        
+        return await asyncio.to_thread(_delete)
+
+    async def restore_from_snapshot(self, namespace: str, snapshot_name: str, pvc_name: str) -> tuple[bool, str | None]:
+        """Create a new PVC from a VolumeSnapshot (simplified restore)"""
+        # This is a convenience method that creates a PVC with snapshot as dataSource
+        # First, get snapshot details to determine size and storage class
+        snapshot = await self.get_volume_snapshot_detail(namespace, snapshot_name)
+        if not snapshot:
+            return False, "Snapshot not found"
+        
+        if not snapshot.ready_to_use:
+            return False, "Snapshot is not ready to use"
+        
+        # Create PVC with snapshot as dataSource
+        clone_request = PvcCloneRequest(
+            source_namespace=namespace,
+            source_snapshot=snapshot_name,
+            target_namespace=namespace,
+            target_name=pvc_name,
+            storage_class=snapshot.snapshot_class,
+            size=snapshot.restore_size,
+        )
+        
+        return await self.clone_pvc(clone_request)
+
+    # ========================================
+    # PVC Clone
+    # ========================================
+    async def clone_pvc(self, payload: PvcCloneRequest) -> tuple[bool, str | None]:
+        """Clone a PVC from another PVC or from a VolumeSnapshot"""
+        def _clone() -> tuple[bool, str | None]:
+            v1 = client.CoreV1Api(self.api_client)
+            
+            # Determine dataSource
+            data_source = {}
+            if payload.source_snapshot:
+                data_source = {
+                    "name": payload.source_snapshot,
+                    "kind": "VolumeSnapshot",
+                    "apiGroup": "snapshot.storage.k8s.io"
+                }
+            elif payload.source_pvc:
+                # Get source PVC to copy attributes
+                try:
+                    source = v1.read_namespaced_persistent_volume_claim(
+                        payload.source_pvc, 
+                        payload.source_namespace
+                    )
+                    data_source = {
+                        "name": payload.source_pvc,
+                        "kind": "PersistentVolumeClaim"
+                    }
+                    
+                    # Use source attributes if not specified
+                    if not payload.storage_class:
+                        payload.storage_class = source.spec.storage_class_name
+                    if not payload.size:
+                        payload.size = source.spec.resources.requests.get("storage")
+                    if not payload.access_modes:
+                        payload.access_modes = source.spec.access_modes or []
+                except Exception as e:
+                    logger.warning("kubernetes.get_source_pvc_error", error=str(e))
+                    return False, f"Failed to get source PVC: {str(e)}"
+            else:
+                return False, "Either source_pvc or source_snapshot must be specified"
+            
+            # Prepare PVC body
+            pvc_body = {
+                "apiVersion": "v1",
+                "kind": "PersistentVolumeClaim",
+                "metadata": {
+                    "name": payload.target_name,
+                    "namespace": payload.target_namespace,
+                },
+                "spec": {
+                    "accessModes": payload.access_modes or ["ReadWriteOnce"],
+                    "resources": {
+                        "requests": {
+                            "storage": payload.size or "1Gi"
+                        }
+                    },
+                    "dataSource": data_source
+                }
+            }
+            
+            if payload.storage_class:
+                pvc_body["spec"]["storageClassName"] = payload.storage_class
+            
+            try:
+                v1.create_namespaced_persistent_volume_claim(
+                    payload.target_namespace,
+                    pvc_body
+                )
+                return True, None
+            except Exception as e:
+                logger.warning("kubernetes.clone_pvc_error", error=str(e))
+                return False, str(e)
+        
+        return await asyncio.to_thread(_clone)
+
+    # ========================================
+    # StorageClass Detail
+    # ========================================
+    async def get_storage_class_detail(self, name: str) -> StorageClassDetail | None:
+        """Get detailed StorageClass information including associated PVCs"""
+        async def _fetch() -> StorageClassDetail | None:
+            def _collect() -> StorageClassDetail | None:
+                storage_v1 = client.StorageV1Api(self.api_client)
+                v1 = client.CoreV1Api(self.api_client)
+                
+                try:
+                    # Get StorageClass
+                    sc = storage_v1.read_storage_class(name)
+                    
+                    # Get all PVCs using this StorageClass
+                    pvcs_list = v1.list_persistent_volume_claim_for_all_namespaces()
+                    related_pvcs: list[PersistentVolumeClaimSummary] = []
+                    total_capacity = 0
+                    used_capacity = 0
+                    
+                    for pvc in pvcs_list.items:
+                        if pvc.spec.storage_class_name == name:
+                            capacity_str = pvc.status.capacity.get("storage") if pvc.status.capacity else None
+                            capacity_bytes = self._parse_storage_to_bytes(capacity_str) if capacity_str else 0
+                            total_capacity += capacity_bytes
+                            
+                            # For simplicity, we'll consider all bound PVCs as "used"
+                            # In reality, you'd need to check actual usage via metrics
+                            if pvc.status.phase == "Bound":
+                                used_capacity += capacity_bytes
+                            
+                            related_pvcs.append(PersistentVolumeClaimSummary(
+                                namespace=pvc.metadata.namespace,
+                                name=pvc.metadata.name,
+                                status=pvc.status.phase,
+                                storage_class=pvc.spec.storage_class_name,
+                                capacity=capacity_str,
+                                access_modes=pvc.spec.access_modes or [],
+                                volume_name=pvc.spec.volume_name,
+                                created_at=pvc.metadata.creation_timestamp,
+                            ))
+                    
+                    return StorageClassDetail(
+                        name=sc.metadata.name,
+                        provisioner=sc.provisioner,
+                        reclaim_policy=sc.reclaim_policy,
+                        volume_binding_mode=sc.volume_binding_mode,
+                        allow_volume_expansion=sc.allow_volume_expansion,
+                        parameters=sc.parameters or {},
+                        mount_options=sc.mount_options or [],
+                        created_at=sc.metadata.creation_timestamp,
+                        pvc_count=len(related_pvcs),
+                        total_capacity_bytes=total_capacity,
+                        used_capacity_bytes=used_capacity,
+                        pvcs=related_pvcs,
+                    )
+                except Exception as e:
+                    logger.warning("kubernetes.get_sc_detail_error", error=str(e))
+                    return None
+            
+            return await asyncio.to_thread(_collect)
+        
+        return await _fetch()
+
+    def _parse_storage_to_bytes(self, storage_str: str) -> int:
+        """Parse Kubernetes storage string (e.g., '10Gi', '500Mi') to bytes"""
+        import re
+        match = re.match(r"^(\d+(?:\.\d+)?)(Ki|Mi|Gi|Ti|Pi|Ei|K|M|G|T|P|E)?$", storage_str)
+        if not match:
+            return 0
+        
+        value = float(match.group(1))
+        unit = match.group(2) or ""
+        
+        multipliers = {
+            "": 1,
+            "K": 1000, "Ki": 1024,
+            "M": 1000**2, "Mi": 1024**2,
+            "G": 1000**3, "Gi": 1024**3,
+            "T": 1000**4, "Ti": 1024**4,
+            "P": 1000**5, "Pi": 1024**5,
+            "E": 1000**6, "Ei": 1024**6,
+        }
+        
+        return int(value * multipliers.get(unit, 1))
+
+    # ========================================
+    # Storage Metrics (Performance Monitoring)
+    # ========================================
+    async def get_storage_metrics(self, namespace: str, pvc_name: str) -> StorageMetrics | None:
+        """Get storage performance metrics for a PVC (requires Prometheus)"""
+        # This is a placeholder implementation
+        # In production, you'd query Prometheus for kubelet_volume_stats_* metrics
+        async def _fetch() -> StorageMetrics | None:
+            def _collect() -> StorageMetrics | None:
+                v1 = client.CoreV1Api(self.api_client)
+                
+                try:
+                    pvc = v1.read_namespaced_persistent_volume_claim(pvc_name, namespace)
+                    capacity_str = pvc.status.capacity.get("storage") if pvc.status.capacity else None
+                    capacity_bytes = self._parse_storage_to_bytes(capacity_str) if capacity_str else None
+                    
+                    # Without Prometheus, we can only return basic capacity info
+                    return StorageMetrics(
+                        namespace=namespace,
+                        pvc_name=pvc_name,
+                        capacity_bytes=capacity_bytes,
+                        used_bytes=None,  # Would need kubelet_volume_stats_used_bytes
+                        available_bytes=None,  # Would need kubelet_volume_stats_available_bytes
+                        usage_percent=None,
+                        iops_read=None,  # Would need custom metrics or CSI driver metrics
+                        iops_write=None,
+                        throughput_read_bps=None,
+                        throughput_write_bps=None,
+                        latency_ms=None,
+                    )
+                except Exception as e:
+                    logger.warning("kubernetes.get_storage_metrics_error", error=str(e))
+                    return None
+            
+            return await asyncio.to_thread(_collect)
+        
+        return await _fetch()
+
+    # ========================================
+    # File Preview Enhancement
+    # ========================================
+    async def get_file_preview(self, namespace: str, pvc: str, path: str) -> FilePreview:
+        """Get enhanced file preview with type detection"""
+        import mimetypes
+        import base64
+        
+        async def _fetch() -> FilePreview:
+            # First, try to get file metadata
+            entries = await self.list_volume_path(namespace, pvc, path)
+            
+            file_name = path.rstrip("/").split("/")[-1] or "file"
+            mime_type, _ = mimetypes.guess_type(file_name)
+            
+            # Determine if it's a text or image file
+            is_text = mime_type and (mime_type.startswith("text/") or mime_type in [
+                "application/json", "application/xml", "application/javascript",
+                "application/x-yaml", "application/yaml"
+            ])
+            is_image = mime_type and mime_type.startswith("image/")
+            
+            preview_available = is_text or is_image
+            
+            if not preview_available:
+                return FilePreview(
+                    path=path,
+                    name=file_name,
+                    mime_type=mime_type,
+                    is_text=False,
+                    is_image=False,
+                    preview_available=False,
+                )
+            
+            # Try to read the file
+            try:
+                file_content = await self.read_file_base64(namespace, pvc, path)
+                if not file_content:
+                    return FilePreview(
+                        path=path,
+                        name=file_name,
+                        mime_type=mime_type,
+                        is_text=is_text,
+                        is_image=is_image,
+                        preview_available=False,
+                        error_message="File not found or empty",
+                    )
+                
+                if is_text:
+                    # Decode text content
+                    try:
+                        text_content = base64.b64decode(file_content.base64_data).decode("utf-8")
+                        return FilePreview(
+                            path=path,
+                            name=file_name,
+                            mime_type=mime_type,
+                            size=len(text_content),
+                            is_text=True,
+                            is_image=False,
+                            content=text_content,
+                            encoding="utf-8",
+                            preview_available=True,
+                        )
+                    except UnicodeDecodeError:
+                        return FilePreview(
+                            path=path,
+                            name=file_name,
+                            mime_type=mime_type,
+                            is_text=False,
+                            is_image=False,
+                            preview_available=False,
+                            error_message="File is not valid UTF-8 text",
+                        )
+                
+                elif is_image:
+                    # Return base64 for images
+                    return FilePreview(
+                        path=path,
+                        name=file_name,
+                        mime_type=mime_type,
+                        is_text=False,
+                        is_image=True,
+                        content=file_content.base64_data,  # Keep as base64
+                        preview_available=True,
+                    )
+                
+            except Exception as e:
+                logger.warning("kubernetes.file_preview_error", error=str(e))
+                return FilePreview(
+                    path=path,
+                    name=file_name,
+                    mime_type=mime_type,
+                    is_text=is_text,
+                    is_image=is_image,
+                    preview_available=False,
+                    error_message=str(e),
+                )
+            
+            return FilePreview(
+                path=path,
+                name=file_name,
+                mime_type=mime_type,
+                preview_available=False,
+            )
+        
+        return await _fetch()

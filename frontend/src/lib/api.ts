@@ -75,6 +75,12 @@ export const queryKeys = {
   pvcs: (ns?: string) => ["storage", "pvcs", ns ?? "all"] as const,
   volumeList: (ns: string, pvc: string, path: string) => ["storage", "browser", ns, pvc, path] as const,
   pvDetail: (name: string) => ["storage", "pv", name] as const,
+  volumeSnapshots: (ns?: string) => ["storage", "snapshots", ns ?? "all"] as const,
+  volumeSnapshotDetail: (ns: string, name: string) => ["storage", "snapshot", ns, name] as const,
+  storageClassDetail: (name: string) => ["storage", "class", "detail", name] as const,
+  storageStats: ["storage", "stats"] as const,
+  storageTrends: (scName?: string, days?: number) => ["storage", "trends", scName ?? "all", days ?? 7] as const,
+  storageMetrics: (ns: string, pvc: string) => ["storage", "metrics", ns, pvc] as const,
   nodes: ["cluster", "nodes"] as const,
   nodeDetail: (name: string) => ["nodes", name, "detail"] as const,
   nodeEvents: (name: string) => ["nodes", name, "events"] as const,
@@ -807,6 +813,184 @@ export function fetchPvcs(namespace?: string): Promise<PersistentVolumeClaimSumm
   const params = new URLSearchParams();
   if (namespace && namespace !== "all") params.set("namespace", namespace);
   return request<PersistentVolumeClaimSummaryResponse[]>(`/storage/pvcs?${params.toString()}`);
+}
+
+// VolumeSnapshots
+export interface VolumeSnapshotSummaryResponse {
+  namespace: string;
+  name: string;
+  source_pvc?: string | null;
+  snapshot_class?: string | null;
+  status?: string | null;
+  ready_to_use: boolean;
+  creation_time?: string | null;
+  restore_size?: string | null;
+  error_message?: string | null;
+}
+
+export interface VolumeSnapshotDetailResponse {
+  namespace: string;
+  name: string;
+  source_pvc?: string | null;
+  snapshot_class?: string | null;
+  snapshot_content_name?: string | null;
+  status?: string | null;
+  ready_to_use: boolean;
+  creation_time?: string | null;
+  restore_size?: string | null;
+  error_message?: string | null;
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+}
+
+export interface VolumeSnapshotCreatePayload {
+  namespace: string;
+  name: string;
+  source_pvc: string;
+  snapshot_class?: string | null;
+  labels?: Record<string, string>;
+}
+
+export function fetchVolumeSnapshots(namespace?: string): Promise<VolumeSnapshotSummaryResponse[]> {
+  const params = new URLSearchParams();
+  if (namespace && namespace !== "all") params.set("namespace", namespace);
+  return request<VolumeSnapshotSummaryResponse[]>(`/storage/snapshots?${params.toString()}`);
+}
+
+export function fetchVolumeSnapshotDetail(namespace: string, name: string): Promise<VolumeSnapshotDetailResponse | null> {
+  return request<VolumeSnapshotDetailResponse | null>(`/storage/snapshots/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}`);
+}
+
+export function createVolumeSnapshot(payload: VolumeSnapshotCreatePayload): Promise<OperationResultResponse> {
+  return request<OperationResultResponse>("/storage/snapshots", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function deleteVolumeSnapshot(namespace: string, name: string): Promise<OperationResultResponse> {
+  return request<OperationResultResponse>(`/storage/snapshots/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}`, { method: "DELETE" });
+}
+
+export function restoreFromSnapshot(namespace: string, snapshotName: string, pvcName: string): Promise<OperationResultResponse> {
+  return request<OperationResultResponse>(
+    `/storage/snapshots/${encodeURIComponent(namespace)}/${encodeURIComponent(snapshotName)}/restore?pvc_name=${encodeURIComponent(pvcName)}`,
+    { method: "POST" }
+  );
+}
+
+// PVC Clone
+export interface PvcCloneRequestPayload {
+  source_namespace: string;
+  source_pvc?: string | null;
+  source_snapshot?: string | null;
+  target_namespace: string;
+  target_name: string;
+  storage_class?: string | null;
+  size?: string | null;
+  access_modes?: string[];
+}
+
+export function clonePvc(payload: PvcCloneRequestPayload): Promise<OperationResultResponse> {
+  return request<OperationResultResponse>("/storage/pvcs/clone", { method: "POST", body: JSON.stringify(payload) });
+}
+
+// StorageClass Detail
+export interface StorageClassDetailResponse {
+  name: string;
+  provisioner?: string | null;
+  reclaim_policy?: string | null;
+  volume_binding_mode?: string | null;
+  allow_volume_expansion?: boolean | null;
+  parameters: Record<string, string>;
+  mount_options: string[];
+  created_at?: string | null;
+  pvc_count: number;
+  total_capacity_bytes: number;
+  used_capacity_bytes: number;
+  pvcs: PersistentVolumeClaimSummaryResponse[];
+}
+
+export function fetchStorageClassDetail(name: string): Promise<StorageClassDetailResponse | null> {
+  return request<StorageClassDetailResponse | null>(`/storage/classes/${encodeURIComponent(name)}/detail`);
+}
+
+// Storage Statistics
+export interface StorageUsageByClassResponse {
+  storage_class: string;
+  pvc_count: number;
+  total_capacity_bytes: number;
+  used_capacity_bytes: number;
+  usage_percent: number;
+}
+
+export interface StorageUsageStatsResponse {
+  total_capacity_bytes: number;
+  total_used_bytes: number;
+  overall_usage_percent: number;
+  by_class: StorageUsageByClassResponse[];
+  top_pvcs: Array<{ namespace: string; name: string; storage_class?: string; capacity: string; size_bytes: number }>;
+  timestamp: string;
+}
+
+export function fetchStorageStats(hours: number = 24): Promise<StorageUsageStatsResponse> {
+  return request<StorageUsageStatsResponse>(`/storage/stats?hours=${hours}`);
+}
+
+export interface StorageTrendPointResponse {
+  timestamp: string;
+  capacity_bytes: number;
+  used_bytes: number;
+  pvc_count: number;
+}
+
+export interface StorageTrendsResponse {
+  storage_class?: string | null;
+  period_days: number;
+  data_points: StorageTrendPointResponse[];
+}
+
+export function fetchStorageTrends(scName?: string, days: number = 7): Promise<StorageTrendsResponse> {
+  const params = new URLSearchParams();
+  if (scName) params.set("sc_name", scName);
+  params.set("days", days.toString());
+  return request<StorageTrendsResponse>(`/storage/stats/trends?${params.toString()}`);
+}
+
+// Storage Metrics
+export interface StorageMetricsResponse {
+  namespace: string;
+  pvc_name: string;
+  capacity_bytes?: number | null;
+  used_bytes?: number | null;
+  available_bytes?: number | null;
+  usage_percent?: number | null;
+  iops_read?: number | null;
+  iops_write?: number | null;
+  throughput_read_bps?: number | null;
+  throughput_write_bps?: number | null;
+  latency_ms?: number | null;
+  timestamp: string;
+}
+
+export function fetchStorageMetrics(namespace: string, pvc: string): Promise<StorageMetricsResponse | null> {
+  return request<StorageMetricsResponse | null>(`/storage/metrics/${encodeURIComponent(namespace)}/${encodeURIComponent(pvc)}`);
+}
+
+// File Preview
+export interface FilePreviewResponse {
+  path: string;
+  name: string;
+  mime_type?: string | null;
+  size?: number | null;
+  is_text: boolean;
+  is_image: boolean;
+  content?: string | null;
+  encoding?: string | null;
+  preview_available: boolean;
+  error_message?: string | null;
+}
+
+export function fetchFilePreview(namespace: string, pvc: string, path: string): Promise<FilePreviewResponse> {
+  const params = new URLSearchParams({ path });
+  return request<FilePreviewResponse>(`/storage/browser/${encodeURIComponent(namespace)}/${encodeURIComponent(pvc)}/preview?${params.toString()}`);
 }
 
 // Volume browser
