@@ -19,8 +19,8 @@ function formatTs(ts?: string | null) {
 
 export default function AlertsPage() {
   const qc = useQueryClient();
-  const { data: alerts } = useQuery({ queryKey: queryKeys.alerts, queryFn: () => fetchAlerts(200), refetchInterval: 15_000 });
-  const { data: trends } = useQuery({ queryKey: queryKeys.alertTrends("1h"), queryFn: () => fetchAlertTrends("1h") });
+  const { data: alerts } = useQuery({ queryKey: queryKeys.alerts(200), queryFn: fetchAlerts, refetchInterval: 15_000 });
+  const { data: trends } = useQuery({ queryKey: queryKeys.alertTrends("1h"), queryFn: fetchAlertTrends });
   const [groupBy, setGroupBy] = useState<"none" | "severity" | "alertname">("severity");
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
 
@@ -41,12 +41,12 @@ export default function AlertsPage() {
   async function onAck(fp?: string | null) {
     if (!fp) return;
     await ackAlert(fp);
-    qc.invalidateQueries({ queryKey: queryKeys.alerts });
+    qc.invalidateQueries({ queryKey: ["alerts"] });
   }
   async function onSilence(fp?: string | null) {
     if (!fp) return;
     await silenceAlert(fp, 60);
-    qc.invalidateQueries({ queryKey: queryKeys.alerts });
+    qc.invalidateQueries({ queryKey: ["alerts"] });
   }
 
   function toggleRow(idx: number) {

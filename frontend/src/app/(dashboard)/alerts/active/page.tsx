@@ -19,7 +19,7 @@ function formatTs(ts?: string | null) {
 export default function ActiveAlertsPage() {
   const qc = useQueryClient();
   const { data: alerts } = useQuery({ 
-    queryKey: ["alerts", "active"], 
+    queryKey: queryKeys.activeAlerts(), 
     queryFn: fetchActiveAlerts,
     refetchInterval: 15_000 
   });

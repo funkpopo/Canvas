@@ -119,7 +119,8 @@ export const queryKeys = {
   auditLogs: ["audit", "logs"] as const,
   crds: ["crds", "list"] as const,
   crdResources: (crd: string, ns?: string) => ["crds", crd, ns ?? "all"] as const,
-  alerts: ["alerts", "list"] as const,
+  alerts: (limit?: number) => ["alerts", "list", limit] as const,
+  activeAlerts: (limit?: number) => ["alerts", "active", limit] as const,
   alertTrends: (window: string) => ["alerts", "trends", window] as const,
   users: ["auth", "users"] as const,
   roles: ["auth", "roles"] as const,
@@ -532,16 +533,19 @@ export interface AlertEntryResponse {
   acked?: boolean | null;
   silenced_until?: string | null;
 }
-export function fetchAlerts(limit = 100): Promise<AlertEntryResponse[]> {
+export function fetchAlerts({ queryKey }: { queryKey: readonly [string, string, number?] }): Promise<AlertEntryResponse[]> {
+  const limit = queryKey[2] ?? 100;
   const params = new URLSearchParams({ limit: String(limit) });
   return request<AlertEntryResponse[]>(`/alerts/?${params.toString()}`);
 }
-export function fetchActiveAlerts(limit = 200): Promise<AlertEntryResponse[]> {
+export function fetchActiveAlerts({ queryKey }: { queryKey: readonly [string, string, number?] }): Promise<AlertEntryResponse[]> {
+  const limit = queryKey[2] ?? 200;
   const params = new URLSearchParams({ limit: String(limit) });
   return request<AlertEntryResponse[]>(`/alerts/active?${params.toString()}`);
 }
 export interface TrendPoint { ts: string; firing: number; resolved: number }
-export function fetchAlertTrends(window: string): Promise<TrendPoint[]> {
+export function fetchAlertTrends({ queryKey }: { queryKey: readonly [string, string, string] }): Promise<TrendPoint[]> {
+  const window = queryKey[2];
   const params = new URLSearchParams({ window });
   return request<TrendPoint[]>(`/alerts/trends?${params.toString()}`);
 }
