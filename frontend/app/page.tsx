@@ -2,12 +2,25 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { LogOut, Server, Users, Activity, Settings } from "lucide-react";
+import { LogOut, Server, Users, Activity, Settings, Loader2 } from "lucide-react";
+
+interface DashboardStats {
+  total_clusters: number;
+  active_clusters: number;
+  total_nodes: number;
+  total_namespaces: number;
+  total_pods: number;
+  running_pods: number;
+  total_services: number;
+}
 
 export default function Home() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [isLoadingStats, setIsLoadingStats] = useState(true);
   const router = useRouter();
 
   useEffect(() => {
@@ -17,9 +30,32 @@ export default function Home() {
       return;
     }
 
-    // 验证token（简化版）
+    // 验证token并获取统计数据
     setIsAuthenticated(true);
+    fetchDashboardStats();
   }, [router]);
+
+  const fetchDashboardStats = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch("http://localhost:8000/api/stats/dashboard", {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setStats(data);
+      } else {
+        console.error("获取统计数据失败");
+      }
+    } catch (error) {
+      console.error("获取统计数据出错:", error);
+    } finally {
+      setIsLoadingStats(false);
+    }
+  };
 
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -69,8 +105,17 @@ export default function Home() {
               <Server className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">3</div>
-              <p className="text-xs text-muted-foreground">2 运行中，1 待命</p>
+              {isLoadingStats ? (
+                <div className="flex items-center">
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  <span className="text-sm text-muted-foreground">加载中...</span>
+                </div>
+              ) : (
+                <>
+                  <div className="text-2xl font-bold">{stats?.total_nodes || 0}</div>
+                  <p className="text-xs text-muted-foreground">活跃节点</p>
+                </>
+              )}
             </CardContent>
           </Card>
 
@@ -80,8 +125,17 @@ export default function Home() {
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">8</div>
-              <p className="text-xs text-muted-foreground">包含系统和用户命名空间</p>
+              {isLoadingStats ? (
+                <div className="flex items-center">
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  <span className="text-sm text-muted-foreground">加载中...</span>
+                </div>
+              ) : (
+                <>
+                  <div className="text-2xl font-bold">{stats?.total_namespaces || 0}</div>
+                  <p className="text-xs text-muted-foreground">包含系统和用户命名空间</p>
+                </>
+              )}
             </CardContent>
           </Card>
 
@@ -91,8 +145,19 @@ export default function Home() {
               <Activity className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">24</div>
-              <p className="text-xs text-muted-foreground">18 运行中，6 停止</p>
+              {isLoadingStats ? (
+                <div className="flex items-center">
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  <span className="text-sm text-muted-foreground">加载中...</span>
+                </div>
+              ) : (
+                <>
+                  <div className="text-2xl font-bold">{stats?.total_pods || 0}</div>
+                  <p className="text-xs text-muted-foreground">
+                    {stats?.running_pods || 0} 运行中，{(stats?.total_pods || 0) - (stats?.running_pods || 0)} 停止
+                  </p>
+                </>
+              )}
             </CardContent>
           </Card>
 
@@ -102,8 +167,17 @@ export default function Home() {
               <Settings className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">12</div>
-              <p className="text-xs text-muted-foreground">负载均衡器和ClusterIP</p>
+              {isLoadingStats ? (
+                <div className="flex items-center">
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  <span className="text-sm text-muted-foreground">加载中...</span>
+                </div>
+              ) : (
+                <>
+                  <div className="text-2xl font-bold">{stats?.total_services || 0}</div>
+                  <p className="text-xs text-muted-foreground">负载均衡器和ClusterIP</p>
+                </>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -128,9 +202,11 @@ export default function Home() {
                 <Activity className="h-6 w-6 mb-2" />
                 Pod监控
               </Button>
-              <Button variant="outline" className="h-20 flex-col">
-                <Settings className="h-6 w-6 mb-2" />
-                配置管理
+              <Button variant="outline" className="h-20 flex-col" asChild>
+                <Link href="/clusters">
+                  <Settings className="h-6 w-6 mb-2" />
+                  集群管理
+                </Link>
               </Button>
             </div>
           </CardContent>
