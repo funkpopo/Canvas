@@ -42,7 +42,22 @@ export function PodLogs({ apiBase, namespace, name, container }: PodLogsProps) {
 
     (async () => {
       try {
-        const res = await fetch(url, { signal: ac.signal });
+        // Attach auth header using stored access token
+        let token: string | null = null;
+        try {
+          if (typeof window !== "undefined") {
+            token = window.localStorage.getItem("canvas.access_token");
+          }
+        } catch {}
+        const res = await fetch(url, {
+          signal: ac.signal,
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        });
+        if (!res.ok) {
+          // Surface error text instead of streaming JSON error into the pre block
+          const msg = await res.text();
+          throw new Error(msg || `HTTP ${res.status}`);
+        }
         if (!res.body) {
           throw new Error(`No response body`);
         }
