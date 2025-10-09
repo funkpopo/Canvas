@@ -72,6 +72,13 @@ export default function ClusterForm({ initialData, isEdit = false, clusterId }: 
 
     try {
       const token = localStorage.getItem("token");
+
+      // 检查token是否存在
+      if (!token) {
+        setError("请先登录");
+        router.push("/login");
+        return;
+      }
       const url = isEdit && clusterId
         ? `http://localhost:8000/api/clusters/${clusterId}`
         : "http://localhost:8000/api/clusters";
@@ -91,7 +98,11 @@ export default function ClusterForm({ initialData, isEdit = false, clusterId }: 
         router.push("/clusters");
       } else {
         const errorData = await response.json();
-        setError(errorData.detail || "操作失败");
+        if (response.status === 401 && errorData.detail?.includes("credentials")) {
+          setError("登录已过期，请重新登录后重试");
+        } else {
+          setError(errorData.detail || "操作失败");
+        }
       }
     } catch (error) {
       console.error("提交表单出错:", error);

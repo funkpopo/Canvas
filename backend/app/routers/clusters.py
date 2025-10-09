@@ -20,6 +20,48 @@ async def create_cluster(
     if db_cluster:
         raise HTTPException(status_code=400, detail="集群名称已存在")
 
+    # 验证kubeconfig或token
+    if cluster.auth_type == "kubeconfig" and cluster.kubeconfig_content:
+        # 创建临时集群对象进行验证
+        temp_cluster = Cluster(
+            name=cluster.name,
+            endpoint=cluster.endpoint,
+            auth_type=cluster.auth_type,
+            kubeconfig_content=cluster.kubeconfig_content,
+            token=cluster.token,
+            ca_cert=cluster.ca_cert,
+            is_active=False  # 临时设为False
+        )
+
+        # 验证连接
+        from ..kubernetes import test_cluster_connection
+        connection_result = test_cluster_connection(temp_cluster)
+        if not connection_result.get("success"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"kubeconfig验证失败: {connection_result.get('message', '未知错误')}"
+            )
+    elif cluster.auth_type == "token" and cluster.token:
+        # 创建临时集群对象进行验证
+        temp_cluster = Cluster(
+            name=cluster.name,
+            endpoint=cluster.endpoint,
+            auth_type=cluster.auth_type,
+            kubeconfig_content=cluster.kubeconfig_content,
+            token=cluster.token,
+            ca_cert=cluster.ca_cert,
+            is_active=False  # 临时设为False
+        )
+
+        # 验证连接
+        from ..kubernetes import test_cluster_connection
+        connection_result = test_cluster_connection(temp_cluster)
+        if not connection_result.get("success"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"token验证失败: {connection_result.get('message', '未知错误')}"
+            )
+
     # 创建新集群
     db_cluster = Cluster(
         name=cluster.name,

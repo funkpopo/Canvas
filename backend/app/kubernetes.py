@@ -128,9 +128,9 @@ def test_cluster_connection(cluster: Cluster) -> Dict[str, Any]:
 
     try:
         core_v1 = client.CoreV1Api(client_instance)
-        # 尝试获取版本信息来测试连接
-        version = core_v1.get_api_versions()
-        return {"success": True, "message": "连接成功", "version": version}
+        # 尝试获取节点列表来测试连接（这是一个轻量级的API调用）
+        nodes = core_v1.list_node(limit=1)  # 只获取一个节点来测试连接
+        return {"success": True, "message": "连接成功"}
     except ApiException as e:
         return {"success": False, "message": f"连接失败: {e.reason}"}
     except Exception as e:
