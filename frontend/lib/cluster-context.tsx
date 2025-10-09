@@ -13,7 +13,7 @@ interface Cluster {
 interface ClusterContextType {
   clusters: Cluster[];
   activeCluster: Cluster | null;
-  setActiveCluster: (cluster: Cluster | null) => void;
+  setActiveCluster: (cluster: Cluster | null) => Promise<void>;
   refreshClusters: () => Promise<void>;
   toggleClusterActive: (clusterId: number) => Promise<boolean>;
   isLoading: boolean;
@@ -23,7 +23,7 @@ const ClusterContext = createContext<ClusterContextType | undefined>(undefined);
 
 export function ClusterProvider({ children }: { children: ReactNode }) {
   const [clusters, setClusters] = useState<Cluster[]>([]);
-  const [activeCluster, setActiveCluster] = useState<Cluster | null>(null);
+  const [activeCluster, _setActiveClusterLocal] = useState<Cluster | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchClusters = async () => {
@@ -40,12 +40,21 @@ export function ClusterProvider({ children }: { children: ReactNode }) {
       if (response.ok) {
         const data = await response.json();
         setClusters(data);
+        const activeClusters = data.filter((c: Cluster) => c.is_active);
+        if (activeClusters.length > 0) {
+          const serverActive = activeClusters[0];
+          if (!activeCluster || activeCluster.id !== serverActive.id) {
+            _setActiveClusterLocal(serverActive);
+          }
+        } else {
+          _setActiveClusterLocal(null);
+        }
 
         // 如果没有活跃集群，选择第一个活跃的集群
         if (!activeCluster) {
           const activeClusters = data.filter((c: Cluster) => c.is_active);
           if (activeClusters.length > 0) {
-            setActiveCluster(activeClusters[0]);
+            _setActiveClusterLocal(activeClusters[0]);
           }
         }
       }
@@ -59,6 +68,35 @@ export function ClusterProvider({ children }: { children: ReactNode }) {
   const refreshClusters = async () => {
     setIsLoading(true);
     await fetchClusters();
+  };
+
+  // 将指定集群设为唯一激活（前后端一致）
+  const setActiveCluster = async (cluster: Cluster | null) => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    if (!cluster) {
+      _setActiveClusterLocal(null);
+      return;
+    }
+
+    try {
+      await Promise.all(
+        clusters.map((c) =>
+          fetch(`http://localhost:8000/api/clusters/${c.id}`, {
+            method: "PUT",
+            headers: {
+              "Authorization": `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ is_active: c.id === cluster.id }),
+          })
+        )
+      );
+
+      await refreshClusters();
+    } catch (err) {
+      console.error("设置激活集群失败:", err);
+    }
   };
 
   const toggleClusterActive = async (clusterId: number) => {

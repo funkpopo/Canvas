@@ -13,6 +13,7 @@ export default function PodLogsPage() {
   const namespace = params.namespace as string;
   const podName = params.pod as string;
   const clusterId = searchParams.get('cluster_id');
+  const { activeCluster } = useCluster();
 
   const [logs, setLogs] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -21,22 +22,26 @@ export default function PodLogsPage() {
   const [availableContainers, setAvailableContainers] = useState<string[]>([]);
 
   useEffect(() => {
-    if (namespace && podName && clusterId) {
+    // 若URL缺少 cluster_id，回退到当前激活集群
+    const effectiveClusterId = clusterId || activeCluster?.id?.toString();
+    if (namespace && podName && effectiveClusterId) {
       fetchPodDetails();
     }
-  }, [namespace, podName, clusterId]);
+  }, [namespace, podName, clusterId, activeCluster]);
 
   useEffect(() => {
-    if (namespace && podName && clusterId) {
+    const effectiveClusterId = clusterId || activeCluster?.id?.toString();
+    if (namespace && podName && effectiveClusterId) {
       fetchLogs();
     }
-  }, [namespace, podName, clusterId, selectedContainer, tailLines]);
+  }, [namespace, podName, clusterId, activeCluster, selectedContainer, tailLines]);
 
   const fetchPodDetails = async () => {
     try {
       const token = localStorage.getItem("token");
+      const effectiveClusterId = clusterId || activeCluster?.id?.toString();
       const response = await fetch(
-        `http://localhost:8000/api/pods/${namespace}/${podName}?cluster_id=${clusterId}`,
+        `http://localhost:8000/api/pods/${namespace}/${podName}?cluster_id=${effectiveClusterId}`,
         {
           headers: {
             "Authorization": `Bearer ${token}`,
@@ -62,7 +67,10 @@ export default function PodLogsPage() {
     try {
       const token = localStorage.getItem("token");
       const url = new URL(`http://localhost:8000/api/pods/${namespace}/${podName}/logs`);
-      url.searchParams.set('cluster_id', clusterId!);
+      const effectiveClusterId = clusterId || activeCluster?.id?.toString();
+      if (effectiveClusterId) {
+        url.searchParams.set('cluster_id', effectiveClusterId);
+      }
       if (selectedContainer && selectedContainer.trim()) {
         url.searchParams.set('container', selectedContainer.trim());
       }
@@ -219,3 +227,4 @@ export default function PodLogsPage() {
     </div>
   );
 }
+import { useCluster } from "@/lib/cluster-context";

@@ -17,7 +17,9 @@ export default function ClusterSelector() {
     );
   }
 
-  const activeClusters = clusters.filter(c => c.is_active);
+  const activeClusters = (clusters.filter(c => c.is_active).length > 0)
+    ? clusters.filter(c => c.is_active)
+    : clusters;
 
   if (activeClusters.length === 0) {
     return (
@@ -33,7 +35,7 @@ export default function ClusterSelector() {
       <Select
         value={activeCluster?.id.toString() || ""}
         onValueChange={(value) => {
-          const cluster = activeClusters.find(c => c.id.toString() === value);
+          const cluster = clusters.find(c => c.id.toString() === value);
           setActiveCluster(cluster || null);
         }}
       >
@@ -50,7 +52,7 @@ export default function ClusterSelector() {
           </SelectValue>
         </SelectTrigger>
         <SelectContent>
-          {activeClusters.map((cluster) => (
+          {clusters.map((cluster) => (
             <SelectItem key={cluster.id} value={cluster.id.toString()}>
               <div className="flex flex-col">
                 <span>{cluster.name}</span>
