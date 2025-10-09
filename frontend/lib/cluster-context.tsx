@@ -29,7 +29,13 @@ export function ClusterProvider({ children }: { children: ReactNode }) {
   const fetchClusters = async () => {
     try {
       const token = localStorage.getItem("token");
-      if (!token) return;
+      if (!token) {
+        console.log("ClusterContext: No token found");
+        setClusters([]);
+        _setActiveClusterLocal(null);
+        setIsLoading(false);
+        return;
+      }
 
       const response = await fetch("http://localhost:8000/api/clusters", {
         headers: {
@@ -39,6 +45,7 @@ export function ClusterProvider({ children }: { children: ReactNode }) {
 
       if (response.ok) {
         const data = await response.json();
+        console.log("ClusterContext: Loaded", data.length, "clusters");
         setClusters(data);
         const activeClusters = data.filter((c: Cluster) => c.is_active);
         if (activeClusters.length > 0) {
@@ -49,17 +56,15 @@ export function ClusterProvider({ children }: { children: ReactNode }) {
         } else {
           _setActiveClusterLocal(null);
         }
-
-        // 如果没有活跃集群，选择第一个活跃的集群
-        if (!activeCluster) {
-          const activeClusters = data.filter((c: Cluster) => c.is_active);
-          if (activeClusters.length > 0) {
-            _setActiveClusterLocal(activeClusters[0]);
-          }
-        }
+      } else {
+        console.error("ClusterContext: Failed to fetch clusters, status:", response.status);
+        setClusters([]);
+        _setActiveClusterLocal(null);
       }
     } catch (error) {
-      console.error("获取集群列表失败:", error);
+      console.error("ClusterContext: 获取集群列表失败:", error);
+      setClusters([]);
+      _setActiveClusterLocal(null);
     } finally {
       setIsLoading(false);
     }
@@ -130,7 +135,25 @@ export function ClusterProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
+    // 页面加载时尝试获取集群（可能已经有token）
     fetchClusters();
+
+    // 监听storage变化，当token变化时重新获取集群
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'token') {
+        console.log("ClusterContext: Token changed in storage");
+        if (e.newValue) {
+          fetchClusters();
+        } else {
+          setClusters([]);
+          _setActiveClusterLocal(null);
+          setIsLoading(false);
+        }
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
 
   return (

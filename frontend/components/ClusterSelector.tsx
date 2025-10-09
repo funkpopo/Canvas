@@ -25,6 +25,9 @@ export default function ClusterSelector() {
     return (
       <div className="flex items-center space-x-2">
         <span className="text-sm text-gray-600">无活跃集群</span>
+        <button onClick={refreshClusters} className="text-xs text-blue-600 underline ml-2">
+          刷新
+        </button>
       </div>
     );
   }

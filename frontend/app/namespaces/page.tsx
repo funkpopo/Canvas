@@ -31,31 +31,52 @@ export default function NamespacesPage() {
   const [newNamespaceName, setNewNamespaceName] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const router = useRouter();
-  const { activeCluster, isLoading: isClusterLoading } = useCluster();
+  const { activeCluster, isLoading: isClusterLoading, refreshClusters } = useCluster();
 
   useEffect(() => {
     const token = localStorage.getItem("token");
+    console.log("Checking authentication, token exists:", !!token);
     if (!token) {
+      console.log("No token found, redirecting to login");
       router.push("/login");
       return;
     }
 
+    console.log("Authentication successful");
     setIsAuthenticated(true);
   }, [router]);
 
   useEffect(() => {
-    // 只有在认证完成且集群加载完成后才获取数据
-    if (isAuthenticated && !isClusterLoading) {
+    // 只有在认证完成后才获取数据
+    console.log("useEffect triggered - isAuthenticated:", isAuthenticated, "isClusterLoading:", isClusterLoading, "activeCluster:", activeCluster);
+    if (isAuthenticated) {
+      console.log("Calling fetchNamespaces");
       fetchNamespaces();
+    } else {
+      console.log("Not calling fetchNamespaces - not authenticated");
     }
   }, [isAuthenticated, isClusterLoading, activeCluster]);
+
+  // 在认证成功后刷新集群列表
+  useEffect(() => {
+    if (isAuthenticated) {
+      console.log("User authenticated, refreshing clusters");
+      refreshClusters();
+    }
+  }, [isAuthenticated]);
 
   const fetchNamespaces = async () => {
     try {
       const token = localStorage.getItem("token");
+      console.log("Token exists:", !!token);
+      console.log("Active cluster:", activeCluster);
+
       const url = new URL("http://localhost:8000/api/namespaces");
       if (activeCluster) {
         url.searchParams.set('cluster_id', activeCluster.id.toString());
+        console.log("Request URL with cluster_id:", url.toString());
+      } else {
+        console.log("Request URL without cluster_id:", url.toString());
       }
 
       const response = await fetch(url.toString(), {
@@ -64,15 +85,30 @@ export default function NamespacesPage() {
         },
       });
 
+      console.log("Response status:", response.status);
+      console.log("Response ok:", response.ok);
+
       if (response.ok) {
         const data = await response.json();
-        // 过滤出当前活跃集群的命名空间
-        const filteredNamespaces = activeCluster
-          ? data.filter((ns: NamespaceInfo) => ns.cluster_id === activeCluster.id)
-          : data;
+        console.log("Raw data from API:", data);
+        console.log("Data length:", data.length);
+
+        // 如果有活跃集群，过滤出该集群的命名空间；否则显示所有命名空间
+        let filteredNamespaces: NamespaceInfo[];
+        if (activeCluster) {
+          filteredNamespaces = data.filter((ns: NamespaceInfo) => ns.cluster_id === activeCluster.id);
+          console.log("Filtered by active cluster:", activeCluster.id, "result length:", filteredNamespaces.length);
+        } else {
+          filteredNamespaces = data;
+          console.log("No active cluster, showing all namespaces");
+        }
+
+        console.log("Final namespaces to display:", filteredNamespaces);
         setNamespaces(filteredNamespaces);
       } else {
-        console.error("获取命名空间列表失败");
+        console.error("获取命名空间列表失败, status:", response.status);
+        const errorText = await response.text();
+        console.error("Error response:", errorText);
         setNamespaces([]);
       }
     } catch (error) {
@@ -288,9 +324,16 @@ export default function NamespacesPage() {
               <Card key={`${namespace.cluster_id}-${namespace.name}`} className="hover:shadow-lg transition-shadow">
                 <CardHeader>
                   <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg truncate max-w-[200px] overflow-hidden text-ellipsis whitespace-nowrap" title={namespace.name}>
-                      {namespace.name}
-                    </CardTitle>
+                    <div className="flex items-center space-x-2">
+                      <CardTitle className="text-lg truncate max-w-[200px] overflow-hidden text-ellipsis whitespace-nowrap" title={namespace.name}>
+                        {namespace.name}
+                      </CardTitle>
+                      {['default', 'kube-system', 'kube-public', 'kube-node-lease'].includes(namespace.name) && (
+                        <Badge variant="secondary" className="text-xs">
+                          系统
+                        </Badge>
+                      )}
+                    </div>
                     <Badge variant={getStatusBadgeVariant(namespace.status)}>
                       {namespace.status}
                     </Badge>

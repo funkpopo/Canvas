@@ -113,11 +113,13 @@ async def test_cluster_connection(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    # TODO: 使用 kubernetes 客户端进行实际连通性测试
+    from ..kubernetes import test_cluster_connection as test_conn
     cluster = db.query(Cluster).filter(Cluster.id == cluster_id).first()
     if not cluster:
         raise HTTPException(status_code=404, detail="集群不存在")
-    return {"status": "success", "message": "连接测试成功"}
+
+    result = test_conn(cluster)
+    return result
 
 
 @router.post("/{cluster_id}/activate", response_model=ClusterResponse)
