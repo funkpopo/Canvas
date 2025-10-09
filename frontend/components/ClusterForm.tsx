@@ -15,7 +15,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 interface ClusterFormData {
   name: string;
   endpoint: string;
-  auth_type: 'kubeconfig' | 'token';
+  auth_type: string;
   kubeconfig_content: string;
   token: string;
   ca_cert: string;

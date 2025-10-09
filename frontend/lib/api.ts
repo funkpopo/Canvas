@@ -2,7 +2,7 @@
 
 const API_BASE_URL = 'http://localhost:8000/api';
 
-interface ApiResponse<T = any> {
+interface ApiResponse<T = unknown> {
   data?: T;
   error?: string;
 }
@@ -33,7 +33,7 @@ class ApiClient {
     }
   }
 
-  async post<T>(endpoint: string, body: any): Promise<ApiResponse<T>> {
+  async post<T>(endpoint: string, body: unknown): Promise<ApiResponse<T>> {
     try {
       const response = await fetch(`${API_BASE_URL}${endpoint}`, {
         method: 'POST',
@@ -53,7 +53,7 @@ class ApiClient {
     }
   }
 
-  async put<T>(endpoint: string, body: any): Promise<ApiResponse<T>> {
+  async put<T>(endpoint: string, body: unknown): Promise<ApiResponse<T>> {
     try {
       const response = await fetch(`${API_BASE_URL}${endpoint}`, {
         method: 'PUT',
@@ -104,11 +104,11 @@ export const clusterApi = {
     return apiClient.get(`/clusters/${id}`);
   },
 
-  async createCluster(clusterData: any) {
+  async createCluster(clusterData: Record<string, unknown>) {
     return apiClient.post('/clusters', clusterData);
   },
 
-  async updateCluster(id: number, clusterData: any) {
+  async updateCluster(id: number, clusterData: Record<string, unknown>) {
     return apiClient.put(`/clusters/${id}`, clusterData);
   },
 

@@ -190,17 +190,23 @@ export default function Home() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <Button variant="outline" className="h-20 flex-col">
-                <Server className="h-6 w-6 mb-2" />
-                节点管理
+              <Button variant="outline" className="h-20 flex-col" asChild>
+                <Link href="/nodes">
+                  <Server className="h-6 w-6 mb-2" />
+                  节点管理
+                </Link>
               </Button>
-              <Button variant="outline" className="h-20 flex-col">
-                <Users className="h-6 w-6 mb-2" />
-                命名空间
+              <Button variant="outline" className="h-20 flex-col" asChild>
+                <Link href="/namespaces">
+                  <Users className="h-6 w-6 mb-2" />
+                  命名空间
+                </Link>
               </Button>
-              <Button variant="outline" className="h-20 flex-col">
-                <Activity className="h-6 w-6 mb-2" />
-                Pod监控
+              <Button variant="outline" className="h-20 flex-col" asChild>
+                <Link href="/pods">
+                  <Activity className="h-6 w-6 mb-2" />
+                  Pod监控
+                </Link>
               </Button>
               <Button variant="outline" className="h-20 flex-col" asChild>
                 <Link href="/clusters">
