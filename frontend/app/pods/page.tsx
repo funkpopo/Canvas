@@ -8,6 +8,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, Activity, Square, FileText, Loader2, RefreshCw } from "lucide-react";
+import { useCluster } from "@/lib/cluster-context";
+import ClusterSelector from "@/components/ClusterSelector";
 
 interface PodInfo {
   name: string;
@@ -29,6 +31,7 @@ export default function PodsPage() {
   const [selectedNamespace, setSelectedNamespace] = useState<string>("");
   const [availableNamespaces, setAvailableNamespaces] = useState<string[]>([]);
   const router = useRouter();
+  const { activeCluster, isLoading: isClusterLoading } = useCluster();
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -41,19 +44,25 @@ export default function PodsPage() {
   }, [router]);
 
   useEffect(() => {
-    if (isAuthenticated) {
+    // 只有在认证完成且集群加载完成后才获取数据
+    if (isAuthenticated && !isClusterLoading) {
       fetchPods();
     }
-  }, [selectedNamespace, isAuthenticated]);
+  }, [selectedNamespace, isAuthenticated, isClusterLoading, activeCluster]);
 
   const fetchPods = async () => {
     try {
       const token = localStorage.getItem("token");
-      const url = selectedNamespace
-        ? `http://localhost:8000/api/pods?namespace=${selectedNamespace}`
-        : "http://localhost:8000/api/pods";
+      const url = new URL("http://localhost:8000/api/pods");
 
-      const response = await fetch(url, {
+      if (activeCluster) {
+        url.searchParams.set('cluster_id', activeCluster.id.toString());
+      }
+      if (selectedNamespace) {
+        url.searchParams.set('namespace', selectedNamespace);
+      }
+
+      const response = await fetch(url.toString(), {
         headers: {
           "Authorization": `Bearer ${token}`,
         },
@@ -68,9 +77,13 @@ export default function PodsPage() {
         setAvailableNamespaces(namespaces);
       } else {
         console.error("获取Pod列表失败");
+        setPods([]);
+        setAvailableNamespaces([]);
       }
     } catch (error) {
       console.error("获取Pod列表出错:", error);
+      setPods([]);
+      setAvailableNamespaces([]);
     } finally {
       setIsLoading(false);
     }
@@ -174,6 +187,7 @@ export default function PodsPage() {
               </Link>
             </div>
             <div className="flex items-center space-x-4">
+              <ClusterSelector />
               <Select value={selectedNamespace || "all"} onValueChange={(value) => setSelectedNamespace(value === "all" ? "" : value)}>
                 <SelectTrigger className="w-48">
                   <SelectValue placeholder="选择命名空间" />
@@ -234,7 +248,7 @@ export default function PodsPage() {
               <Card key={`${pod.cluster_id}-${pod.namespace}-${pod.name}`} className="hover:shadow-lg transition-shadow">
                 <CardHeader>
                   <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg truncate" title={pod.name}>
+                    <CardTitle className="text-lg truncate max-w-[200px] overflow-hidden text-ellipsis whitespace-nowrap" title={pod.name}>
                       {pod.name}
                     </CardTitle>
                     <Badge variant={getStatusBadgeVariant(pod.status)}>

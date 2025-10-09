@@ -63,8 +63,8 @@ export default function PodLogsPage() {
       const token = localStorage.getItem("token");
       const url = new URL(`http://localhost:8000/api/pods/${namespace}/${podName}/logs`);
       url.searchParams.set('cluster_id', clusterId!);
-      if (selectedContainer) {
-        url.searchParams.set('container', selectedContainer);
+      if (selectedContainer && selectedContainer.trim()) {
+        url.searchParams.set('container', selectedContainer.trim());
       }
       url.searchParams.set('tail_lines', tailLines.toString());
 
@@ -75,14 +75,24 @@ export default function PodLogsPage() {
       });
 
       if (response.ok) {
-        const logsData = await response.json();
-        setLogs(logsData.logs);
+        const logsText = await response.text();
+        setLogs(logsText || "暂无日志内容");
       } else {
-        setLogs("获取日志失败");
+        let errorMessage = `获取日志失败 (${response.status}): ${response.statusText}`;
+        try {
+          const errorData = await response.json();
+          if (errorData.detail) {
+            errorMessage += ` - ${errorData.detail}`;
+          }
+        } catch (e) {
+          // 忽略JSON解析错误
+        }
+        setLogs(errorMessage);
+        console.error("日志API响应错误:", response.status, response.statusText);
       }
     } catch (error) {
       console.error("获取日志出错:", error);
-      setLogs("获取日志时发生错误");
+      setLogs("获取日志时发生网络错误，请检查网络连接");
     } finally {
       setIsLoading(false);
     }

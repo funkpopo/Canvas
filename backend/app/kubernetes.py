@@ -690,18 +690,28 @@ def get_pod_logs(cluster: Cluster, namespace: str, pod_name: str, container: Opt
     try:
         core_v1 = client.CoreV1Api(client_instance)
 
+        # 构建参数，只在container不为None或空字符串时传递
+        kwargs = {
+            "name": pod_name,
+            "namespace": namespace,
+            "tail_lines": tail_lines if tail_lines and tail_lines > 0 else 100
+        }
+
+        if container and container.strip():
+            kwargs["container"] = container.strip()
+
         # 获取日志
-        logs = core_v1.read_namespaced_pod_log(
-            name=pod_name,
-            namespace=namespace,
-            container=container,
-            tail_lines=tail_lines
-        )
+        logs = core_v1.read_namespaced_pod_log(**kwargs)
 
         return logs
 
     except Exception as e:
         print(f"获取Pod日志失败: {e}")
+        # 如果是ApiException，打印更多详细信息用于调试
+        if hasattr(e, 'status') and hasattr(e, 'reason'):
+            print(f"API错误状态: {e.status}, 原因: {e.reason}")
+            if hasattr(e, 'body'):
+                print(f"API错误详情: {e.body}")
         return None
     finally:
         if client_instance:

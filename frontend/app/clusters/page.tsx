@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Edit, Trash2, TestTube, ArrowLeft, Loader2 } from "lucide-react";
+import { Plus, Edit, Trash2, TestTube, ArrowLeft, Loader2, Power, PowerOff } from "lucide-react";
 import Link from "next/link";
 
 interface Cluster {
@@ -102,6 +102,41 @@ export default function ClustersPage() {
     }
   };
 
+  const handleToggleActive = async (cluster: Cluster) => {
+    const action = cluster.is_active ? "停用" : "激活";
+    if (!confirm(`确定要${action}集群 "${cluster.name}" 吗？`)) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(`http://localhost:8000/api/clusters/${cluster.id}`, {
+        method: "PUT",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          is_active: !cluster.is_active
+        }),
+      });
+
+      if (response.ok) {
+        // 更新本地状态
+        setClusters(clusters.map(c =>
+          c.id === cluster.id ? { ...c, is_active: !c.is_active } : c
+        ));
+        alert(`集群 "${cluster.name}" 已${action}成功！`);
+      } else {
+        const error = await response.json();
+        alert(`${action}集群失败: ${error.detail || '未知错误'}`);
+      }
+    } catch (error) {
+      console.error(`${action}集群出错:`, error);
+      alert(`${action}集群时发生错误`);
+    }
+  };
+
   if (!isAuthenticated) {
     return null;
   }
@@ -181,7 +216,24 @@ export default function ClustersPage() {
                     <div className="text-sm text-gray-600 dark:text-gray-400">
                       认证方式: {cluster.auth_type === 'kubeconfig' ? 'Kubeconfig' : 'Token'}
                     </div>
-                    <div className="flex space-x-2">
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        variant={cluster.is_active ? "secondary" : "default"}
+                        onClick={() => handleToggleActive(cluster)}
+                      >
+                        {cluster.is_active ? (
+                          <>
+                            <PowerOff className="h-4 w-4 mr-1" />
+                            停用
+                          </>
+                        ) : (
+                          <>
+                            <Power className="h-4 w-4 mr-1" />
+                            激活
+                          </>
+                        )}
+                      </Button>
                       <Button
                         size="sm"
                         variant="outline"

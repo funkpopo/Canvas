@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from ..database import get_db
@@ -34,7 +34,7 @@ class NamespaceResources(BaseModel):
 
 @router.get("/", response_model=List[NamespaceInfo])
 async def get_namespaces(
-    cluster_id: Optional[int] = None,
+    cluster_id: Optional[int] = Query(None, description="集群ID，不传则获取所有活跃集群"),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
@@ -54,13 +54,18 @@ async def get_namespaces(
         for cluster in clusters:
             try:
                 namespaces = get_namespaces_info(cluster)
-                # 添加集群标识
-                for ns in namespaces:
-                    ns['cluster_id'] = cluster.id
-                    ns['cluster_name'] = cluster.name
-                all_namespaces.extend(namespaces)
+                if namespaces:
+                    # 添加集群标识
+                    for ns in namespaces:
+                        ns['cluster_id'] = cluster.id
+                        ns['cluster_name'] = cluster.name
+                    all_namespaces.extend(namespaces)
+                    print(f"成功获取集群 {cluster.name} 的 {len(namespaces)} 个命名空间")
+                else:
+                    print(f"集群 {cluster.name} 返回空命名空间列表")
             except Exception as e:
                 print(f"获取集群 {cluster.name} 命名空间信息失败: {e}")
+                # 即使失败，也继续处理其他集群
                 continue
 
         return all_namespaces
@@ -71,7 +76,7 @@ async def get_namespaces(
 @router.post("/", response_model=NamespaceInfo)
 async def create_new_namespace(
     namespace: NamespaceCreate,
-    cluster_id: int,
+    cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
@@ -106,7 +111,7 @@ async def create_new_namespace(
 @router.delete("/{namespace_name}")
 async def remove_namespace(
     namespace_name: str,
-    cluster_id: int,
+    cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):

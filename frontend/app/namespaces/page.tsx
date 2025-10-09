@@ -10,6 +10,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ArrowLeft, Users, Plus, Trash2, Loader2, Activity } from "lucide-react";
+import { useCluster } from "@/lib/cluster-context";
+import ClusterSelector from "@/components/ClusterSelector";
 
 interface NamespaceInfo {
   name: string;
@@ -28,8 +30,8 @@ export default function NamespacesPage() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newNamespaceName, setNewNamespaceName] = useState("");
   const [isCreating, setIsCreating] = useState(false);
-  const [selectedClusterId, setSelectedClusterId] = useState<number | null>(null);
   const router = useRouter();
+  const { activeCluster, isLoading: isClusterLoading } = useCluster();
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -39,13 +41,24 @@ export default function NamespacesPage() {
     }
 
     setIsAuthenticated(true);
-    fetchNamespaces();
   }, [router]);
+
+  useEffect(() => {
+    // 只有在认证完成且集群加载完成后才获取数据
+    if (isAuthenticated && !isClusterLoading) {
+      fetchNamespaces();
+    }
+  }, [isAuthenticated, isClusterLoading, activeCluster]);
 
   const fetchNamespaces = async () => {
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch("http://localhost:8000/api/namespaces", {
+      const url = new URL("http://localhost:8000/api/namespaces");
+      if (activeCluster) {
+        url.searchParams.set('cluster_id', activeCluster.id.toString());
+      }
+
+      const response = await fetch(url.toString(), {
         headers: {
           "Authorization": `Bearer ${token}`,
         },
@@ -53,26 +66,32 @@ export default function NamespacesPage() {
 
       if (response.ok) {
         const data = await response.json();
-        setNamespaces(data);
+        // 过滤出当前活跃集群的命名空间
+        const filteredNamespaces = activeCluster
+          ? data.filter((ns: NamespaceInfo) => ns.cluster_id === activeCluster.id)
+          : data;
+        setNamespaces(filteredNamespaces);
       } else {
         console.error("获取命名空间列表失败");
+        setNamespaces([]);
       }
     } catch (error) {
       console.error("获取命名空间列表出错:", error);
+      setNamespaces([]);
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleCreateNamespace = async () => {
-    if (!newNamespaceName.trim() || !selectedClusterId) {
+    if (!newNamespaceName.trim() || !activeCluster) {
       return;
     }
 
     setIsCreating(true);
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch(`http://localhost:8000/api/namespaces?cluster_id=${selectedClusterId}`, {
+      const response = await fetch(`http://localhost:8000/api/namespaces?cluster_id=${activeCluster.id}`, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${token}`,
@@ -145,13 +164,6 @@ export default function NamespacesPage() {
     }
   };
 
-  // 获取可用的集群列表（从命名空间数据中提取）
-  const availableClusters = Array.from(
-    new Set(namespaces.map(ns => `${ns.cluster_id}:${ns.cluster_name}`))
-  ).map(clusterStr => {
-    const [id, name] = clusterStr.split(':');
-    return { id: parseInt(id), name };
-  });
 
   if (!isAuthenticated) {
     return null;
@@ -169,7 +181,8 @@ export default function NamespacesPage() {
                 <span className="text-gray-600 dark:text-gray-400">返回仪表板</span>
               </Link>
             </div>
-            <div className="flex space-x-2">
+            <div className="flex items-center space-x-4">
+              <ClusterSelector />
               <Button variant="outline" onClick={fetchNamespaces} disabled={isLoading}>
                 {isLoading ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -189,7 +202,7 @@ export default function NamespacesPage() {
                   <DialogHeader>
                     <DialogTitle>创建新命名空间</DialogTitle>
                     <DialogDescription>
-                      输入命名空间名称和选择集群
+                      在当前集群中创建新的命名空间
                     </DialogDescription>
                   </DialogHeader>
                   <div className="space-y-4">
@@ -202,22 +215,14 @@ export default function NamespacesPage() {
                         placeholder="输入命名空间名称"
                       />
                     </div>
-                    <div>
-                      <Label htmlFor="cluster-select">选择集群</Label>
-                      <select
-                        id="cluster-select"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                        value={selectedClusterId || ""}
-                        onChange={(e) => setSelectedClusterId(parseInt(e.target.value))}
-                      >
-                        <option value="">选择集群</option>
-                        {availableClusters.map((cluster) => (
-                          <option key={cluster.id} value={cluster.id}>
-                            {cluster.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                    {activeCluster && (
+                      <div>
+                        <Label>目标集群</Label>
+                        <div className="px-3 py-2 bg-gray-50 rounded-md text-sm">
+                          {activeCluster.name} ({activeCluster.endpoint})
+                        </div>
+                      </div>
+                    )}
                     <div className="flex justify-end space-x-2">
                       <Button
                         variant="outline"
@@ -227,7 +232,7 @@ export default function NamespacesPage() {
                       </Button>
                       <Button
                         onClick={handleCreateNamespace}
-                        disabled={isCreating || !newNamespaceName.trim() || !selectedClusterId}
+                        disabled={isCreating || !newNamespaceName.trim() || !activeCluster}
                       >
                         {isCreating ? (
                           <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -283,7 +288,9 @@ export default function NamespacesPage() {
               <Card key={`${namespace.cluster_id}-${namespace.name}`} className="hover:shadow-lg transition-shadow">
                 <CardHeader>
                   <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg">{namespace.name}</CardTitle>
+                    <CardTitle className="text-lg truncate max-w-[200px] overflow-hidden text-ellipsis whitespace-nowrap" title={namespace.name}>
+                      {namespace.name}
+                    </CardTitle>
                     <Badge variant={getStatusBadgeVariant(namespace.status)}>
                       {namespace.status}
                     </Badge>

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { LogOut, Server, Users, Activity, Settings, Loader2 } from "lucide-react";
+import ClusterSelector from "@/components/ClusterSelector";
 
 interface DashboardStats {
   total_clusters: number;
@@ -78,10 +79,13 @@ export default function Home() {
                 Kubernetes管理面板
               </h1>
             </div>
-            <Button variant="outline" onClick={handleLogout}>
-              <LogOut className="h-4 w-4 mr-2" />
-              登出
-            </Button>
+            <div className="flex items-center space-x-4">
+              <ClusterSelector />
+              <Button variant="outline" onClick={handleLogout}>
+                <LogOut className="h-4 w-4 mr-2" />
+                登出
+              </Button>
+            </div>
           </div>
         </div>
       </header>

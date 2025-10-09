@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from ..database import get_db
@@ -61,13 +61,18 @@ async def get_pods(
         for cluster in clusters:
             try:
                 pods = get_pods_info(cluster, namespace)
-                # 添加集群标识
-                for pod in pods:
-                    pod['cluster_id'] = cluster.id
-                    pod['cluster_name'] = cluster.name
-                all_pods.extend(pods)
+                if pods:
+                    # 添加集群标识
+                    for pod in pods:
+                        pod['cluster_id'] = cluster.id
+                        pod['cluster_name'] = cluster.name
+                    all_pods.extend(pods)
+                    print(f"成功获取集群 {cluster.name} 的 {len(pods)} 个Pod")
+                else:
+                    print(f"集群 {cluster.name} 返回空Pod列表")
             except Exception as e:
                 print(f"获取集群 {cluster.name} Pod信息失败: {e}")
+                # 即使失败，也继续处理其他集群
                 continue
 
         return all_pods
@@ -79,7 +84,7 @@ async def get_pods(
 async def get_pod_detail(
     namespace: str,
     pod_name: str,
-    cluster_id: int,
+    cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
@@ -102,13 +107,13 @@ async def get_pod_detail(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取Pod详情失败: {str(e)}")
 
-@router.get("/{namespace}/{pod_name}/logs", response_model=PodLogs)
+@router.get("/{namespace}/{pod_name}/logs")
 async def get_pod_log(
     namespace: str,
     pod_name: str,
-    cluster_id: int,
-    container: Optional[str] = None,
-    tail_lines: Optional[int] = 100,
+    cluster_id: int = Query(..., description="集群ID"),
+    container: Optional[str] = Query(None, description="容器名称"),
+    tail_lines: Optional[int] = Query(100, description="获取的日志行数"),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
@@ -120,7 +125,8 @@ async def get_pod_log(
 
         logs = get_pod_logs(cluster, namespace, pod_name, container, tail_lines)
         if logs is not None:
-            return {"logs": logs, "container_name": container}
+            # 返回纯文本日志，前端直接处理
+            return logs
         else:
             raise HTTPException(status_code=404, detail=f"Pod {namespace}/{pod_name} 日志获取失败")
 
@@ -133,7 +139,7 @@ async def get_pod_log(
 async def restart_pod_endpoint(
     namespace: str,
     pod_name: str,
-    cluster_id: int,
+    cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
@@ -158,7 +164,7 @@ async def restart_pod_endpoint(
 async def delete_pod_endpoint(
     namespace: str,
     pod_name: str,
-    cluster_id: int,
+    cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
