@@ -4,7 +4,7 @@ from typing import List, Optional
 from ..database import get_db
 from ..models import Cluster
 from ..auth import get_current_user
-from ..kubernetes import get_namespaces_info, create_namespace, delete_namespace, get_namespace_resources
+from ..kubernetes import get_namespaces_info, create_namespace, delete_namespace, get_namespace_resources, get_namespace_deployments, get_namespace_services, get_namespace_crds
 from pydantic import BaseModel
 
 router = APIRouter()
@@ -153,6 +153,10 @@ async def get_namespace_resource_usage(
 ):
     """获取命名空间资源使用情况"""
     try:
+        # 验证cluster_id参数
+        if not isinstance(cluster_id, int) or cluster_id <= 0:
+            raise HTTPException(status_code=422, detail="无效的集群ID")
+
         cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
         if not cluster:
             raise HTTPException(status_code=404, detail="集群不存在或未激活")
@@ -167,3 +171,81 @@ async def get_namespace_resource_usage(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取命名空间资源信息失败: {str(e)}")
+
+
+@router.get("/{namespace_name}/deployments")
+async def get_namespace_deployments_endpoint(
+    namespace_name: str,
+    cluster_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """获取命名空间中的部署"""
+    try:
+        # 验证cluster_id参数
+        if not isinstance(cluster_id, int) or cluster_id <= 0:
+            raise HTTPException(status_code=422, detail="无效的集群ID")
+
+        cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
+        if not cluster:
+            raise HTTPException(status_code=404, detail="集群不存在或未激活")
+
+        deployments = get_namespace_deployments(cluster, namespace_name)
+        return deployments
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取命名空间部署信息失败: {str(e)}")
+
+
+@router.get("/{namespace_name}/services")
+async def get_namespace_services_endpoint(
+    namespace_name: str,
+    cluster_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """获取命名空间中的服务"""
+    try:
+        # 验证cluster_id参数
+        if not isinstance(cluster_id, int) or cluster_id <= 0:
+            raise HTTPException(status_code=422, detail="无效的集群ID")
+
+        cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
+        if not cluster:
+            raise HTTPException(status_code=404, detail="集群不存在或未激活")
+
+        services = get_namespace_services(cluster, namespace_name)
+        return services
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取命名空间服务信息失败: {str(e)}")
+
+
+@router.get("/{namespace_name}/crds")
+async def get_namespace_crds_endpoint(
+    namespace_name: str,
+    cluster_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """获取命名空间中的自定义资源"""
+    try:
+        # 验证cluster_id参数
+        if not isinstance(cluster_id, int) or cluster_id <= 0:
+            raise HTTPException(status_code=422, detail="无效的集群ID")
+
+        cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
+        if not cluster:
+            raise HTTPException(status_code=404, detail="集群不存在或未激活")
+
+        crds = get_namespace_crds(cluster, namespace_name)
+        return crds
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取命名空间CRD信息失败: {str(e)}")

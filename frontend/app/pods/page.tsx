@@ -245,7 +245,19 @@ export default function PodsPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {pods.map((pod) => (
-              <Card key={`${pod.cluster_id}-${pod.namespace}-${pod.name}`} className="hover:shadow-lg transition-shadow">
+              <Card
+                key={`${pod.cluster_id}-${pod.namespace}-${pod.name}`}
+                className="hover:shadow-lg transition-shadow cursor-pointer"
+                onClick={() => {
+                  console.log("Pod clicked:", pod);
+                  console.log("Cluster ID:", pod.cluster_id);
+                  if (pod.cluster_id == null || pod.cluster_id === undefined) {
+                    alert("Pod缺少集群ID，无法查看详情");
+                    return;
+                  }
+                  router.push(`/pods/${pod.namespace}/${pod.name}?cluster_id=${pod.cluster_id}`);
+                }}
+              >
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-lg truncate max-w-[200px] overflow-hidden text-ellipsis whitespace-nowrap" title={pod.name}>

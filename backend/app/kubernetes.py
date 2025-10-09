@@ -554,6 +554,115 @@ def parse_memory(memory_str: str) -> int:
         # 假设是字节
         return int(int(memory_str) / (1024 * 1024))
 
+
+def get_namespace_deployments(cluster: Cluster, namespace_name: str) -> List[Dict[str, Any]]:
+    """获取命名空间中的部署"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return []
+
+    try:
+        apps_v1 = client.AppsV1Api(client_instance)
+        deployments = apps_v1.list_namespaced_deployment(namespace_name)
+
+        result = []
+        for deployment in deployments.items:
+            result.append({
+                "name": deployment.metadata.name,
+                "replicas": deployment.spec.replicas,
+                "ready_replicas": deployment.status.ready_replicas or 0,
+                "available_replicas": deployment.status.available_replicas or 0,
+                "updated_replicas": deployment.status.updated_replicas or 0,
+                "age": deployment.metadata.creation_timestamp,
+                "images": [container.image for container in deployment.spec.template.spec.containers],
+                "labels": deployment.metadata.labels or {},
+                "status": "Running" if deployment.status.ready_replicas == deployment.spec.replicas else "Updating"
+            })
+        return result
+    except Exception as e:
+        print(f"获取命名空间部署信息失败: {e}")
+        return []
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def get_namespace_services(cluster: Cluster, namespace_name: str) -> List[Dict[str, Any]]:
+    """获取命名空间中的服务"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return []
+
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+        services = core_v1.list_namespaced_service(namespace_name)
+
+        result = []
+        for service in services.items:
+            result.append({
+                "name": service.metadata.name,
+                "type": service.spec.type,
+                "cluster_ip": service.spec.cluster_ip,
+                "external_ip": getattr(service.status, 'load_balancer', {}).get('ingress', [{}])[0].get('ip', None) if service.spec.type == 'LoadBalancer' else None,
+                "ports": [{"port": port.port, "target_port": port.target_port, "protocol": port.protocol} for port in (service.spec.ports or [])],
+                "selector": service.spec.selector or {},
+                "age": service.metadata.creation_timestamp,
+                "labels": service.metadata.labels or {}
+            })
+        return result
+    except Exception as e:
+        print(f"获取命名空间服务信息失败: {e}")
+        return []
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def get_namespace_crds(cluster: Cluster, namespace_name: str) -> List[Dict[str, Any]]:
+    """获取命名空间中的自定义资源"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return []
+
+    try:
+        # 获取所有CRD
+        apiextensions_v1 = client.ApiextensionsV1Api(client_instance)
+        crds = apiextensions_v1.list_custom_resource_definition()
+
+        result = []
+        for crd in crds.items:
+            try:
+                # 尝试获取该CRD在指定命名空间的实例
+                custom_api = client.CustomObjectsApi(client_instance)
+                group, version = crd.spec.group, crd.spec.versions[0].name
+                plural = crd.spec.names.plural
+
+                # 如果是命名空间范围的CRD，获取该命名空间的实例
+                if crd.spec.scope == 'Namespaced':
+                    resources = custom_api.list_namespaced_custom_object(
+                        group, version, namespace_name, plural
+                    )
+                    for resource in resources.get('items', []):
+                        result.append({
+                            "name": resource['metadata']['name'],
+                            "kind": crd.spec.names.kind,
+                            "api_version": f"{group}/{version}",
+                            "namespace": resource['metadata']['namespace'],
+                            "age": resource['metadata']['creationTimestamp'],
+                            "labels": resource['metadata'].get('labels', {})
+                        })
+            except Exception as e:
+                # 忽略单个CRD获取失败的情况
+                continue
+
+        return result
+    except Exception as e:
+        print(f"获取命名空间CRD信息失败: {e}")
+        return []
+    finally:
+        if client_instance:
+            client_instance.close()
+
 def get_pods_info(cluster: Cluster, namespace: Optional[str] = None) -> List[Dict[str, Any]]:
     """获取Pod信息"""
     client_instance = create_k8s_client(cluster)

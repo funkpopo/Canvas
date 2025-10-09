@@ -21,6 +21,7 @@ class PodInfo(BaseModel):
   ready_containers: str
   cluster_name: str
   labels: dict
+  cluster_id: int
 
 
 class PodDetails(BaseModel):
@@ -36,6 +37,8 @@ class PodDetails(BaseModel):
   containers: List[dict]
   volumes: List[dict]
   events: List[dict]
+  cluster_id: int
+  cluster_name: str
 
 
 class PodLogs(BaseModel):
@@ -71,7 +74,8 @@ async def get_pods(
           for pod in pods:
             pod["cluster_id"] = cluster.id
             pod["cluster_name"] = cluster.name
-          all_pods.extend(pods)
+            # 确保所有必需字段都存在
+            all_pods.append(PodInfo(**pod))
       except Exception as e:
         print(f"获取集群 {cluster.name} Pod信息失败: {e}")
         continue
@@ -90,6 +94,10 @@ async def get_pod_detail(
   current_user: dict = Depends(get_current_user),
 ):
   try:
+    # 验证cluster_id参数
+    if not isinstance(cluster_id, int) or cluster_id <= 0:
+      raise HTTPException(status_code=422, detail="无效的集群ID")
+
     cluster = (
       db.query(Cluster)
       .filter(Cluster.id == cluster_id, Cluster.is_active == True)
@@ -102,7 +110,7 @@ async def get_pod_detail(
     if pod_detail:
       pod_detail["cluster_id"] = cluster.id
       pod_detail["cluster_name"] = cluster.name
-      return pod_detail
+      return PodDetails(**pod_detail)
     else:
       raise HTTPException(status_code=404, detail=f"未找到 Pod {namespace}/{pod_name}")
   except HTTPException:
