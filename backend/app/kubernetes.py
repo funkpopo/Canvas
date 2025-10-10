@@ -1608,3 +1608,395 @@ def test_cluster_connection(cluster: Cluster) -> Dict[str, Any]:
     finally:
         if client_instance:
             client_instance.close()
+
+# ========== 存储管理相关函数 ==========
+
+def get_storage_classes(cluster: Cluster) -> List[Dict[str, Any]]:
+    """获取存储类列表"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return []
+
+    try:
+        storage_v1 = client.StorageV1Api(client_instance)
+        storage_classes = storage_v1.list_storage_class()
+
+        result = []
+        for sc in storage_classes.items:
+            result.append({
+                "name": sc.metadata.name,
+                "provisioner": sc.provisioner,
+                "reclaim_policy": sc.reclaim_policy or "Delete",
+                "volume_binding_mode": sc.volume_binding_mode or "Immediate",
+                "allow_volume_expansion": sc.allow_volume_expansion or False
+            })
+
+        return result
+
+    except Exception as e:
+        print(f"获取存储类信息失败: {e}")
+        return []
+    finally:
+        if client_instance:
+            client_instance.close()
+
+def create_storage_class(cluster: Cluster, sc_data: Dict[str, Any]) -> bool:
+    """创建存储类"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        storage_v1 = client.StorageV1Api(client_instance)
+
+        # 创建StorageClass对象
+        sc = client.V1StorageClass(
+            metadata=client.V1ObjectMeta(name=sc_data["name"]),
+            provisioner=sc_data["provisioner"],
+            reclaim_policy=sc_data.get("reclaim_policy", "Delete"),
+            volume_binding_mode=sc_data.get("volume_binding_mode", "Immediate"),
+            allow_volume_expansion=sc_data.get("allow_volume_expansion", False),
+            parameters=sc_data.get("parameters", {})
+        )
+
+        storage_v1.create_storage_class(sc)
+        return True
+
+    except Exception as e:
+        print(f"创建存储类失败: {e}")
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
+
+def delete_storage_class(cluster: Cluster, sc_name: str) -> bool:
+    """删除存储类"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        storage_v1 = client.StorageV1Api(client_instance)
+        storage_v1.delete_storage_class(sc_name)
+        return True
+
+    except Exception as e:
+        print(f"删除存储类失败: {e}")
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
+
+def get_persistent_volumes(cluster: Cluster) -> List[Dict[str, Any]]:
+    """获取持久卷列表"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return []
+
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+        pvs = core_v1.list_persistent_volume()
+
+        result = []
+        for pv in pvs.items:
+            capacity = pv.spec.capacity.get("storage", "0") if pv.spec.capacity else "0"
+            access_modes = [mode for mode in pv.spec.access_modes] if pv.spec.access_modes else []
+
+            result.append({
+                "name": pv.metadata.name,
+                "capacity": capacity,
+                "access_modes": access_modes,
+                "status": pv.status.phase,
+                "claim": f"{pv.spec.claim_ref.namespace}/{pv.spec.claim_ref.name}" if pv.spec.claim_ref else None,
+                "storage_class": pv.spec.storage_class_name,
+                "volume_mode": pv.spec.volume_mode or "Filesystem"
+            })
+
+        return result
+
+    except Exception as e:
+        print(f"获取持久卷信息失败: {e}")
+        return []
+    finally:
+        if client_instance:
+            client_instance.close()
+
+def get_pv_details(cluster: Cluster, pv_name: str) -> Optional[Dict[str, Any]]:
+    """获取PV详情"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return None
+
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+        pv = core_v1.read_persistent_volume(pv_name)
+
+        capacity = pv.spec.capacity.get("storage", "0") if pv.spec.capacity else "0"
+        access_modes = [mode for mode in pv.spec.access_modes] if pv.spec.access_modes else []
+
+        return {
+            "name": pv.metadata.name,
+            "capacity": capacity,
+            "access_modes": access_modes,
+            "status": pv.status.phase,
+            "claim": f"{pv.spec.claim_ref.namespace}/{pv.spec.claim_ref.name}" if pv.spec.claim_ref else None,
+            "storage_class": pv.spec.storage_class_name,
+            "volume_mode": pv.spec.volume_mode or "Filesystem",
+            "created_time": pv.metadata.creation_timestamp.isoformat() if pv.metadata.creation_timestamp else None
+        }
+
+    except Exception as e:
+        print(f"获取PV详情失败: {e}")
+        return None
+    finally:
+        if client_instance:
+            client_instance.close()
+
+def create_pv(cluster: Cluster, pv_data: Dict[str, Any]) -> bool:
+    """创建持久卷"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+
+        # 创建PV对象
+        pv = client.V1PersistentVolume(
+            metadata=client.V1ObjectMeta(name=pv_data["name"]),
+            spec=client.V1PersistentVolumeSpec(
+                capacity={"storage": pv_data["capacity"]},
+                access_modes=pv_data["access_modes"],
+                storage_class_name=pv_data.get("storage_class_name"),
+                volume_mode=pv_data.get("volume_mode", "Filesystem"),
+                host_path=client.V1HostPathVolumeSource(path=pv_data["host_path"]) if pv_data.get("host_path") else None
+            )
+        )
+
+        core_v1.create_persistent_volume(pv)
+        return True
+
+    except Exception as e:
+        print(f"创建持久卷失败: {e}")
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
+
+def delete_pv(cluster: Cluster, pv_name: str) -> bool:
+    """删除持久卷"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+        core_v1.delete_persistent_volume(pv_name)
+        return True
+
+    except Exception as e:
+        print(f"删除持久卷失败: {e}")
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
+
+def get_persistent_volume_claims(cluster: Cluster) -> List[Dict[str, Any]]:
+    """获取所有PVC列表"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return []
+
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+        pvcs = core_v1.list_persistent_volume_claim_for_all_namespaces()
+
+        result = []
+        for pvc in pvcs.items:
+            capacity = pvc.status.capacity.get("storage", "0") if pvc.status.capacity else "0"
+            access_modes = [mode for mode in pvc.spec.access_modes] if pvc.spec.access_modes else []
+
+            result.append({
+                "name": pvc.metadata.name,
+                "namespace": pvc.metadata.namespace,
+                "status": pvc.status.phase,
+                "volume": pvc.spec.volume_name,
+                "capacity": capacity,
+                "access_modes": access_modes,
+                "storage_class": pvc.spec.storage_class_name,
+                "volume_mode": pvc.spec.volume_mode or "Filesystem"
+            })
+
+        return result
+
+    except Exception as e:
+        print(f"获取PVC信息失败: {e}")
+        return []
+    finally:
+        if client_instance:
+            client_instance.close()
+
+def get_namespace_pvcs(cluster: Cluster, namespace: str) -> List[Dict[str, Any]]:
+    """获取命名空间下的PVC列表"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return []
+
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+        pvcs = core_v1.list_namespaced_persistent_volume_claim(namespace)
+
+        result = []
+        for pvc in pvcs.items:
+            capacity = pvc.status.capacity.get("storage", "0") if pvc.status.capacity else "0"
+            access_modes = [mode for mode in pvc.spec.access_modes] if pvc.spec.access_modes else []
+
+            result.append({
+                "name": pvc.metadata.name,
+                "namespace": pvc.metadata.namespace,
+                "status": pvc.status.phase,
+                "volume": pvc.spec.volume_name,
+                "capacity": capacity,
+                "access_modes": access_modes,
+                "storage_class": pvc.spec.storage_class_name,
+                "volume_mode": pvc.spec.volume_mode or "Filesystem"
+            })
+
+        return result
+
+    except Exception as e:
+        print(f"获取命名空间PVC信息失败: {e}")
+        return []
+    finally:
+        if client_instance:
+            client_instance.close()
+
+def get_pvc_details(cluster: Cluster, namespace: str, pvc_name: str) -> Optional[Dict[str, Any]]:
+    """获取PVC详情"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return None
+
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+        pvc = core_v1.read_namespaced_persistent_volume_claim(pvc_name, namespace)
+
+        capacity = pvc.status.capacity.get("storage", "0") if pvc.status.capacity else "0"
+        access_modes = [mode for mode in pvc.spec.access_modes] if pvc.spec.access_modes else []
+
+        return {
+            "name": pvc.metadata.name,
+            "namespace": pvc.metadata.namespace,
+            "status": pvc.status.phase,
+            "volume": pvc.spec.volume_name,
+            "capacity": capacity,
+            "access_modes": access_modes,
+            "storage_class": pvc.spec.storage_class_name,
+            "volume_mode": pvc.spec.volume_mode or "Filesystem",
+            "created_time": pvc.metadata.creation_timestamp.isoformat() if pvc.metadata.creation_timestamp else None
+        }
+
+    except Exception as e:
+        print(f"获取PVC详情失败: {e}")
+        return None
+    finally:
+        if client_instance:
+            client_instance.close()
+
+def create_pvc(cluster: Cluster, pvc_data: Dict[str, Any]) -> bool:
+    """创建持久卷声明"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+
+        # 创建PVC对象
+        pvc = client.V1PersistentVolumeClaim(
+            metadata=client.V1ObjectMeta(name=pvc_data["name"]),
+            spec=client.V1PersistentVolumeClaimSpec(
+                access_modes=pvc_data["access_modes"],
+                storage_class_name=pvc_data.get("storage_class_name"),
+                volume_mode=pvc_data.get("volume_mode", "Filesystem"),
+                resources=client.V1ResourceRequirements(requests=pvc_data["requests"])
+            )
+        )
+
+        core_v1.create_namespaced_persistent_volume_claim(pvc_data["namespace"], pvc)
+        return True
+
+    except Exception as e:
+        print(f"创建PVC失败: {e}")
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
+
+def delete_pvc(cluster: Cluster, namespace: str, pvc_name: str) -> bool:
+    """删除持久卷声明"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+        core_v1.delete_namespaced_persistent_volume_claim(pvc_name, namespace)
+        return True
+
+    except Exception as e:
+        print(f"删除PVC失败: {e}")
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
+
+def browse_volume_files(cluster: Cluster, pv_name: str, path: str = "/") -> List[Dict[str, Any]]:
+    """浏览卷内文件（简化实现，返回模拟数据）"""
+    # 注意：这是一个简化的实现
+    # 在实际生产环境中，需要通过以下方式之一实现：
+    # 1. 使用Kubernetes exec API在挂载了该PV的Pod中执行ls命令
+    # 2. 如果PV是hostPath类型，可以直接读取宿主机文件系统
+    # 3. 对于云存储，需要使用相应的云API
+
+    # 这里返回模拟数据用于演示
+    if path == "/":
+        return [
+            {"name": "example-file.txt", "type": "file", "size": 1024, "modified_time": "2024-01-01 10:00:00", "permissions": "-rw-r--r--"},
+            {"name": "data", "type": "directory", "size": None, "modified_time": "2024-01-01 09:00:00", "permissions": "drwxr-xr-x"},
+            {"name": "logs", "type": "directory", "size": None, "modified_time": "2024-01-01 08:00:00", "permissions": "drwxr-xr-x"}
+        ]
+    elif path == "/data":
+        return [
+            {"name": "database.db", "type": "file", "size": 1048576, "modified_time": "2024-01-01 11:00:00", "permissions": "-rw-r--r--"},
+            {"name": "config.yaml", "type": "file", "size": 512, "modified_time": "2024-01-01 10:30:00", "permissions": "-rw-r--r--"}
+        ]
+    elif path == "/logs":
+        return [
+            {"name": "app.log", "type": "file", "size": 2048, "modified_time": "2024-01-01 12:00:00", "permissions": "-rw-r--r--"},
+            {"name": "error.log", "type": "file", "size": 1024, "modified_time": "2024-01-01 11:30:00", "permissions": "-rw-r--r--"}
+        ]
+    else:
+        return []
+
+def read_volume_file(cluster: Cluster, pv_name: str, file_path: str, max_lines: Optional[int] = None) -> Optional[str]:
+    """读取卷内文件内容（简化实现，返回模拟数据）"""
+    # 注意：这也是一个简化的实现
+    # 在实际生产环境中，需要通过exec API或直接文件访问来读取内容
+
+    # 返回模拟文件内容
+    mock_contents = {
+        "/example-file.txt": "这是一个示例文件的内容。\n包含多行文本。\n用于演示文件浏览功能。",
+        "/data/database.db": "[二进制文件 - 无法显示文本内容]",
+        "/data/config.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: example-config\ndata:\n  key: value",
+        "/logs/app.log": "2024-01-01 10:00:00 INFO Application started\n2024-01-01 10:05:00 INFO Processing request\n2024-01-01 10:10:00 INFO Request completed",
+        "/logs/error.log": "2024-01-01 10:02:00 ERROR Connection timeout\n2024-01-01 10:07:00 WARN High memory usage"
+    }
+
+    content = mock_contents.get(file_path, f"文件 {file_path} 的内容（模拟数据）")
+
+    if max_lines and content.count('\n') >= max_lines:
+        lines = content.split('\n')[:max_lines]
+        content = '\n'.join(lines) + f"\n\n[已截断，显示前 {max_lines} 行]"
+
+    return content

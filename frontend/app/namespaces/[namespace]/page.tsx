@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Activity, Loader2, RefreshCw, Users, Settings, FileText, Database, Cpu, MemoryStick, AlertCircle } from "lucide-react";
+import { ArrowLeft, Activity, Loader2, RefreshCw, Users, Settings, FileText, Database, Cpu, MemoryStick, AlertCircle, HardDrive } from "lucide-react";
 
 interface NamespaceResources {
   cpu_requests: string;
@@ -57,12 +57,26 @@ interface CRD {
   labels: Record<string, string>;
 }
 
+interface PVC {
+  name: string;
+  namespace: string;
+  status: string;
+  volume: string | null;
+  capacity: string;
+  access_modes: string[];
+  storage_class: string | null;
+  volume_mode: string;
+  cluster_name: string;
+  cluster_id: number;
+}
+
 export default function NamespaceDetailsPage({ params }: { params: Promise<{ namespace: string }> }) {
   const resolvedParams = use(params);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [resources, setResources] = useState<NamespaceResources | null>(null);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [services, setServices] = useState<Service[]>([]);
+  const [pvcs, setPvcs] = useState<PVC[]>([]);
   const [crds, setCrds] = useState<CRD[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("overview");
@@ -172,6 +186,21 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
           const servicesData = await servicesResponse.json();
           setServices(servicesData);
         }
+      } else if (activeTab === "pvcs") {
+        // 获取PVC
+        const pvcsResponse = await fetch(
+          `http://localhost:8000/api/storage/claims?cluster_id=${clusterId}&namespace=${resolvedParams.namespace}`,
+          {
+            headers: {
+              "Authorization": `Bearer ${token}`,
+            },
+          }
+        );
+
+        if (pvcsResponse.ok) {
+          const pvcsData = await pvcsResponse.json();
+          setPvcs(pvcsData);
+        }
       } else if (activeTab === "crds") {
         // 获取CRD
         const crdsResponse = await fetch(
@@ -252,10 +281,11 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="overview">概览</TabsTrigger>
             <TabsTrigger value="deployments">部署</TabsTrigger>
             <TabsTrigger value="services">服务</TabsTrigger>
+            <TabsTrigger value="pvcs">PVC</TabsTrigger>
             <TabsTrigger value="crds">自定义资源</TabsTrigger>
           </TabsList>
 
@@ -513,6 +543,68 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
                                 </Badge>
                               ))}
                             </div>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          {/* PVC标签页 */}
+          <TabsContent value="pvcs" className="space-y-6">
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin mr-2" />
+                <span className="text-lg">加载中...</span>
+              </div>
+            ) : pvcs.length === 0 ? (
+              <Card>
+                <CardContent className="flex flex-col items-center justify-center py-12">
+                  <HardDrive className="h-12 w-12 text-gray-400 mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                    暂无持久卷声明
+                  </h3>
+                  <p className="text-gray-600 dark:text-gray-400">
+                    该命名空间中没有持久卷声明
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid grid-cols-1 gap-4">
+                {pvcs.map((pvc, index) => (
+                  <Card key={index}>
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-lg">{pvc.name}</CardTitle>
+                        <Badge variant={pvc.status === 'Bound' ? 'default' : 'secondary'}>
+                          {pvc.status}
+                        </Badge>
+                      </div>
+                      <CardDescription>
+                        容量: {pvc.capacity} •
+                        存储类: {pvc.storage_class || '默认'} •
+                        卷模式: {pvc.volume_mode}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <h4 className="text-sm font-medium mb-1">访问模式:</h4>
+                          <div className="flex flex-wrap gap-1">
+                            {pvc.access_modes.map((mode) => (
+                              <Badge key={mode} variant="outline" className="text-xs">
+                                {mode}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                        {pvc.volume && (
+                          <div>
+                            <h4 className="text-sm font-medium mb-1">绑定卷:</h4>
+                            <p className="text-sm text-gray-600 dark:text-gray-400">{pvc.volume}</p>
                           </div>
                         )}
                       </div>

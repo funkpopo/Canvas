@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { LogOut, Server, Users, Activity, Settings, Loader2 } from "lucide-react";
+import { LogOut, Server, Users, Activity, Settings, Database, Loader2 } from "lucide-react";
 import ClusterSelector from "@/components/ClusterSelector";
 import { useAuth } from "@/lib/auth-context";
 
@@ -197,7 +197,7 @@ export default function Home() {
             <CardDescription>常用Kubernetes管理任务</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               <Button variant="outline" className="h-20 flex-col" asChild>
                 <Link href="/nodes">
                   <Server className="h-6 w-6 mb-2" />
@@ -214,6 +214,12 @@ export default function Home() {
                 <Link href="/pods">
                   <Activity className="h-6 w-6 mb-2" />
                   Pod监控
+                </Link>
+              </Button>
+              <Button variant="outline" className="h-20 flex-col" asChild>
+                <Link href="/storage">
+                  <Database className="h-6 w-6 mb-2" />
+                  存储管理
                 </Link>
               </Button>
               <Button variant="outline" className="h-20 flex-col" asChild>
