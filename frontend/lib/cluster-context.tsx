@@ -167,6 +167,8 @@ export function ClusterProvider({ children }: { children: ReactNode }) {
   );
 }
 
+export type { Cluster };
+
 export function useCluster() {
   const context = useContext(ClusterContext);
   if (context === undefined) {

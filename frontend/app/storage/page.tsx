@@ -17,6 +17,7 @@ import ClusterSelector from "@/components/ClusterSelector";
 import { useAuth } from "@/lib/auth-context";
 import { useCluster } from "@/lib/cluster-context";
 import { storageApi } from "@/lib/api";
+import type { Cluster } from "@/lib/cluster-context";
 
 interface StorageClass {
   name: string;
@@ -101,51 +102,66 @@ export default function StorageManagement() {
 
   const router = useRouter();
   const { isAuthenticated, isLoading: authLoading, logout } = useAuth();
-  const { activeCluster } = useCluster();
+  const { activeCluster, clusters, isLoading: clusterLoading } = useCluster();
 
   useEffect(() => {
+    console.log("Storage page useEffect:", { authLoading, isAuthenticated, activeCluster });
+
     if (!authLoading && !isAuthenticated) {
+      console.log("Storage page: User not authenticated, redirecting to login");
       router.push("/login");
       return;
     }
 
     if (activeCluster) {
+      console.log("Storage page: Setting active cluster", activeCluster.id);
       setSelectedClusterId(activeCluster.id);
-      loadData();
+      loadData(activeCluster.id);
     } else {
+      console.log("Storage page: No active cluster");
       // 没有活跃集群时停止加载状态
       setIsLoading(false);
     }
   }, [isAuthenticated, authLoading, router, activeCluster]);
 
-  const loadData = async () => {
-    if (!selectedClusterId) return;
+  const loadData = async (clusterId?: number) => {
+    const id = clusterId ?? selectedClusterId;
+    if (!id) {
+      console.log("loadData: No cluster id, skipping");
+      return;
+    }
 
+    console.log("loadData: Loading data for cluster", id);
     setIsLoading(true);
     try {
       // 并行加载所有存储数据
       const [scResponse, pvResponse, pvcResponse] = await Promise.all([
-        storageApi.getStorageClasses(selectedClusterId),
-        storageApi.getPersistentVolumes(selectedClusterId),
-        storageApi.getPersistentVolumeClaims(selectedClusterId)
+        storageApi.getStorageClasses(id),
+        storageApi.getPersistentVolumes(id),
+        storageApi.getPersistentVolumeClaims(id)
       ]);
 
+      console.log("loadData: API responses", { scResponse, pvResponse, pvcResponse });
+
       // 处理存储类数据
-      if (scResponse.data) {
+      if (scResponse.data !== undefined) {
+        console.log("loadData: Setting storage classes", scResponse.data);
         setStorageClasses(scResponse.data);
       } else if (scResponse.error) {
         console.error("加载存储类失败:", scResponse.error);
+      } else {
+        console.warn("loadData: No storage class data and no error");
       }
 
       // 处理持久卷数据
-      if (pvResponse.data) {
+      if (pvResponse.data !== undefined) {
         setPersistentVolumes(pvResponse.data);
       } else if (pvResponse.error) {
         console.error("加载持久卷失败:", pvResponse.error);
       }
 
       // 处理PVC数据
-      if (pvcResponse.data) {
+      if (pvcResponse.data !== undefined) {
         setPersistentVolumeClaims(pvcResponse.data);
       } else if (pvcResponse.error) {
         console.error("加载PVC失败:", pvcResponse.error);
@@ -160,25 +176,27 @@ export default function StorageManagement() {
   const handleCreateStorageClass = async () => {
     if (!selectedClusterId) return;
 
-    try {
-      const response = await storageApi.createStorageClass(selectedClusterId, scForm);
-      if (response.data) {
-        setStorageClasses([...storageClasses, response.data]);
-        setIsCreateSCOpen(false);
-        setScForm({
-          name: "",
-          provisioner: "",
-          reclaim_policy: "Delete",
-          volume_binding_mode: "Immediate",
-          allow_volume_expansion: false,
-          nfs_server: "",
-          nfs_path: "",
-          custom_provisioner: false,
-          provisioner_image: ""
-        });
-      }
-    } catch (error) {
-      console.error("创建存储类失败:", error);
+    const response = await storageApi.createStorageClass(selectedClusterId, scForm);
+    if (response.data) {
+      setStorageClasses([...storageClasses, response.data]);
+      setIsCreateSCOpen(false);
+      setScForm({
+        name: "",
+        provisioner: "",
+        reclaim_policy: "Delete",
+        volume_binding_mode: "Immediate",
+        allow_volume_expansion: false,
+        nfs_server: "",
+        nfs_path: "",
+        custom_provisioner: false,
+        provisioner_image: ""
+      });
+      // 重新加载数据以确保显示最新的存储类列表
+      loadData(selectedClusterId ?? undefined);
+    } else if (response.error) {
+      console.error("创建存储类失败:", response.error);
+      // 这里可以显示错误提示给用户
+      alert(`创建存储类失败: ${response.error}`);
     }
   };
 
@@ -299,7 +317,7 @@ export default function StorageManagement() {
       </header>
 
       {/* 检查是否有活跃集群 */}
-      {!activeCluster && !isLoading ? (
+      {!activeCluster && !isLoading && !clusterLoading ? (
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
             <Database className="h-16 w-16 text-gray-400 mb-4" />
@@ -309,6 +327,11 @@ export default function StorageManagement() {
             <p className="text-gray-600 dark:text-gray-400 mb-4">
               请先选择或激活一个Kubernetes集群，然后才能管理存储资源。
             </p>
+            <div className="text-sm text-gray-500 mt-4">
+              <p>认证状态: {isAuthenticated ? '已认证' : '未认证'}</p>
+              <p>集群数量: {clusters.length}</p>
+              <p>活跃集群: {activeCluster ? '已选择' : '无'}</p>
+            </div>
             <Button asChild>
               <Link href="/clusters/new">
                 创建集群
