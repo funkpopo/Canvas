@@ -42,12 +42,12 @@ export default function ClusterSelector() {
           setActiveCluster(cluster || null);
         }}
       >
-        <SelectTrigger className="w-48">
+        <SelectTrigger className="min-w-48 max-w-64">
           <SelectValue placeholder="选择集群">
             {activeCluster && (
-              <div className="flex items-center space-x-2">
-                <span>{activeCluster.name}</span>
-                <Badge variant="outline" className="text-xs">
+              <div className="flex items-center space-x-2 min-w-0">
+                <span className="truncate">{activeCluster.name}</span>
+                <Badge variant="outline" className="text-xs flex-shrink-0">
                   {activeCluster.endpoint}
                 </Badge>
               </div>
@@ -57,9 +57,9 @@ export default function ClusterSelector() {
         <SelectContent>
           {clusters.map((cluster) => (
             <SelectItem key={cluster.id} value={cluster.id.toString()}>
-              <div className="flex flex-col">
-                <span>{cluster.name}</span>
-                <span className="text-xs text-gray-500">{cluster.endpoint}</span>
+              <div className="flex flex-col min-w-0">
+                <span className="truncate">{cluster.name}</span>
+                <span className="text-xs text-gray-500 truncate">{cluster.endpoint}</span>
               </div>
             </SelectItem>
           ))}
