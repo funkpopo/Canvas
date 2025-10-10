@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { ArrowLeft, Activity, Cpu, MemoryStick, Loader2, RefreshCw, AlertCircle, Play, Square, RotateCcw, Trash2, Settings } from "lucide-react";
+import { ArrowLeft, Activity, Loader2, RefreshCw, AlertCircle, RotateCcw, Trash2, Settings } from "lucide-react";
 import DeploymentConfigTab from "@/components/DeploymentConfigTab";
 import DeploymentYamlTab from "@/components/DeploymentYamlTab";
 import DeploymentServicesTab from "@/components/DeploymentServicesTab";

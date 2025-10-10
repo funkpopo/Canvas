@@ -31,7 +31,7 @@ function NamespacesPageContent() {
   const [newNamespaceName, setNewNamespaceName] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const router = useRouter();
-  const { activeCluster, isLoading: isClusterLoading, refreshClusters } = useCluster();
+  const { activeCluster, isLoading: isClusterLoading } = useCluster();
 
   useEffect(() => {
     // 只有在集群加载完成后才获取数据

@@ -43,7 +43,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setIsAuthenticated(false);
         setUser(null);
       }
-    } catch (error) {
+    } catch {
       // 验证失败，清除token
       localStorage.removeItem('token');
       setIsAuthenticated(false);

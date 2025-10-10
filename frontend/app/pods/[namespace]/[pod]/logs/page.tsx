@@ -92,7 +92,7 @@ export default function PodLogsPage() {
           if (errorData.detail) {
             errorMessage += ` - ${errorData.detail}`;
           }
-        } catch (e) {
+        } catch {
           // 忽略JSON解析错误
         }
         setLogs(errorMessage);

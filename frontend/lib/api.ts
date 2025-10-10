@@ -11,7 +11,7 @@ export const authApi = {
         return { valid: response.data.valid, username: response.data.username };
       }
       return { valid: false };
-    } catch (error) {
+    } catch {
       return { valid: false };
     }
   }
