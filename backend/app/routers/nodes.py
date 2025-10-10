@@ -44,6 +44,7 @@ class NodeDetails(BaseModel):
     taints: List[dict]
 
 @router.get("/", response_model=List[NodeInfo])
+@router.get("", response_model=List[NodeInfo])
 async def get_nodes(
     cluster_id: Optional[int] = None,
     db: Session = Depends(get_db),

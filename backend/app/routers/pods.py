@@ -47,6 +47,7 @@ class PodLogs(BaseModel):
 
 
 @router.get("/", response_model=List[PodInfo])
+@router.get("", response_model=List[PodInfo])
 async def get_pods(
   namespace: Optional[str] = None,
   cluster_id: Optional[int] = None,

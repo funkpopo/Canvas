@@ -34,6 +34,7 @@ class NamespaceResources(BaseModel):
     services: int
 
 @router.get("/", response_model=List[NamespaceInfo])
+@router.get("", response_model=List[NamespaceInfo])
 async def get_namespaces(
     cluster_id: Optional[int] = Query(None, description="集群ID，不传则获取所有活跃集群"),
     db: Session = Depends(get_db),
@@ -63,7 +64,7 @@ async def get_namespaces(
                     all_namespaces.extend(namespaces)
             except Exception as e:
                 # 如果连接失败，使用模拟数据但也要添加集群标识
-                from .kubernetes import get_mock_namespaces
+                from kubernetes import get_mock_namespaces
                 mock_namespaces = get_mock_namespaces()
                 if mock_namespaces:
                     for ns in mock_namespaces:

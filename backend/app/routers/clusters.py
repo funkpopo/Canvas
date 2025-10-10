@@ -42,6 +42,7 @@ async def create_cluster(
 
 
 @router.get("/", response_model=List[ClusterResponse])
+@router.get("", response_model=List[ClusterResponse])
 async def get_clusters(
     skip: int = 0,
     limit: int = 100,

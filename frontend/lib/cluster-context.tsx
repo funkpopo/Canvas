@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { useAuth } from './auth-context';
 
 interface Cluster {
   id: number;
@@ -25,6 +26,7 @@ export function ClusterProvider({ children }: { children: ReactNode }) {
   const [clusters, setClusters] = useState<Cluster[]>([]);
   const [activeCluster, _setActiveClusterLocal] = useState<Cluster | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
 
   const fetchClusters = async () => {
     try {
@@ -140,8 +142,17 @@ export function ClusterProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    // 页面加载时尝试获取集群（可能已经有token）
-    fetchClusters();
+    // 只有在认证完成后才尝试获取集群
+    if (!authLoading) {
+      if (isAuthenticated) {
+        fetchClusters();
+      } else {
+        // 未认证时清空状态
+        setClusters([]);
+        _setActiveClusterLocal(null);
+        setIsLoading(false);
+      }
+    }
 
     // 监听storage变化，当token变化时重新获取集群
     const handleStorageChange = (e: StorageEvent) => {
@@ -159,7 +170,7 @@ export function ClusterProvider({ children }: { children: ReactNode }) {
 
     window.addEventListener('storage', handleStorageChange);
     return () => window.removeEventListener('storage', handleStorageChange);
-  }, []);
+  }, [isAuthenticated, authLoading]);
 
   return (
     <ClusterContext.Provider
