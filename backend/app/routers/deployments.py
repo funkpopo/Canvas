@@ -4,7 +4,11 @@ from typing import List, Optional
 from ..database import get_db
 from ..models import Cluster
 from ..auth import get_current_user
-from ..kubernetes import get_deployment_details, get_deployment_pods, scale_deployment, restart_deployment, delete_deployment, get_namespace_deployments
+from ..kubernetes import (
+    get_deployment_details, get_deployment_pods, scale_deployment, restart_deployment, delete_deployment,
+    get_namespace_deployments, update_deployment, get_deployment_yaml, update_deployment_yaml,
+    get_deployment_services, get_service_details, update_service, get_service_yaml, update_service_yaml
+)
 from pydantic import BaseModel
 
 router = APIRouter()
@@ -55,6 +59,47 @@ class DeploymentPod(BaseModel):
 
 class ScaleRequest(BaseModel):
     replicas: int
+
+class DeploymentUpdateRequest(BaseModel):
+    replicas: Optional[int] = None
+    containers: Optional[List[dict]] = None
+    labels: Optional[dict] = None
+    strategy: Optional[dict] = None
+    env_vars: Optional[List[dict]] = None
+    resources: Optional[List[dict]] = None
+    node_selector: Optional[dict] = None
+    affinity: Optional[dict] = None
+    tolerations: Optional[List[dict]] = None
+    dns_policy: Optional[str] = None
+    dns_config: Optional[dict] = None
+    volumes: Optional[List[dict]] = None
+    volume_mounts: Optional[List[dict]] = None
+    security_context: Optional[dict] = None
+
+class YamlUpdateRequest(BaseModel):
+    yaml_content: str
+
+class ServiceUpdateRequest(BaseModel):
+    labels: Optional[dict] = None
+    selector: Optional[dict] = None
+    ports: Optional[List[dict]] = None
+    type: Optional[str] = None
+    session_affinity: Optional[str] = None
+    external_traffic_policy: Optional[str] = None
+
+class ServiceDetails(BaseModel):
+    name: str
+    namespace: str
+    type: str
+    cluster_ip: Optional[str]
+    external_ip: Optional[str]
+    ports: List[dict]
+    selector: dict
+    labels: dict
+    annotations: dict
+    age: str
+    session_affinity: Optional[str]
+    external_traffic_policy: Optional[str]
 
 @router.get("/", response_model=List[DeploymentInfo])
 @router.get("", response_model=List[DeploymentInfo])
@@ -239,3 +284,228 @@ async def delete_deployment_endpoint(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"删除部署失败: {str(e)}")
+
+@router.patch("/{namespace}/{deployment_name}")
+async def update_deployment_endpoint(
+    namespace: str,
+    deployment_name: str,
+    update_request: DeploymentUpdateRequest,
+    cluster_id: int = Query(..., description="集群ID"),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """更新部署"""
+    try:
+        if not isinstance(cluster_id, int) or cluster_id <= 0:
+            raise HTTPException(status_code=422, detail="无效的集群ID")
+
+        cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
+        if not cluster:
+            raise HTTPException(status_code=404, detail="集群不存在或未激活")
+
+        # 转换为字典格式传递给kubernetes函数
+        updates = update_request.dict(exclude_unset=True)
+        result = update_deployment(cluster, namespace, deployment_name, updates)
+        if result:
+            return {"message": f"部署 {namespace}/{deployment_name} 更新成功"}
+        else:
+            raise HTTPException(status_code=500, detail="更新部署失败")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"更新部署失败: {str(e)}")
+
+@router.get("/{namespace}/{deployment_name}/yaml")
+async def get_deployment_yaml_endpoint(
+    namespace: str,
+    deployment_name: str,
+    cluster_id: int = Query(..., description="集群ID"),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """获取部署的YAML配置"""
+    try:
+        if not isinstance(cluster_id, int) or cluster_id <= 0:
+            raise HTTPException(status_code=422, detail="无效的集群ID")
+
+        cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
+        if not cluster:
+            raise HTTPException(status_code=404, detail="集群不存在或未激活")
+
+        yaml_content = get_deployment_yaml(cluster, namespace, deployment_name)
+        if yaml_content:
+            return {"yaml": yaml_content}
+        else:
+            raise HTTPException(status_code=404, detail="获取部署YAML失败")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取部署YAML失败: {str(e)}")
+
+@router.put("/{namespace}/{deployment_name}/yaml")
+async def update_deployment_yaml_endpoint(
+    namespace: str,
+    deployment_name: str,
+    yaml_request: YamlUpdateRequest,
+    cluster_id: int = Query(..., description="集群ID"),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """通过YAML更新部署"""
+    try:
+        if not isinstance(cluster_id, int) or cluster_id <= 0:
+            raise HTTPException(status_code=422, detail="无效的集群ID")
+
+        cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
+        if not cluster:
+            raise HTTPException(status_code=404, detail="集群不存在或未激活")
+
+        result = update_deployment_yaml(cluster, namespace, deployment_name, yaml_request.yaml_content)
+        if result:
+            return {"message": f"部署 {namespace}/{deployment_name} YAML更新成功"}
+        else:
+            raise HTTPException(status_code=500, detail="更新部署YAML失败")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"更新部署YAML失败: {str(e)}")
+
+@router.get("/{namespace}/{deployment_name}/services", response_model=List[dict])
+async def get_deployment_services_endpoint(
+    namespace: str,
+    deployment_name: str,
+    cluster_id: int = Query(..., description="集群ID"),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """获取部署关联的服务"""
+    try:
+        if not isinstance(cluster_id, int) or cluster_id <= 0:
+            raise HTTPException(status_code=422, detail="无效的集群ID")
+
+        cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
+        if not cluster:
+            raise HTTPException(status_code=404, detail="集群不存在或未激活")
+
+        services = get_deployment_services(cluster, namespace, deployment_name)
+        return services
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取部署服务失败: {str(e)}")
+
+@router.get("/{namespace}/{deployment_name}/services/{service_name}", response_model=ServiceDetails)
+async def get_service_detail_endpoint(
+    namespace: str,
+    deployment_name: str,
+    service_name: str,
+    cluster_id: int = Query(..., description="集群ID"),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """获取服务详细信息"""
+    try:
+        if not isinstance(cluster_id, int) or cluster_id <= 0:
+            raise HTTPException(status_code=422, detail="无效的集群ID")
+
+        cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
+        if not cluster:
+            raise HTTPException(status_code=404, detail="集群不存在或未激活")
+
+        service_detail = get_service_details(cluster, namespace, service_name)
+        if service_detail:
+            return ServiceDetails(**service_detail)
+        else:
+            raise HTTPException(status_code=404, detail=f"未找到服务 {namespace}/{service_name}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取服务详情失败: {str(e)}")
+
+@router.patch("/{namespace}/{deployment_name}/services/{service_name}")
+async def update_service_endpoint(
+    namespace: str,
+    deployment_name: str,
+    service_name: str,
+    update_request: ServiceUpdateRequest,
+    cluster_id: int = Query(..., description="集群ID"),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """更新服务"""
+    try:
+        if not isinstance(cluster_id, int) or cluster_id <= 0:
+            raise HTTPException(status_code=422, detail="无效的集群ID")
+
+        cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
+        if not cluster:
+            raise HTTPException(status_code=404, detail="集群不存在或未激活")
+
+        # 转换为字典格式传递给kubernetes函数
+        updates = update_request.dict(exclude_unset=True)
+        result = update_service(cluster, namespace, service_name, updates)
+        if result:
+            return {"message": f"服务 {namespace}/{service_name} 更新成功"}
+        else:
+            raise HTTPException(status_code=500, detail="更新服务失败")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"更新服务失败: {str(e)}")
+
+@router.get("/{namespace}/{deployment_name}/services/{service_name}/yaml")
+async def get_service_yaml_endpoint(
+    namespace: str,
+    deployment_name: str,
+    service_name: str,
+    cluster_id: int = Query(..., description="集群ID"),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """获取服务的YAML配置"""
+    try:
+        if not isinstance(cluster_id, int) or cluster_id <= 0:
+            raise HTTPException(status_code=422, detail="无效的集群ID")
+
+        cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
+        if not cluster:
+            raise HTTPException(status_code=404, detail="集群不存在或未激活")
+
+        yaml_content = get_service_yaml(cluster, namespace, service_name)
+        if yaml_content:
+            return {"yaml": yaml_content}
+        else:
+            raise HTTPException(status_code=404, detail="获取服务YAML失败")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取服务YAML失败: {str(e)}")
+
+@router.put("/{namespace}/{deployment_name}/services/{service_name}/yaml")
+async def update_service_yaml_endpoint(
+    namespace: str,
+    deployment_name: str,
+    service_name: str,
+    yaml_request: YamlUpdateRequest,
+    cluster_id: int = Query(..., description="集群ID"),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """通过YAML更新服务"""
+    try:
+        if not isinstance(cluster_id, int) or cluster_id <= 0:
+            raise HTTPException(status_code=422, detail="无效的集群ID")
+
+        cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
+        if not cluster:
+            raise HTTPException(status_code=404, detail="集群不存在或未激活")
+
+        result = update_service_yaml(cluster, namespace, service_name, yaml_request.yaml_content)
+        if result:
+            return {"message": f"服务 {namespace}/{service_name} YAML更新成功"}
+        else:
+            raise HTTPException(status_code=500, detail="更新服务YAML失败")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"更新服务YAML失败: {str(e)}")

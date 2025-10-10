@@ -856,6 +856,409 @@ def delete_deployment(cluster: Cluster, namespace: str, deployment_name: str) ->
         if client_instance:
             client_instance.close()
 
+def update_deployment(cluster: Cluster, namespace: str, deployment_name: str, updates: Dict[str, Any]) -> bool:
+    """更新部署"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        apps_v1 = client.AppsV1Api(client_instance)
+
+        # 获取当前部署
+        deployment = apps_v1.read_namespaced_deployment(deployment_name, namespace)
+
+        # 更新副本数
+        if 'replicas' in updates:
+            deployment.spec.replicas = updates['replicas']
+
+        # 更新镜像和镜像拉取策略
+        if 'containers' in updates:
+            for container_update in updates['containers']:
+                container_name = container_update.get('name')
+                for container in deployment.spec.template.spec.containers:
+                    if container.name == container_name:
+                        if 'image' in container_update:
+                            container.image = container_update['image']
+                        if 'image_pull_policy' in container_update:
+                            container.image_pull_policy = container_update['image_pull_policy']
+                        break
+
+        # 更新标签
+        if 'labels' in updates:
+            deployment.metadata.labels = updates['labels']
+
+        # 更新策略
+        if 'strategy' in updates:
+            if 'type' in updates['strategy']:
+                deployment.spec.strategy.type = updates['strategy']['type']
+            if 'rolling_update' in updates['strategy']:
+                if not deployment.spec.strategy.rolling_update:
+                    deployment.spec.strategy.rolling_update = client.V1RollingUpdateDeployment()
+                ru = updates['strategy']['rolling_update']
+                if 'max_unavailable' in ru:
+                    deployment.spec.strategy.rolling_update.max_unavailable = ru['max_unavailable']
+                if 'max_surge' in ru:
+                    deployment.spec.strategy.rolling_update.max_surge = ru['max_surge']
+
+        # 更新环境变量
+        if 'env_vars' in updates:
+            for container_update in updates['env_vars']:
+                container_name = container_update.get('name')
+                for container in deployment.spec.template.spec.containers:
+                    if container.name == container_name:
+                        if not container.env:
+                            container.env = []
+                        # 清除现有环境变量
+                        container.env = []
+                        # 添加新环境变量
+                        for env_var in container_update.get('env', []):
+                            env_obj = client.V1EnvVar(name=env_var['name'], value=env_var.get('value'))
+                            container.env.append(env_obj)
+                        break
+
+        # 更新资源限制
+        if 'resources' in updates:
+            for container_update in updates['resources']:
+                container_name = container_update.get('name')
+                for container in deployment.spec.template.spec.containers:
+                    if container.name == container_name:
+                        if not container.resources:
+                            container.resources = client.V1ResourceRequirements()
+                        if 'requests' in container_update:
+                            container.resources.requests = container_update['requests']
+                        if 'limits' in container_update:
+                            container.resources.limits = container_update['limits']
+                        break
+
+        # 更新节点调度策略
+        if 'node_selector' in updates:
+            deployment.spec.template.spec.node_selector = updates['node_selector']
+
+        if 'affinity' in updates:
+            deployment.spec.template.spec.affinity = updates['affinity']
+
+        if 'tolerations' in updates:
+            deployment.spec.template.spec.tolerations = []
+            for toleration in updates['tolerations']:
+                tol = client.V1Toleration(
+                    key=toleration.get('key'),
+                    operator=toleration.get('operator', 'Equal'),
+                    value=toleration.get('value'),
+                    effect=toleration.get('effect')
+                )
+                deployment.spec.template.spec.tolerations.append(tol)
+
+        # 更新DNS配置
+        if 'dns_policy' in updates:
+            deployment.spec.template.spec.dns_policy = updates['dns_policy']
+
+        if 'dns_config' in updates:
+            dns_config = updates['dns_config']
+            deployment.spec.template.spec.dns_config = client.V1PodDNSConfig(
+                nameservers=dns_config.get('nameservers', []),
+                searches=dns_config.get('searches', []),
+                options=[client.V1PodDNSConfigOption(name=opt['name'], value=opt.get('value'))
+                        for opt in dns_config.get('options', [])]
+            )
+
+        # 更新存储挂载
+        if 'volumes' in updates:
+            deployment.spec.template.spec.volumes = []
+            for volume in updates['volumes']:
+                vol = client.V1Volume(name=volume['name'])
+                if 'config_map' in volume:
+                    vol.config_map = client.V1ConfigMapVolumeSource(name=volume['config_map']['name'])
+                elif 'secret' in volume:
+                    vol.secret = client.V1SecretVolumeSource(secret_name=volume['secret']['name'])
+                elif 'persistent_volume_claim' in volume:
+                    vol.persistent_volume_claim = client.V1PersistentVolumeClaimVolumeSource(
+                        claim_name=volume['persistent_volume_claim']['claim_name']
+                    )
+                deployment.spec.template.spec.volumes.append(vol)
+
+        # 更新容器挂载点
+        if 'volume_mounts' in updates:
+            for container_update in updates['volume_mounts']:
+                container_name = container_update.get('name')
+                for container in deployment.spec.template.spec.containers:
+                    if container.name == container_name:
+                        container.volume_mounts = []
+                        for mount in container_update.get('mounts', []):
+                            vm = client.V1VolumeMount(
+                                name=mount['name'],
+                                mount_path=mount['mount_path'],
+                                read_only=mount.get('read_only', False)
+                            )
+                            container.volume_mounts.append(vm)
+                        break
+
+        # 更新安全上下文
+        if 'security_context' in updates:
+            sc = updates['security_context']
+            deployment.spec.template.spec.security_context = client.V1PodSecurityContext(
+                run_as_user=sc.get('run_as_user'),
+                run_as_group=sc.get('run_as_group'),
+                fs_group=sc.get('fs_group')
+            )
+
+        # 执行更新
+        apps_v1.patch_namespaced_deployment(deployment_name, namespace, deployment)
+        return True
+
+    except Exception as e:
+        print(f"更新部署失败: {e}")
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
+
+def get_deployment_yaml(cluster: Cluster, namespace: str, deployment_name: str) -> Optional[str]:
+    """获取部署的YAML配置"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return None
+
+    try:
+        apps_v1 = client.AppsV1Api(client_instance)
+        deployment = apps_v1.read_namespaced_deployment(deployment_name, namespace)
+
+        # 转换为YAML
+        from kubernetes import utils
+        import yaml
+        yaml_content = yaml.dump(deployment.to_dict(), default_flow_style=False)
+        return yaml_content
+
+    except Exception as e:
+        print(f"获取部署YAML失败: {e}")
+        return None
+    finally:
+        if client_instance:
+            client_instance.close()
+
+def update_deployment_yaml(cluster: Cluster, namespace: str, deployment_name: str, yaml_content: str) -> bool:
+    """通过YAML更新部署"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        import yaml
+        from kubernetes.client import ApiClient
+
+        # 解析YAML
+        deployment_dict = yaml.safe_load(yaml_content)
+
+        # 创建部署对象
+        apps_v1 = client.AppsV1Api(client_instance)
+        deployment = apps_v1.api_client._ApiClient__deserialize(deployment_dict, 'V1Deployment')
+
+        # 更新部署
+        apps_v1.patch_namespaced_deployment(deployment_name, namespace, deployment)
+        return True
+
+    except Exception as e:
+        print(f"更新部署YAML失败: {e}")
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
+
+def get_deployment_services(cluster: Cluster, namespace: str, deployment_name: str) -> List[Dict[str, Any]]:
+    """获取部署关联的服务"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return []
+
+    try:
+        # 先获取deployment的selector labels
+        apps_v1 = client.AppsV1Api(client_instance)
+        deployment = apps_v1.read_namespaced_deployment(deployment_name, namespace)
+
+        if not deployment.spec.selector or not deployment.spec.selector.match_labels:
+            return []
+
+        deployment_labels = deployment.spec.selector.match_labels
+
+        # 获取所有服务，找出匹配的
+        core_v1 = client.CoreV1Api(client_instance)
+        services = core_v1.list_namespaced_service(namespace)
+
+        matching_services = []
+        for service in services.items:
+            if service.spec.selector:
+                # 检查服务选择器是否匹配部署标签
+                if all(service.spec.selector.get(k) == v for k, v in deployment_labels.items()):
+                    matching_services.append({
+                        "name": service.metadata.name,
+                        "type": service.spec.type,
+                        "cluster_ip": service.spec.cluster_ip,
+                        "external_ip": getattr(service.status, 'load_balancer', {}).get('ingress', [{}])[0].get('ip', None) if service.spec.type == 'LoadBalancer' else None,
+                        "ports": [{"port": port.port, "target_port": port.target_port, "protocol": port.protocol} for port in (service.spec.ports or [])],
+                        "selector": service.spec.selector or {},
+                        "labels": service.metadata.labels or {},
+                        "age": service.metadata.creation_timestamp
+                    })
+
+        return matching_services
+
+    except Exception as e:
+        print(f"获取部署服务失败: {e}")
+        return []
+    finally:
+        if client_instance:
+            client_instance.close()
+
+def get_service_details(cluster: Cluster, namespace: str, service_name: str) -> Optional[Dict[str, Any]]:
+    """获取服务详细信息"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return None
+
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+        service = core_v1.read_namespaced_service(service_name, namespace)
+
+        # 计算年龄
+        from datetime import datetime
+        age = "Unknown"
+        if service.metadata.creation_timestamp:
+            created = service.metadata.creation_timestamp.replace(tzinfo=None)
+            now = datetime.now()
+            delta = now - created
+            if delta.days > 0:
+                age = f"{delta.days}d"
+            elif delta.seconds // 3600 > 0:
+                age = f"{delta.seconds // 3600}h"
+            elif delta.seconds // 60 > 0:
+                age = f"{delta.seconds // 60}m"
+            else:
+                age = f"{delta.seconds}s"
+
+        return {
+            "name": service.metadata.name,
+            "namespace": namespace,
+            "type": service.spec.type,
+            "cluster_ip": service.spec.cluster_ip,
+            "external_ip": getattr(service.status, 'load_balancer', {}).get('ingress', [{}])[0].get('ip', None) if service.spec.type == 'LoadBalancer' else None,
+            "ports": [{"port": port.port, "target_port": port.target_port, "protocol": port.protocol, "name": getattr(port, 'name', None)} for port in (service.spec.ports or [])],
+            "selector": service.spec.selector or {},
+            "labels": service.metadata.labels or {},
+            "annotations": service.metadata.annotations or {},
+            "age": age,
+            "session_affinity": service.spec.session_affinity,
+            "external_traffic_policy": getattr(service.spec, 'external_traffic_policy', None)
+        }
+
+    except Exception as e:
+        print(f"获取服务详情失败: {e}")
+        return None
+    finally:
+        if client_instance:
+            client_instance.close()
+
+def update_service(cluster: Cluster, namespace: str, service_name: str, updates: Dict[str, Any]) -> bool:
+    """更新服务"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+
+        # 获取当前服务
+        service = core_v1.read_namespaced_service(service_name, namespace)
+
+        # 更新标签
+        if 'labels' in updates:
+            service.metadata.labels = updates['labels']
+
+        # 更新选择器
+        if 'selector' in updates:
+            service.spec.selector = updates['selector']
+
+        # 更新端口
+        if 'ports' in updates:
+            service.spec.ports = []
+            for port_data in updates['ports']:
+                port = client.V1ServicePort(
+                    port=port_data['port'],
+                    target_port=port_data.get('target_port', port_data['port']),
+                    protocol=port_data.get('protocol', 'TCP'),
+                    name=port_data.get('name')
+                )
+                service.spec.ports.append(port)
+
+        # 更新类型
+        if 'type' in updates:
+            service.spec.type = updates['type']
+
+        # 更新会话亲和性
+        if 'session_affinity' in updates:
+            service.spec.session_affinity = updates['session_affinity']
+
+        # 更新外部流量策略
+        if 'external_traffic_policy' in updates:
+            service.spec.external_traffic_policy = updates['external_traffic_policy']
+
+        # 执行更新
+        core_v1.patch_namespaced_service(service_name, namespace, service)
+        return True
+
+    except Exception as e:
+        print(f"更新服务失败: {e}")
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
+
+def get_service_yaml(cluster: Cluster, namespace: str, service_name: str) -> Optional[str]:
+    """获取服务的YAML配置"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return None
+
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+        service = core_v1.read_namespaced_service(service_name, namespace)
+
+        # 转换为YAML
+        import yaml
+        yaml_content = yaml.dump(service.to_dict(), default_flow_style=False)
+        return yaml_content
+
+    except Exception as e:
+        print(f"获取服务YAML失败: {e}")
+        return None
+    finally:
+        if client_instance:
+            client_instance.close()
+
+def update_service_yaml(cluster: Cluster, namespace: str, service_name: str, yaml_content: str) -> bool:
+    """通过YAML更新服务"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        import yaml
+        core_v1 = client.CoreV1Api(client_instance)
+
+        # 解析YAML
+        service_dict = yaml.safe_load(yaml_content)
+        service = core_v1.api_client._ApiClient__deserialize(service_dict, 'V1Service')
+
+        # 更新服务
+        core_v1.patch_namespaced_service(service_name, namespace, service)
+        return True
+
+    except Exception as e:
+        print(f"更新服务YAML失败: {e}")
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
+
 
 def get_namespace_services(cluster: Cluster, namespace_name: str) -> List[Dict[str, Any]]:
     """获取命名空间中的服务"""

@@ -11,6 +11,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { ArrowLeft, Activity, Cpu, MemoryStick, Loader2, RefreshCw, AlertCircle, Play, Square, RotateCcw, Trash2, Settings } from "lucide-react";
+import DeploymentConfigTab from "@/components/DeploymentConfigTab";
+import DeploymentYamlTab from "@/components/DeploymentYamlTab";
+import DeploymentServicesTab from "@/components/DeploymentServicesTab";
+import DeploymentScalingTab from "@/components/DeploymentScalingTab";
 
 interface DeploymentDetails {
   name: string;
@@ -362,8 +366,12 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="overview">概览</TabsTrigger>
+            <TabsTrigger value="config">配置</TabsTrigger>
+            <TabsTrigger value="yaml">YAML</TabsTrigger>
+            <TabsTrigger value="services">服务</TabsTrigger>
+            <TabsTrigger value="scaling">伸缩</TabsTrigger>
             <TabsTrigger value="pods">Pods</TabsTrigger>
           </TabsList>
 
@@ -502,6 +510,97 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
                 </CardContent>
               </Card>
             )}
+          </TabsContent>
+
+          {/* Pods标签页 */}
+          <TabsContent value="pods" className="space-y-6">
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin mr-2" />
+                <span className="text-lg">加载中...</span>
+              </div>
+            ) : deploymentPods.length === 0 ? (
+              <Card>
+                <CardContent className="flex flex-col items-center justify-center py-12">
+                  <Activity className="h-12 w-12 text-gray-400 mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                    暂无Pods
+                  </h3>
+                  <p className="text-gray-600 dark:text-gray-400">
+                    该部署当前没有运行中的Pods
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid grid-cols-1 gap-4">
+                {deploymentPods.map((pod) => (
+                  <Card key={pod.name}>
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          <CardTitle className="text-lg">{pod.name}</CardTitle>
+                          <Badge variant={
+                            pod.status === 'Running' ? 'default' :
+                            pod.status === 'Pending' ? 'secondary' :
+                            pod.status === 'Succeeded' ? 'default' :
+                            pod.status === 'Failed' ? 'destructive' : 'outline'
+                          }>
+                            {pod.status}
+                          </Badge>
+                        </div>
+                        <Link href={`/pods/${pod.namespace}/${pod.name}?cluster_id=${clusterId}`}>
+                          <Button variant="outline" size="sm">
+                            查看详情
+                          </Button>
+                        </Link>
+                      </div>
+                      <CardDescription>
+                        节点: {pod.node_name || '未调度'} •
+                        容器: {pod.ready_containers} •
+                        重启: {pod.restarts} •
+                        年龄: {pod.age}
+                      </CardDescription>
+                    </CardHeader>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          {/* 配置标签页 */}
+          <TabsContent value="config" className="space-y-6">
+            <DeploymentConfigTab
+              deploymentDetails={deploymentDetails}
+              clusterId={clusterId}
+              onUpdate={fetchDeploymentData}
+            />
+          </TabsContent>
+
+          {/* YAML标签页 */}
+          <TabsContent value="yaml" className="space-y-6">
+            <DeploymentYamlTab
+              namespace={resolvedParams.namespace}
+              deployment={resolvedParams.deployment}
+              clusterId={clusterId}
+            />
+          </TabsContent>
+
+          {/* 服务标签页 */}
+          <TabsContent value="services" className="space-y-6">
+            <DeploymentServicesTab
+              namespace={resolvedParams.namespace}
+              deployment={resolvedParams.deployment}
+              clusterId={clusterId}
+            />
+          </TabsContent>
+
+          {/* 伸缩标签页 */}
+          <TabsContent value="scaling" className="space-y-6">
+            <DeploymentScalingTab
+              deploymentDetails={deploymentDetails}
+              clusterId={clusterId}
+              onScale={fetchDeploymentData}
+            />
           </TabsContent>
 
           {/* Pods标签页 */}
