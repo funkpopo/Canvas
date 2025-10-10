@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Kubernetes管理面板",
-  description: "Kubernetes集群管理界面",
+  title: "Canvas",
+  description: "Kubernetes集群管理",
 };
 
 export default function RootLayout({

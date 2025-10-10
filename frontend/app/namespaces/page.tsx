@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Users, Plus, Trash2, Loader2, Activity } from "lucide-react";
+import { ArrowLeft, FolderPen, Plus, Trash2, Loader2, Activity } from "lucide-react";
 import { useCluster } from "@/lib/cluster-context";
 import ClusterSelector from "@/components/ClusterSelector";
 import AuthGuard from "@/components/AuthGuard";
@@ -278,7 +278,7 @@ function NamespacesPageContent() {
         ) : namespaces.length === 0 ? (
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-12">
-              <Users className="h-12 w-12 text-gray-400 mb-4" />
+              <FolderPen className="h-12 w-12 text-gray-400 mb-4" />
               <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
                 暂无命名空间
               </h3>

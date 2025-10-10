@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { LogOut, Server, Users, Activity, Settings, Database, Loader2 } from "lucide-react";
+import { LogOut, Server, FolderPen, Activity, Settings, Database, Loader2 } from "lucide-react";
 import ClusterSelector from "@/components/ClusterSelector";
 import { useAuth } from "@/lib/auth-context";
 
@@ -80,7 +80,7 @@ export default function Home() {
             <div className="flex items-center">
               <Server className="h-8 w-8 text-blue-600" />
               <h1 className="ml-2 text-xl font-semibold text-gray-900 dark:text-white">
-                Kubernetes管理面板
+                Canvas
               </h1>
             </div>
             <div className="flex items-center space-x-4">
@@ -98,7 +98,7 @@ export default function Home() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <h2 className="text-3xl font-bold text-gray-900 dark:text-white">
-            欢迎使用Kubernetes管理面板
+            欢迎使用Canvas
           </h2>
           <p className="mt-2 text-gray-600 dark:text-gray-400">
             管理您的Kubernetes集群资源
@@ -130,7 +130,7 @@ export default function Home() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">命名空间</CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
+              <FolderPen className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               {isLoadingStats ? (
@@ -206,7 +206,7 @@ export default function Home() {
               </Button>
               <Button variant="outline" className="h-20 flex-col" asChild>
                 <Link href="/namespaces">
-                  <Users className="h-6 w-6 mb-2" />
+                  <FolderPen className="h-6 w-6 mb-2" />
                   命名空间
                 </Link>
               </Button>

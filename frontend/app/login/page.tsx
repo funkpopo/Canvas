@@ -57,7 +57,7 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl text-center">Kubernetes管理面板</CardTitle>
+          <CardTitle className="text-2xl text-center">Canvas</CardTitle>
           <CardDescription className="text-center">
             请输入您的凭据登录
           </CardDescription>

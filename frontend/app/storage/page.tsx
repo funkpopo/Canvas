@@ -302,7 +302,7 @@ export default function StorageManagement() {
             <div className="flex items-center">
               <Database className="h-8 w-8 text-blue-600" />
               <h1 className="ml-2 text-xl font-semibold text-gray-900 dark:text-white">
-                Kubernetes管理面板
+                Canvas
               </h1>
             </div>
             <div className="flex items-center space-x-4">
