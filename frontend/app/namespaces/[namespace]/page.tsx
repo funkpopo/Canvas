@@ -396,48 +396,50 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
             ) : (
               <div className="grid grid-cols-1 gap-4">
                 {deployments.map((deployment) => (
-                  <Card key={deployment.name}>
-                    <CardHeader>
-                      <div className="flex items-center justify-between">
-                        <CardTitle className="text-lg">{deployment.name}</CardTitle>
-                        <Badge variant={deployment.status === "Running" ? "default" : "secondary"}>
-                          {deployment.status}
-                        </Badge>
-                      </div>
-                      <CardDescription>
-                        副本: {deployment.ready_replicas}/{deployment.replicas} •
-                        可用: {deployment.available_replicas} •
-                        更新: {deployment.updated_replicas} •
-                        创建时间: {formatAge(deployment.age)}
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-2">
-                        <div>
-                          <h4 className="text-sm font-medium mb-1">镜像:</h4>
-                          <div className="flex flex-wrap gap-1">
-                            {deployment.images.map((image, index) => (
-                              <Badge key={index} variant="outline" className="text-xs">
-                                {image}
-                              </Badge>
-                            ))}
-                          </div>
+                  <Link key={deployment.name} href={`/deployments/${resolvedParams.namespace}/${deployment.name}?cluster_id=${clusterId}`}>
+                    <Card className="cursor-pointer hover:shadow-md transition-shadow">
+                      <CardHeader>
+                        <div className="flex items-center justify-between">
+                          <CardTitle className="text-lg">{deployment.name}</CardTitle>
+                          <Badge variant={deployment.status === "Running" ? "default" : "secondary"}>
+                            {deployment.status}
+                          </Badge>
                         </div>
-                        {Object.keys(deployment.labels).length > 0 && (
+                        <CardDescription>
+                          副本: {deployment.ready_replicas}/{deployment.replicas} •
+                          可用: {deployment.available_replicas} •
+                          更新: {deployment.updated_replicas} •
+                          创建时间: {formatAge(deployment.age)}
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-2">
                           <div>
-                            <h4 className="text-sm font-medium mb-1">标签:</h4>
+                            <h4 className="text-sm font-medium mb-1">镜像:</h4>
                             <div className="flex flex-wrap gap-1">
-                              {Object.entries(deployment.labels).map(([key, value]) => (
-                                <Badge key={key} variant="secondary" className="text-xs">
-                                  {key}: {value}
+                              {deployment.images.map((image, index) => (
+                                <Badge key={index} variant="outline" className="text-xs">
+                                  {image}
                                 </Badge>
                               ))}
                             </div>
                           </div>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
+                          {Object.keys(deployment.labels).length > 0 && (
+                            <div>
+                              <h4 className="text-sm font-medium mb-1">标签:</h4>
+                              <div className="flex flex-wrap gap-1">
+                                {Object.entries(deployment.labels).map(([key, value]) => (
+                                  <Badge key={key} variant="secondary" className="text-xs">
+                                    {key}: {value}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </Link>
                 ))}
               </div>
             )}

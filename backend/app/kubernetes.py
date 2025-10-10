@@ -567,21 +567,291 @@ def get_namespace_deployments(cluster: Cluster, namespace_name: str) -> List[Dic
 
         result = []
         for deployment in deployments.items:
+            # 计算年龄
+            age = "Unknown"
+            if deployment.metadata.creation_timestamp:
+                from datetime import datetime
+                created = deployment.metadata.creation_timestamp.replace(tzinfo=None)
+                now = datetime.now()
+                delta = now - created
+                if delta.days > 0:
+                    age = f"{delta.days}d"
+                elif delta.seconds // 3600 > 0:
+                    age = f"{delta.seconds // 3600}h"
+                elif delta.seconds // 60 > 0:
+                    age = f"{delta.seconds // 60}m"
+                else:
+                    age = f"{delta.seconds}s"
+
             result.append({
                 "name": deployment.metadata.name,
-                "replicas": deployment.spec.replicas,
+                "namespace": namespace_name,
+                "replicas": deployment.spec.replicas or 0,
                 "ready_replicas": deployment.status.ready_replicas or 0,
                 "available_replicas": deployment.status.available_replicas or 0,
                 "updated_replicas": deployment.status.updated_replicas or 0,
-                "age": deployment.metadata.creation_timestamp,
+                "age": age,
                 "images": [container.image for container in deployment.spec.template.spec.containers],
                 "labels": deployment.metadata.labels or {},
-                "status": "Running" if deployment.status.ready_replicas == deployment.spec.replicas else "Updating"
+                "status": "Running" if (deployment.status.ready_replicas or 0) == (deployment.spec.replicas or 0) else "Updating"
             })
         return result
     except Exception as e:
         print(f"获取命名空间部署信息失败: {e}")
         return []
+    finally:
+        if client_instance:
+            client_instance.close()
+
+def get_deployment_details(cluster: Cluster, namespace: str, deployment_name: str) -> Optional[Dict[str, Any]]:
+    """获取部署详细信息"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return None
+
+    try:
+        apps_v1 = client.AppsV1Api(client_instance)
+        deployment = apps_v1.read_namespaced_deployment(deployment_name, namespace)
+
+        # 计算年龄
+        age = "Unknown"
+        creation_timestamp = ""
+        if deployment.metadata.creation_timestamp:
+            from datetime import datetime
+            created = deployment.metadata.creation_timestamp.replace(tzinfo=None)
+            now = datetime.now()
+            delta = now - created
+            creation_timestamp = str(deployment.metadata.creation_timestamp)
+            if delta.days > 0:
+                age = f"{delta.days}d"
+            elif delta.seconds // 3600 > 0:
+                age = f"{delta.seconds // 3600}h"
+            elif delta.seconds // 60 > 0:
+                age = f"{delta.seconds // 60}m"
+            else:
+                age = f"{delta.seconds}s"
+
+        # 获取条件状态
+        conditions = []
+        if deployment.status.conditions:
+            for condition in deployment.status.conditions:
+                conditions.append({
+                    "type": condition.type,
+                    "status": condition.status,
+                    "last_update_time": str(condition.last_update_time) if condition.last_update_time else None,
+                    "last_transition_time": str(condition.last_transition_time) if condition.last_transition_time else None,
+                    "reason": condition.reason,
+                    "message": condition.message
+                })
+
+        # 构建spec信息
+        spec = {
+            "replicas": deployment.spec.replicas,
+            "selector": deployment.spec.selector.match_labels if deployment.spec.selector else {},
+            "strategy": {
+                "type": deployment.spec.strategy.type if deployment.spec.strategy else "RollingUpdate",
+                "rolling_update": {
+                    "max_unavailable": str(deployment.spec.strategy.rolling_update.max_unavailable) if deployment.spec.strategy and deployment.spec.strategy.rolling_update else "25%",
+                    "max_surge": str(deployment.spec.strategy.rolling_update.max_surge) if deployment.spec.strategy and deployment.spec.strategy.rolling_update else "25%"
+                } if deployment.spec.strategy and deployment.spec.strategy.rolling_update else {}
+            } if deployment.spec.strategy else {},
+            "template": {
+                "spec": {
+                    "containers": [{
+                        "name": container.name,
+                        "image": container.image,
+                        "ports": [{"container_port": port.container_port, "protocol": port.protocol} for port in (container.ports or [])],
+                        "resources": {
+                            "requests": dict(container.resources.requests) if container.resources and container.resources.requests else {},
+                            "limits": dict(container.resources.limits) if container.resources and container.resources.limits else {}
+                        } if container.resources else {}
+                    } for container in deployment.spec.template.spec.containers]
+                }
+            }
+        }
+
+        # 构建status信息
+        status = {
+            "replicas": deployment.status.replicas or 0,
+            "ready_replicas": deployment.status.ready_replicas or 0,
+            "available_replicas": deployment.status.available_replicas or 0,
+            "updated_replicas": deployment.status.updated_replicas or 0,
+            "unavailable_replicas": deployment.status.unavailable_replicas or 0,
+            "conditions": conditions
+        }
+
+        return {
+            "name": deployment.metadata.name,
+            "namespace": namespace,
+            "replicas": deployment.spec.replicas or 0,
+            "ready_replicas": deployment.status.ready_replicas or 0,
+            "available_replicas": deployment.status.available_replicas or 0,
+            "updated_replicas": deployment.status.updated_replicas or 0,
+            "unavailable_replicas": deployment.status.unavailable_replicas or 0,
+            "age": age,
+            "creation_timestamp": creation_timestamp,
+            "strategy": spec["strategy"],
+            "selector": spec["selector"],
+            "labels": dict(deployment.metadata.labels) if deployment.metadata.labels else {},
+            "annotations": dict(deployment.metadata.annotations) if deployment.metadata.annotations else {},
+            "conditions": conditions,
+            "spec": spec,
+            "status": status
+        }
+
+    except Exception as e:
+        print(f"获取部署详情失败: {e}")
+        return None
+    finally:
+        if client_instance:
+            client_instance.close()
+
+def get_deployment_pods(cluster: Cluster, namespace: str, deployment_name: str) -> List[Dict[str, Any]]:
+    """获取部署管理的Pods"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return []
+
+    try:
+        # 先获取deployment的selector labels
+        apps_v1 = client.AppsV1Api(client_instance)
+        deployment = apps_v1.read_namespaced_deployment(deployment_name, namespace)
+
+        if not deployment.spec.selector or not deployment.spec.selector.match_labels:
+            return []
+
+        selector_labels = deployment.spec.selector.match_labels
+
+        # 构建selector字符串
+        label_selector = ",".join([f"{k}={v}" for k, v in selector_labels.items()])
+
+        # 获取匹配的pods
+        core_v1 = client.CoreV1Api(client_instance)
+        pods = core_v1.list_namespaced_pod(namespace, label_selector=label_selector)
+
+        pod_list = []
+        for pod in pods.items:
+            # 获取Pod状态
+            status = pod.status.phase
+
+            # 获取容器重启次数
+            restarts = 0
+            ready_containers = "0/0"
+            if pod.status.container_statuses:
+                total_containers = len(pod.status.container_statuses)
+                ready_count = sum(1 for cs in pod.status.container_statuses if cs.ready)
+                ready_containers = f"{ready_count}/{total_containers}"
+                restarts = sum(cs.restart_count for cs in pod.status.container_statuses if cs.restart_count)
+
+            # 计算Pod年龄
+            age = "Unknown"
+            if pod.metadata.creation_timestamp:
+                from datetime import datetime
+                created = pod.metadata.creation_timestamp.replace(tzinfo=None)
+                now = datetime.now()
+                delta = now - created
+                if delta.days > 0:
+                    age = f"{delta.days}d"
+                elif delta.seconds // 3600 > 0:
+                    age = f"{delta.seconds // 3600}h"
+                elif delta.seconds // 60 > 0:
+                    age = f"{delta.seconds // 60}m"
+                else:
+                    age = f"{delta.seconds}s"
+
+            pod_info = {
+                "name": pod.metadata.name,
+                "namespace": pod.metadata.namespace,
+                "status": status,
+                "node_name": pod.spec.node_name,
+                "age": age,
+                "restarts": restarts,
+                "ready_containers": ready_containers,
+                "labels": dict(pod.metadata.labels) if pod.metadata.labels else {}
+            }
+            pod_list.append(pod_info)
+
+        return pod_list
+
+    except Exception as e:
+        print(f"获取部署Pods失败: {e}")
+        return []
+    finally:
+        if client_instance:
+            client_instance.close()
+
+def scale_deployment(cluster: Cluster, namespace: str, deployment_name: str, replicas: int) -> bool:
+    """扩容/缩容部署"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        apps_v1 = client.AppsV1Api(client_instance)
+
+        # 创建scale对象
+        scale = client.V1Scale(
+            spec=client.V1ScaleSpec(replicas=replicas)
+        )
+
+        # 执行scale操作
+        apps_v1.patch_namespaced_deployment_scale(deployment_name, namespace, scale)
+        return True
+
+    except Exception as e:
+        print(f"调整部署副本数失败: {e}")
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
+
+def restart_deployment(cluster: Cluster, namespace: str, deployment_name: str) -> bool:
+    """重启部署"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        apps_v1 = client.AppsV1Api(client_instance)
+
+        # 通过更新注解来重启deployment
+        from datetime import datetime
+        restart_annotation = {
+            "spec": {
+                "template": {
+                    "metadata": {
+                        "annotations": {
+                            "kubectl.kubernetes.io/restartedAt": datetime.utcnow().isoformat() + "Z"
+                        }
+                    }
+                }
+            }
+        }
+
+        apps_v1.patch_namespaced_deployment(deployment_name, namespace, restart_annotation)
+        return True
+
+    except Exception as e:
+        print(f"重启部署失败: {e}")
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
+
+def delete_deployment(cluster: Cluster, namespace: str, deployment_name: str) -> bool:
+    """删除部署"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        apps_v1 = client.AppsV1Api(client_instance)
+        apps_v1.delete_namespaced_deployment(deployment_name, namespace)
+        return True
+
+    except Exception as e:
+        print(f"删除部署失败: {e}")
+        return False
     finally:
         if client_instance:
             client_instance.close()
