@@ -1281,7 +1281,7 @@ def get_namespace_services(cluster: Cluster, namespace_name: str) -> List[Dict[s
                 "type": service.spec.type,
                 "cluster_ip": service.spec.cluster_ip,
                 "external_ip": getattr(service.status, 'load_balancer', {}).get('ingress', [{}])[0].get('ip', None) if service.spec.type == 'LoadBalancer' else None,
-                "ports": [{"port": port.port, "target_port": port.target_port, "protocol": port.protocol} for port in (service.spec.ports or [])],
+                "ports": [{"port": port.port, "target_port": port.target_port, "protocol": port.protocol, "node_port": getattr(port, 'node_port', None)} for port in (service.spec.ports or [])],
                 "selector": service.spec.selector or {},
                 "age": service.metadata.creation_timestamp,
                 "labels": service.metadata.labels or {}

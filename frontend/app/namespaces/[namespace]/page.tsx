@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Activity, Loader2, RefreshCw, Users, Settings, FileText, Database, Cpu, MemoryStick, AlertCircle, HardDrive } from "lucide-react";
+import { ArrowLeft, Activity, Loader2, RefreshCw, Users, Settings, FileText, Database, Cpu, MemoryStick, AlertCircle, HardDrive, ExternalLink } from "lucide-react";
 
 interface NamespaceResources {
   cpu_requests: string;
@@ -42,6 +42,7 @@ interface Service {
     port: number;
     target_port: number | string;
     protocol: string;
+    node_port?: number;
   }>;
   selector: Record<string, string>;
   age: string;
@@ -521,6 +522,34 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
                             ))}
                           </div>
                         </div>
+                        {service.type === 'NodePort' && service.ports.some(port => port.node_port) && (
+                          <div>
+                            <h4 className="text-sm font-medium mb-1">访问地址:</h4>
+                            <div className="flex flex-wrap gap-2">
+                              {service.ports.filter(port => port.node_port).map((port, index) => (
+                                <Button
+                                  key={index}
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    const protocol = port.protocol === 'TCP' ? 'http' : 'https';
+                                    const url = `${protocol}://<node-ip>:${port.node_port}`;
+                                    navigator.clipboard.writeText(url).then(() => {
+                                      alert('访问URL已复制到剪贴板，请将 <node-ip> 替换为集群节点的实际IP地址');
+                                    }).catch(() => {
+                                      alert(`访问URL: ${url}\n请将 <node-ip> 替换为集群节点的实际IP地址`);
+                                    });
+                                  }}
+                                  className="text-xs h-7"
+                                >
+                                  <ExternalLink className="h-3 w-3 mr-1" />
+                                  NodePort {port.node_port}
+                                </Button>
+                              ))}
+                            </div>
+                            <p className="text-xs text-gray-500 mt-1">请将 &lt;node-ip&gt; 替换为集群节点的实际IP地址</p>
+                          </div>
+                        )}
                         {Object.keys(service.selector).length > 0 && (
                           <div>
                             <h4 className="text-sm font-medium mb-1">选择器:</h4>
