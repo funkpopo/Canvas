@@ -85,6 +85,9 @@ export function ClusterProvider({ children }: { children: ReactNode }) {
     }
 
     try {
+      // 先设置本地状态，避免UI闪烁
+      _setActiveClusterLocal(cluster);
+
       await Promise.all(
         clusters.map((c) =>
           fetch(`http://localhost:8000/api/clusters/${c.id}`, {
@@ -101,6 +104,8 @@ export function ClusterProvider({ children }: { children: ReactNode }) {
       await refreshClusters();
     } catch (err) {
       console.error("设置激活集群失败:", err);
+      // 失败时恢复到之前的活跃集群状态
+      await refreshClusters();
     }
   };
 

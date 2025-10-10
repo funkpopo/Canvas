@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ArrowLeft, Activity, Square, FileText, Loader2, RefreshCw } from "lucide-react";
 import { useCluster } from "@/lib/cluster-context";
 import ClusterSelector from "@/components/ClusterSelector";
+import AuthGuard from "@/components/AuthGuard";
 
 interface PodInfo {
   name: string;
@@ -24,8 +25,7 @@ interface PodInfo {
   cluster_id: number;
 }
 
-export default function PodsPage() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+function PodsPageContent() {
   const [pods, setPods] = useState<PodInfo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedNamespace, setSelectedNamespace] = useState<string>("");
@@ -34,21 +34,11 @@ export default function PodsPage() {
   const { activeCluster, isLoading: isClusterLoading } = useCluster();
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      router.push("/login");
-      return;
-    }
-
-    setIsAuthenticated(true);
-  }, [router]);
-
-  useEffect(() => {
-    // 只有在认证完成且集群加载完成后才获取数据
-    if (isAuthenticated && !isClusterLoading) {
+    // 只有在集群加载完成后才获取数据
+    if (!isClusterLoading) {
       fetchPods();
     }
-  }, [selectedNamespace, isAuthenticated, isClusterLoading, activeCluster]);
+  }, [selectedNamespace, isClusterLoading, activeCluster]);
 
   const fetchPods = async () => {
     try {
@@ -169,10 +159,6 @@ export default function PodsPage() {
         return "outline";
     }
   };
-
-  if (!isAuthenticated) {
-    return null;
-  }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -324,5 +310,13 @@ export default function PodsPage() {
         )}
       </main>
     </div>
+  );
+}
+
+export default function PodsPage() {
+  return (
+    <AuthGuard>
+      <PodsPageContent />
+    </AuthGuard>
   );
 }

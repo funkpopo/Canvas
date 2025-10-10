@@ -5,6 +5,7 @@ import { useRouter, useParams } from "next/navigation";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import Link from "next/link";
 import ClusterForm from "@/components/ClusterForm";
+import AuthGuard from "@/components/AuthGuard";
 
 interface Cluster {
   id: number;
@@ -17,23 +18,15 @@ interface Cluster {
   is_active: boolean;
 }
 
-export default function EditClusterPage() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+function EditClusterPageContent() {
   const [cluster, setCluster] = useState<Cluster | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
   const params = useParams();
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      router.push("/login");
-      return;
-    }
-
-    setIsAuthenticated(true);
     fetchCluster();
-  }, [router, params.id]);
+  }, [params.id]);
 
   const fetchCluster = async () => {
     try {
@@ -59,10 +52,6 @@ export default function EditClusterPage() {
       setIsLoading(false);
     }
   };
-
-  if (!isAuthenticated) {
-    return null;
-  }
 
   if (isLoading) {
     return (
@@ -116,5 +105,13 @@ export default function EditClusterPage() {
         />
       </main>
     </div>
+  );
+}
+
+export default function EditClusterPage() {
+  return (
+    <AuthGuard>
+      <EditClusterPageContent />
+    </AuthGuard>
   );
 }

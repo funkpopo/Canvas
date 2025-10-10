@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { ArrowLeft, Users, Plus, Trash2, Loader2, Activity } from "lucide-react";
 import { useCluster } from "@/lib/cluster-context";
 import ClusterSelector from "@/components/ClusterSelector";
+import AuthGuard from "@/components/AuthGuard";
 
 interface NamespaceInfo {
   name: string;
@@ -23,8 +24,7 @@ interface NamespaceInfo {
   cluster_id: number;
 }
 
-export default function NamespacesPage() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+function NamespacesPageContent() {
   const [namespaces, setNamespaces] = useState<NamespaceInfo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -34,36 +34,13 @@ export default function NamespacesPage() {
   const { activeCluster, isLoading: isClusterLoading, refreshClusters } = useCluster();
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    console.log("Checking authentication, token exists:", !!token);
-    if (!token) {
-      console.log("No token found, redirecting to login");
-      router.push("/login");
-      return;
-    }
-
-    console.log("Authentication successful");
-    setIsAuthenticated(true);
-  }, [router]);
-
-  useEffect(() => {
-    // 只有在认证完成后才获取数据
-    console.log("useEffect triggered - isAuthenticated:", isAuthenticated, "isClusterLoading:", isClusterLoading, "activeCluster:", activeCluster);
-    if (isAuthenticated) {
+    // 只有在集群加载完成后才获取数据
+    console.log("useEffect triggered - isClusterLoading:", isClusterLoading, "activeCluster:", activeCluster);
+    if (!isClusterLoading) {
       console.log("Calling fetchNamespaces");
       fetchNamespaces();
-    } else {
-      console.log("Not calling fetchNamespaces - not authenticated");
     }
-  }, [isAuthenticated, isClusterLoading, activeCluster]);
-
-  // 在认证成功后刷新集群列表
-  useEffect(() => {
-    if (isAuthenticated) {
-      console.log("User authenticated, refreshing clusters");
-      refreshClusters();
-    }
-  }, [isAuthenticated]);
+  }, [isClusterLoading, activeCluster]);
 
   const fetchNamespaces = async () => {
     try {
@@ -200,10 +177,6 @@ export default function NamespacesPage() {
     }
   };
 
-
-  if (!isAuthenticated) {
-    return null;
-  }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -394,5 +367,13 @@ export default function NamespacesPage() {
         )}
       </main>
     </div>
+  );
+}
+
+export default function NamespacesPage() {
+  return (
+    <AuthGuard>
+      <NamespacesPageContent />
+    </AuthGuard>
   );
 }

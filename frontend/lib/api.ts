@@ -2,6 +2,21 @@
 
 const API_BASE_URL = 'http://localhost:8000/api';
 
+// Token验证相关函数
+export const authApi = {
+  async verifyToken(): Promise<{valid: boolean, username?: string}> {
+    try {
+      const response = await apiClient.post<{valid: boolean, username: string}>('/auth/verify-token', {});
+      if (response.data) {
+        return { valid: response.data.valid, username: response.data.username };
+      }
+      return { valid: false };
+    } catch (error) {
+      return { valid: false };
+    }
+  }
+};
+
 interface ApiResponse<T = unknown> {
   data?: T;
   error?: string;

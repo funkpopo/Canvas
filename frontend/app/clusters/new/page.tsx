@@ -1,29 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import ClusterForm from "@/components/ClusterForm";
+import AuthGuard from "@/components/AuthGuard";
 
-export default function NewClusterPage() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const router = useRouter();
-
-  useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      router.push("/login");
-      return;
-    }
-
-    setIsAuthenticated(true);
-  }, [router]);
-
-  if (!isAuthenticated) {
-    return null;
-  }
-
+function NewClusterPageContent() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Header */}
@@ -45,5 +27,13 @@ export default function NewClusterPage() {
         <ClusterForm />
       </main>
     </div>
+  );
+}
+
+export default function NewClusterPage() {
+  return (
+    <AuthGuard>
+      <NewClusterPageContent />
+    </AuthGuard>
   );
 }

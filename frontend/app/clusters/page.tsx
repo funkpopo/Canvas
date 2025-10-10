@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Edit, Trash2, TestTube, ArrowLeft, Loader2, Power, PowerOff } from "lucide-react";
 import Link from "next/link";
+import AuthGuard from "@/components/AuthGuard";
 
 interface Cluster {
   id: number;
@@ -16,22 +16,13 @@ interface Cluster {
   is_active: boolean;
 }
 
-export default function ClustersPage() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+function ClustersPageContent() {
   const [clusters, setClusters] = useState<Cluster[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const router = useRouter();
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      router.push("/login");
-      return;
-    }
-
-    setIsAuthenticated(true);
     fetchClusters();
-  }, [router]);
+  }, []);
 
   const fetchClusters = async () => {
     try {
@@ -136,10 +127,6 @@ export default function ClustersPage() {
       alert(`${action}集群时发生错误`);
     }
   };
-
-  if (!isAuthenticated) {
-    return null;
-  }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -268,5 +255,13 @@ export default function ClustersPage() {
         )}
       </main>
     </div>
+  );
+}
+
+export default function ClustersPage() {
+  return (
+    <AuthGuard>
+      <ClustersPageContent />
+    </AuthGuard>
   );
 }

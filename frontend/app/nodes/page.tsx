@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Server, Cpu, MemoryStick, HardDrive, Loader2 } from "lucide-react";
+import AuthGuard from "@/components/AuthGuard";
 
 interface NodeInfo {
   name: string;
@@ -26,22 +26,13 @@ interface NodeInfo {
   cluster_name: string;
 }
 
-export default function NodesPage() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+function NodesPageContent() {
   const [nodes, setNodes] = useState<NodeInfo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const router = useRouter();
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      router.push("/login");
-      return;
-    }
-
-    setIsAuthenticated(true);
     fetchNodes();
-  }, [router]);
+  }, []);
 
   const fetchNodes = async () => {
     try {
@@ -81,10 +72,6 @@ export default function NodesPage() {
     if (roles.includes("worker")) return "Worker";
     return "Node";
   };
-
-  if (!isAuthenticated) {
-    return null;
-  }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -206,5 +193,13 @@ export default function NodesPage() {
         )}
       </main>
     </div>
+  );
+}
+
+export default function NodesPage() {
+  return (
+    <AuthGuard>
+      <NodesPageContent />
+    </AuthGuard>
   );
 }

@@ -10,7 +10,7 @@ from .schemas import TokenData
 # JWT配置
 SECRET_KEY = "your-secret-key-here-change-in-production"
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ACCESS_TOKEN_EXPIRE_MINUTES = 1440  # 24小时
 
 
 def create_access_token(data: dict, expires_delta: timedelta = None):

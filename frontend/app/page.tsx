@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { LogOut, Server, Users, Activity, Settings, Loader2 } from "lucide-react";
 import ClusterSelector from "@/components/ClusterSelector";
+import { useAuth } from "@/lib/auth-context";
 
 interface DashboardStats {
   total_clusters: number;
@@ -19,22 +20,21 @@ interface DashboardStats {
 }
 
 export default function Home() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [isLoadingStats, setIsLoadingStats] = useState(true);
   const router = useRouter();
+  const { isAuthenticated, isLoading, logout } = useAuth();
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) {
+    if (!isLoading && !isAuthenticated) {
       router.push("/login");
       return;
     }
 
-    // 验证token并获取统计数据
-    setIsAuthenticated(true);
-    fetchDashboardStats();
-  }, [router]);
+    if (isAuthenticated) {
+      fetchDashboardStats();
+    }
+  }, [isAuthenticated, isLoading, router]);
 
   const fetchDashboardStats = async () => {
     try {
@@ -58,13 +58,17 @@ export default function Home() {
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    router.push("/login");
-  };
+  // 显示loading状态
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
-    return null; // 或显示loading状态
+    return null;
   }
 
   return (
@@ -81,7 +85,7 @@ export default function Home() {
             </div>
             <div className="flex items-center space-x-4">
               <ClusterSelector />
-              <Button variant="outline" onClick={handleLogout}>
+              <Button variant="outline" onClick={logout}>
                 <LogOut className="h-4 w-4 mr-2" />
                 登出
               </Button>

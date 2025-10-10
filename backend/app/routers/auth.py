@@ -62,3 +62,9 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
 @router.get("/me")
 async def read_users_me(current_user: models.User = Depends(get_current_user)):
     return {"username": current_user.username, "id": current_user.id}
+
+
+@router.post("/verify-token")
+async def verify_token_endpoint(current_user: models.User = Depends(get_current_user)):
+    """验证token是否有效"""
+    return {"valid": True, "username": current_user.username}
