@@ -15,6 +15,8 @@ import DeploymentConfigTab from "@/components/DeploymentConfigTab";
 import DeploymentYamlTab from "@/components/DeploymentYamlTab";
 import DeploymentServicesTab from "@/components/DeploymentServicesTab";
 import DeploymentScalingTab from "@/components/DeploymentScalingTab";
+import { toast } from "sonner";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 interface DeploymentDetails {
   name: string;
@@ -71,6 +73,12 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
   const [isScaleDialogOpen, setIsScaleDialogOpen] = useState(false);
   const [newReplicas, setNewReplicas] = useState(0);
   const [isOperationLoading, setIsOperationLoading] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState({
+    open: false,
+    title: "",
+    description: "",
+    onConfirm: () => {},
+  });
   const router = useRouter();
   const searchParams = useSearchParams();
   const clusterId = searchParams.get('cluster_id');
@@ -194,13 +202,18 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
     }
   };
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
     if (!deploymentDetails) return;
 
-    if (!confirm(`确定要删除部署 ${resolvedParams.deployment} 吗？此操作不可撤销。`)) {
-      return;
-    }
+    setConfirmDialog({
+      open: true,
+      title: "删除部署",
+      description: `确定要删除部署 ${resolvedParams.deployment} 吗？此操作不可撤销。`,
+      onConfirm: () => performDelete(),
+    });
+  };
 
+  const performDelete = async () => {
     setIsOperationLoading(true);
     try {
       const token = localStorage.getItem("token");
@@ -215,12 +228,15 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
       );
 
       if (response.ok) {
+        toast.success("部署删除成功");
         router.push(`/namespaces/${resolvedParams.namespace}?cluster_id=${clusterId}`);
       } else {
         console.error("删除失败");
+        toast.error("删除部署失败");
       }
     } catch (error) {
       console.error("删除出错:", error);
+      toast.error("删除部署时发生错误");
     } finally {
       setIsOperationLoading(false);
     }
@@ -606,6 +622,15 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
 
         </Tabs>
       </main>
+
+      <ConfirmDialog
+        open={confirmDialog.open}
+        onOpenChange={(open) => setConfirmDialog(prev => ({ ...prev, open }))}
+        title={confirmDialog.title}
+        description={confirmDialog.description}
+        onConfirm={confirmDialog.onConfirm}
+        variant="destructive"
+      />
     </div>
   );
 }

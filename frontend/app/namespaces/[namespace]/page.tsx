@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowLeft, Activity, Loader2, RefreshCw, Users, Settings, FileText, Database, Cpu, MemoryStick, AlertCircle, HardDrive, ExternalLink } from "lucide-react";
+import { toast } from "sonner";
 
 interface NamespaceResources {
   cpu_requests: string;
@@ -535,9 +536,9 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
                                     const protocol = port.protocol === 'TCP' ? 'http' : 'https';
                                     const url = `${protocol}://<node-ip>:${port.node_port}`;
                                     navigator.clipboard.writeText(url).then(() => {
-                                      alert('访问URL已复制到剪贴板，请将 <node-ip> 替换为集群节点的实际IP地址');
+                                      toast.success('访问URL已复制到剪贴板，请将 <node-ip> 替换为集群节点的实际IP地址');
                                     }).catch(() => {
-                                      alert(`访问URL: ${url}\n请将 <node-ip> 替换为集群节点的实际IP地址`);
+                                      toast.error(`复制失败，请手动复制：${url}\n请将 <node-ip> 替换为集群节点的实际IP地址`);
                                     });
                                   }}
                                   className="text-xs h-7"

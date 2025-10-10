@@ -11,6 +11,8 @@ import { ArrowLeft, Activity, Square, FileText, Loader2, RefreshCw } from "lucid
 import { useCluster } from "@/lib/cluster-context";
 import ClusterSelector from "@/components/ClusterSelector";
 import AuthGuard from "@/components/AuthGuard";
+import { toast } from "sonner";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 interface PodInfo {
   name: string;
@@ -30,6 +32,12 @@ function PodsPageContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedNamespace, setSelectedNamespace] = useState<string>("");
   const [availableNamespaces, setAvailableNamespaces] = useState<string[]>([]);
+  const [confirmDialog, setConfirmDialog] = useState({
+    open: false,
+    title: "",
+    description: "",
+    onConfirm: () => {},
+  });
   const router = useRouter();
   const { activeCluster, isLoading: isClusterLoading } = useCluster();
 
@@ -79,11 +87,16 @@ function PodsPageContent() {
     }
   };
 
-  const handleRestartPod = async (pod: PodInfo) => {
-    if (!confirm(`确定要重启Pod "${pod.name}" 吗？`)) {
-      return;
-    }
+  const handleRestartPod = (pod: PodInfo) => {
+    setConfirmDialog({
+      open: true,
+      title: "重启Pod",
+      description: `确定要重启Pod "${pod.name}" 吗？`,
+      onConfirm: () => performRestartPod(pod),
+    });
+  };
 
+  const performRestartPod = async (pod: PodInfo) => {
     try {
       const token = localStorage.getItem("token");
       const response = await fetch(
@@ -97,22 +110,27 @@ function PodsPageContent() {
       );
 
       if (response.ok) {
-        alert("Pod重启成功");
+        toast.success("Pod重启成功");
         fetchPods();
       } else {
-        alert("重启Pod失败");
+        toast.error("重启Pod失败");
       }
     } catch (error) {
       console.error("重启Pod出错:", error);
-      alert("重启Pod时发生错误");
+      toast.error("重启Pod时发生错误");
     }
   };
 
-  const handleDeletePod = async (pod: PodInfo) => {
-    if (!confirm(`确定要删除Pod "${pod.name}" 吗？此操作不可撤销。`)) {
-      return;
-    }
+  const handleDeletePod = (pod: PodInfo) => {
+    setConfirmDialog({
+      open: true,
+      title: "删除Pod",
+      description: `确定要删除Pod "${pod.name}" 吗？此操作不可撤销。`,
+      onConfirm: () => performDeletePod(pod),
+    });
+  };
 
+  const performDeletePod = async (pod: PodInfo) => {
     try {
       const token = localStorage.getItem("token");
       const response = await fetch(
@@ -126,14 +144,14 @@ function PodsPageContent() {
       );
 
       if (response.ok) {
-        alert("Pod删除成功");
+        toast.success("Pod删除成功");
         fetchPods();
       } else {
-        alert("删除Pod失败");
+        toast.error("删除Pod失败");
       }
     } catch (error) {
       console.error("删除Pod出错:", error);
-      alert("删除Pod时发生错误");
+      toast.error("删除Pod时发生错误");
     }
   };
 
@@ -238,7 +256,7 @@ function PodsPageContent() {
                   console.log("Pod clicked:", pod);
                   console.log("Cluster ID:", pod.cluster_id);
                   if (pod.cluster_id == null || pod.cluster_id === undefined) {
-                    alert("Pod缺少集群ID，无法查看详情");
+                    toast.error("Pod缺少集群ID，无法查看详情");
                     return;
                   }
                   router.push(`/pods/${pod.namespace}/${pod.name}?cluster_id=${pod.cluster_id}`);
@@ -309,6 +327,15 @@ function PodsPageContent() {
           </div>
         )}
       </main>
+
+      <ConfirmDialog
+        open={confirmDialog.open}
+        onOpenChange={(open) => setConfirmDialog(prev => ({ ...prev, open }))}
+        title={confirmDialog.title}
+        description={confirmDialog.description}
+        onConfirm={confirmDialog.onConfirm}
+        variant="destructive"
+      />
     </div>
   );
 }

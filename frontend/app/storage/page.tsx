@@ -18,6 +18,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useCluster } from "@/lib/cluster-context";
 import { storageApi } from "@/lib/api";
 import type { Cluster } from "@/lib/cluster-context";
+import { toast } from "sonner";
 
 interface StorageClass {
   name: string;
@@ -195,8 +196,7 @@ export default function StorageManagement() {
       loadData(selectedClusterId ?? undefined);
     } else if (response.error) {
       console.error("创建存储类失败:", response.error);
-      // 这里可以显示错误提示给用户
-      alert(`创建存储类失败: ${response.error}`);
+      toast.error(`创建存储类失败: ${response.error}`);
     }
   };
 

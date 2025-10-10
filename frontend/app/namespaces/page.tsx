@@ -13,6 +13,8 @@ import { ArrowLeft, FolderPen, Plus, Trash2, Loader2, Activity } from "lucide-re
 import { useCluster } from "@/lib/cluster-context";
 import ClusterSelector from "@/components/ClusterSelector";
 import AuthGuard from "@/components/AuthGuard";
+import { toast } from "sonner";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 interface NamespaceInfo {
   name: string;
@@ -30,6 +32,12 @@ function NamespacesPageContent() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newNamespaceName, setNewNamespaceName] = useState("");
   const [isCreating, setIsCreating] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState({
+    open: false,
+    title: "",
+    description: "",
+    onConfirm: () => {},
+  });
   const router = useRouter();
   const { activeCluster, isLoading: isClusterLoading } = useCluster();
 
@@ -119,30 +127,36 @@ function NamespacesPageContent() {
         setIsCreateDialogOpen(false);
         setNewNamespaceName("");
         fetchNamespaces();
+        toast.success("命名空间创建成功");
       } else {
         const error = await response.json();
-        alert(`创建命名空间失败: ${error.detail}`);
+        toast.error(`创建命名空间失败: ${error.detail}`);
       }
     } catch (error) {
       console.error("创建命名空间出错:", error);
-      alert("创建命名空间时发生错误");
+      toast.error("创建命名空间时发生错误");
     } finally {
       setIsCreating(false);
     }
   };
 
-  const handleDeleteNamespace = async (namespace: NamespaceInfo) => {
+  const handleDeleteNamespace = (namespace: NamespaceInfo) => {
     // 保护系统命名空间
     const systemNamespaces = ['default', 'kube-system', 'kube-public', 'kube-node-lease'];
     if (systemNamespaces.includes(namespace.name)) {
-      alert("不能删除系统命名空间");
+      toast.error("不能删除系统命名空间");
       return;
     }
 
-    if (!confirm(`确定要删除命名空间 "${namespace.name}" 吗？此操作不可撤销。`)) {
-      return;
-    }
+    setConfirmDialog({
+      open: true,
+      title: "删除命名空间",
+      description: `确定要删除命名空间 "${namespace.name}" 吗？此操作不可撤销。`,
+      onConfirm: () => performDeleteNamespace(namespace),
+    });
+  };
 
+  const performDeleteNamespace = async (namespace: NamespaceInfo) => {
     try {
       const token = localStorage.getItem("token");
       const response = await fetch(
@@ -157,12 +171,13 @@ function NamespacesPageContent() {
 
       if (response.ok) {
         fetchNamespaces();
+        toast.success("命名空间删除成功");
       } else {
-        alert("删除命名空间失败");
+        toast.error("删除命名空间失败");
       }
     } catch (error) {
       console.error("删除命名空间出错:", error);
-      alert("删除命名空间时发生错误");
+      toast.error("删除命名空间时发生错误");
     }
   };
 
@@ -301,7 +316,7 @@ function NamespacesPageContent() {
                   console.log("Namespace clicked:", namespace);
                   console.log("Cluster ID:", namespace.cluster_id);
                   if (!namespace.cluster_id) {
-                    alert("命名空间缺少集群ID，无法查看详情");
+                    toast.error("命名空间缺少集群ID，无法查看详情");
                     return;
                   }
                   router.push(`/namespaces/${namespace.name}?cluster_id=${namespace.cluster_id}`);
@@ -366,6 +381,15 @@ function NamespacesPageContent() {
           </div>
         )}
       </main>
+
+      <ConfirmDialog
+        open={confirmDialog.open}
+        onOpenChange={(open) => setConfirmDialog(prev => ({ ...prev, open }))}
+        title={confirmDialog.title}
+        description={confirmDialog.description}
+        onConfirm={confirmDialog.onConfirm}
+        variant="destructive"
+      />
     </div>
   );
 }
