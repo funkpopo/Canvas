@@ -156,28 +156,45 @@ function NodesPageContent() {
                       )}
                     </div>
 
-                    {/* 资源容量 */}
+                    {/* 资源容量和使用情况 */}
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center">
                           <Cpu className="h-4 w-4 mr-1 text-blue-500" />
                           <span className="text-sm">CPU</span>
                         </div>
-                        <span className="text-sm font-medium">{node.cpu_capacity}</span>
+                        <div className="text-right">
+                          <div className="text-sm font-medium">{node.cpu_capacity}</div>
+                          {node.cpu_usage && (
+                            <div className="text-xs text-gray-500">{node.cpu_usage} 已用</div>
+                          )}
+                        </div>
                       </div>
                       <div className="flex items-center justify-between">
                         <div className="flex items-center">
                           <MemoryStick className="h-4 w-4 mr-1 text-green-500" />
                           <span className="text-sm">内存</span>
                         </div>
-                        <span className="text-sm font-medium">{node.memory_capacity}</span>
+                        <div className="text-right">
+                          <div className="text-sm font-medium">{node.memory_capacity}</div>
+                          {node.memory_usage && (
+                            <div className="text-xs text-gray-500">{node.memory_usage} 已用</div>
+                          )}
+                        </div>
                       </div>
                       <div className="flex items-center justify-between">
                         <div className="flex items-center">
                           <HardDrive className="h-4 w-4 mr-1 text-purple-500" />
                           <span className="text-sm">Pods</span>
                         </div>
-                        <span className="text-sm font-medium">{node.pods_capacity}</span>
+                        <div className="text-right">
+                          <div className="text-sm font-medium">{node.pods_usage || '0'}/{node.pods_capacity}</div>
+                          {node.pods_usage && (
+                            <div className="text-xs text-gray-500">
+                              {Math.round((parseInt(node.pods_usage) / parseInt(node.pods_capacity || '1')) * 100)}% 已用
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
 

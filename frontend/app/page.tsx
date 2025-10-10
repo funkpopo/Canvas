@@ -97,11 +97,8 @@ export default function Home() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
-          <h2 className="text-3xl font-bold text-gray-900 dark:text-white">
-            欢迎使用Canvas
-          </h2>
           <p className="mt-2 text-gray-600 dark:text-gray-400">
-            管理您的Kubernetes集群资源
+            管理Kubernetes集群资源
           </p>
         </div>
 

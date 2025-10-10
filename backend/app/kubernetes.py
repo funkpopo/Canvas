@@ -134,8 +134,60 @@ def get_nodes_info(cluster: Cluster) -> List[Dict[str, Any]]:
         core_v1 = client.CoreV1Api(client_instance)
         nodes = core_v1.list_node()
 
+        # 获取所有Pods用于统计节点上的Pods数量
+        pods = core_v1.list_pod_for_all_namespaces()
+
+        # 统计每个节点上的Pods数量
+        node_pod_counts = {}
+        for pod in pods.items:
+            node_name = pod.spec.node_name
+            if node_name:
+                node_pod_counts[node_name] = node_pod_counts.get(node_name, 0) + 1
+
+        # 获取节点资源使用情况（从allocatable和capacity计算）
+        node_resource_usage = {}
+        for node in nodes.items:
+            node_name = node.metadata.name
+
+            # 获取CPU和内存使用情况（通过allocatable计算可用资源比例）
+            cpu_capacity = node.status.capacity.get("cpu", "0")
+            memory_capacity = node.status.capacity.get("memory", "0")
+            cpu_allocatable = node.status.allocatable.get("cpu", "0")
+            memory_allocatable = node.status.allocatable.get("memory", "0")
+
+            # 计算使用率（简单估算：1 - allocatable/capacity）
+            cpu_usage = None
+            memory_usage = None
+
+            try:
+                if cpu_capacity and cpu_allocatable:
+                    cpu_capacity_val = parse_cpu(cpu_capacity)
+                    cpu_allocatable_val = parse_cpu(cpu_allocatable)
+                    if cpu_capacity_val > 0:
+                        cpu_usage_val = ((cpu_capacity_val - cpu_allocatable_val) / cpu_capacity_val) * 100
+                        cpu_usage = f"{cpu_usage_val:.1f}%"
+            except:
+                pass
+
+            try:
+                if memory_capacity and memory_allocatable:
+                    memory_capacity_val = parse_memory(memory_capacity)
+                    memory_allocatable_val = parse_memory(memory_allocatable)
+                    if memory_capacity_val > 0:
+                        memory_usage_val = ((memory_capacity_val - memory_allocatable_val) / memory_capacity_val) * 100
+                        memory_usage = f"{memory_usage_val:.1f}%"
+            except:
+                pass
+
+            node_resource_usage[node_name] = {
+                'cpu_usage': cpu_usage,
+                'memory_usage': memory_usage
+            }
+
         node_list = []
         for node in nodes.items:
+            node_name = node.metadata.name
+
             # 获取节点状态
             status = "Unknown"
             for condition in node.status.conditions:
@@ -166,6 +218,9 @@ def get_nodes_info(cluster: Cluster) -> List[Dict[str, Any]]:
             memory_capacity = node.status.capacity.get("memory", "0")
             pods_capacity = node.status.capacity.get("pods", "0")
 
+            # 获取实际Pods数量
+            pods_usage = str(node_pod_counts.get(node_name, 0))
+
             # 计算节点年龄
             from datetime import datetime
             age = "Unknown"
@@ -192,7 +247,10 @@ def get_nodes_info(cluster: Cluster) -> List[Dict[str, Any]]:
                 "external_ip": external_ip,
                 "cpu_capacity": cpu_capacity,
                 "memory_capacity": memory_capacity,
-                "pods_capacity": pods_capacity
+                "pods_capacity": pods_capacity,
+                "cpu_usage": node_resource_usage.get(node_name, {}).get('cpu_usage'),
+                "memory_usage": node_resource_usage.get(node_name, {}).get('memory_usage'),
+                "pods_usage": pods_usage
             }
             node_list.append(node_info)
 
