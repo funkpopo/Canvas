@@ -18,6 +18,12 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Canvas",
   description: "Kubernetes集群管理",
+  icons: {
+    icon: "/canvas-icon.svg",
+    shortcut: "/canvas-icon.svg",
+    apple: "/canvas-icon.svg",
+  },
+  manifest: "/manifest.json",
 };
 
 export default function RootLayout({

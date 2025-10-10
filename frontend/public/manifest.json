@@ -1,0 +1,17 @@
+{
+  "name": "Canvas - Kubernetes集群管理",
+  "short_name": "Canvas",
+  "description": "Kubernetes集群管理工具",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#f12711",
+  "icons": [
+    {
+      "src": "/canvas-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
