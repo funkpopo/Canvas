@@ -75,7 +75,10 @@ export default function StorageManagement() {
     allow_volume_expansion: false,
     // NFS specific fields
     nfs_server: "",
-    nfs_path: ""
+    nfs_path: "",
+    // Custom provisioner fields
+    custom_provisioner: false,
+    provisioner_image: ""
   });
 
   const [pvForm, setPvForm] = useState({
@@ -109,6 +112,9 @@ export default function StorageManagement() {
     if (activeCluster) {
       setSelectedClusterId(activeCluster.id);
       loadData();
+    } else {
+      // 没有活跃集群时停止加载状态
+      setIsLoading(false);
     }
   }, [isAuthenticated, authLoading, router, activeCluster]);
 
@@ -117,22 +123,32 @@ export default function StorageManagement() {
 
     setIsLoading(true);
     try {
-      // 加载存储类
-      const scResponse = await storageApi.getStorageClasses(selectedClusterId);
+      // 并行加载所有存储数据
+      const [scResponse, pvResponse, pvcResponse] = await Promise.all([
+        storageApi.getStorageClasses(selectedClusterId),
+        storageApi.getPersistentVolumes(selectedClusterId),
+        storageApi.getPersistentVolumeClaims(selectedClusterId)
+      ]);
+
+      // 处理存储类数据
       if (scResponse.data) {
         setStorageClasses(scResponse.data);
+      } else if (scResponse.error) {
+        console.error("加载存储类失败:", scResponse.error);
       }
 
-      // 加载持久卷
-      const pvResponse = await storageApi.getPersistentVolumes(selectedClusterId);
+      // 处理持久卷数据
       if (pvResponse.data) {
         setPersistentVolumes(pvResponse.data);
+      } else if (pvResponse.error) {
+        console.error("加载持久卷失败:", pvResponse.error);
       }
 
-      // 加载PVC
-      const pvcResponse = await storageApi.getPersistentVolumeClaims(selectedClusterId);
+      // 处理PVC数据
       if (pvcResponse.data) {
         setPersistentVolumeClaims(pvcResponse.data);
+      } else if (pvcResponse.error) {
+        console.error("加载PVC失败:", pvcResponse.error);
       }
     } catch (error) {
       console.error("加载存储数据失败:", error);
@@ -156,7 +172,9 @@ export default function StorageManagement() {
           volume_binding_mode: "Immediate",
           allow_volume_expansion: false,
           nfs_server: "",
-          nfs_path: ""
+          nfs_path: "",
+          custom_provisioner: false,
+          provisioner_image: ""
         });
       }
     } catch (error) {
@@ -169,7 +187,7 @@ export default function StorageManagement() {
 
     try {
       await storageApi.deleteStorageClass(selectedClusterId, scName);
-      setStorageClasses(storageClasses.filter(sc => sc.name !== scName));
+      setStorageClasses(storageClasses.filter(sc => sc.cluster_id === selectedClusterId && sc.name !== scName));
     } catch (error) {
       console.error("删除存储类失败:", error);
     }
@@ -280,8 +298,27 @@ export default function StorageManagement() {
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* 检查是否有活跃集群 */}
+      {!activeCluster && !isLoading ? (
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
+            <Database className="h-16 w-16 text-gray-400 mb-4" />
+            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-2">
+              没有活跃集群
+            </h2>
+            <p className="text-gray-600 dark:text-gray-400 mb-4">
+              请先选择或激活一个Kubernetes集群，然后才能管理存储资源。
+            </p>
+            <Button asChild>
+              <Link href="/clusters/new">
+                创建集群
+              </Link>
+            </Button>
+          </div>
+        </main>
+      ) : (
+        /* Main Content */
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <div className="flex items-center justify-between">
             <div>
@@ -343,20 +380,60 @@ export default function StorageManagement() {
                             />
                           </div>
                           <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="sc-provisioner" className="text-right">Provisioner</Label>
-                            <Select value={scForm.provisioner} onValueChange={(value) => setScForm({...scForm, provisioner: value, nfs_server: value === "kubernetes.io/nfs" ? scForm.nfs_server : "", nfs_path: value === "kubernetes.io/nfs" ? scForm.nfs_path : ""})}>
-                              <SelectTrigger className="col-span-3">
-                                <SelectValue placeholder="选择Provisioner" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="kubernetes.io/aws-ebs">AWS EBS</SelectItem>
-                                <SelectItem value="kubernetes.io/gce-pd">GCE PD</SelectItem>
-                                <SelectItem value="kubernetes.io/nfs">NFS</SelectItem>
-                                <SelectItem value="kubernetes.io/host-path">Host Path</SelectItem>
-                              </SelectContent>
-                            </Select>
+                            <Label className="text-right">Provisioner类型</Label>
+                            <div className="col-span-3 flex items-center space-x-2">
+                              <Select value={scForm.custom_provisioner ? "custom" : "preset"} onValueChange={(value) => setScForm({...scForm, custom_provisioner: value === "custom", provisioner: value === "custom" ? "" : scForm.provisioner, provisioner_image: value === "custom" ? scForm.provisioner_image : ""})}>
+                                <SelectTrigger className="flex-1">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="preset">预设Provisioner</SelectItem>
+                                  <SelectItem value="custom">自定义Provisioner</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
                           </div>
-                          {scForm.provisioner === "kubernetes.io/nfs" && (
+                          {scForm.custom_provisioner ? (
+                            <div className="grid grid-cols-4 items-center gap-4">
+                              <Label htmlFor="sc-custom-provisioner" className="text-right">Provisioner</Label>
+                              <Input
+                                id="sc-custom-provisioner"
+                                value={scForm.provisioner}
+                                onChange={(e) => setScForm({...scForm, provisioner: e.target.value})}
+                                className="col-span-3"
+                                placeholder="例如: k8s-sigs.io/nfs-subdir-external-provisioner"
+                              />
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-4 items-center gap-4">
+                              <Label htmlFor="sc-provisioner" className="text-right">Provisioner</Label>
+                              <Select value={scForm.provisioner} onValueChange={(value) => setScForm({...scForm, provisioner: value, nfs_server: (value === "kubernetes.io/nfs" || value === "k8s-sigs.io/nfs-subdir-external-provisioner") ? scForm.nfs_server : "", nfs_path: (value === "kubernetes.io/nfs" || value === "k8s-sigs.io/nfs-subdir-external-provisioner") ? scForm.nfs_path : ""})}>
+                                <SelectTrigger className="col-span-3">
+                                  <SelectValue placeholder="选择Provisioner" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="kubernetes.io/aws-ebs">AWS EBS</SelectItem>
+                                  <SelectItem value="kubernetes.io/gce-pd">GCE PD</SelectItem>
+                                  <SelectItem value="kubernetes.io/nfs">NFS (内置)</SelectItem>
+                                  <SelectItem value="k8s-sigs.io/nfs-subdir-external-provisioner">NFS Subdir External Provisioner</SelectItem>
+                                  <SelectItem value="kubernetes.io/host-path">Host Path</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          )}
+                          {scForm.custom_provisioner && (
+                            <div className="grid grid-cols-4 items-center gap-4">
+                              <Label htmlFor="sc-provisioner-image" className="text-right">Provisioner镜像</Label>
+                              <Input
+                                id="sc-provisioner-image"
+                                value={scForm.provisioner_image}
+                                onChange={(e) => setScForm({...scForm, provisioner_image: e.target.value})}
+                                className="col-span-3"
+                                placeholder="例如: eipwork/nfs-subdir-external-provisioner"
+                              />
+                            </div>
+                          )}
+                          {(scForm.provisioner === "kubernetes.io/nfs" || scForm.provisioner === "k8s-sigs.io/nfs-subdir-external-provisioner") && (
                             <>
                               <div className="grid grid-cols-4 items-center gap-4">
                                 <Label htmlFor="sc-nfs-server" className="text-right">NFS服务器</Label>
@@ -380,6 +457,18 @@ export default function StorageManagement() {
                               </div>
                             </>
                           )}
+                          {scForm.provisioner === "k8s-sigs.io/nfs-subdir-external-provisioner" && !scForm.custom_provisioner && (
+                            <div className="grid grid-cols-4 items-center gap-4">
+                              <Label htmlFor="sc-provisioner-image" className="text-right">Provisioner镜像</Label>
+                              <Input
+                                id="sc-provisioner-image"
+                                value={scForm.provisioner_image || "eipwork/nfs-subdir-external-provisioner"}
+                                onChange={(e) => setScForm({...scForm, provisioner_image: e.target.value})}
+                                className="col-span-3"
+                                placeholder="eipwork/nfs-subdir-external-provisioner"
+                              />
+                            </div>
+                          )}
                           <div className="grid grid-cols-4 items-center gap-4">
                             <Label htmlFor="sc-reclaim" className="text-right">回收策略</Label>
                             <Select value={scForm.reclaim_policy} onValueChange={(value) => setScForm({...scForm, reclaim_policy: value})}>
@@ -389,6 +478,18 @@ export default function StorageManagement() {
                               <SelectContent>
                                 <SelectItem value="Delete">Delete</SelectItem>
                                 <SelectItem value="Retain">Retain</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="sc-binding-mode" className="text-right">绑定模式</Label>
+                            <Select value={scForm.volume_binding_mode} onValueChange={(value) => setScForm({...scForm, volume_binding_mode: value})}>
+                              <SelectTrigger className="col-span-3">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Immediate">Immediate</SelectItem>
+                                <SelectItem value="WaitForFirstConsumer">WaitForFirstConsumer</SelectItem>
                               </SelectContent>
                             </Select>
                           </div>
@@ -413,12 +514,13 @@ export default function StorageManagement() {
                           <TableHead>回收策略</TableHead>
                           <TableHead>绑定模式</TableHead>
                           <TableHead>允许扩展</TableHead>
+                          <TableHead>集群</TableHead>
                           <TableHead>操作</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {storageClasses.map((sc) => (
-                          <TableRow key={sc.name}>
+                          <TableRow key={`${sc.cluster_id}-${sc.name}`}>
                             <TableCell className="font-medium">{sc.name}</TableCell>
                             <TableCell>{sc.provisioner}</TableCell>
                             <TableCell>
@@ -428,6 +530,7 @@ export default function StorageManagement() {
                             </TableCell>
                             <TableCell>{sc.volume_binding_mode}</TableCell>
                             <TableCell>{sc.allow_volume_expansion ? '是' : '否'}</TableCell>
+                            <TableCell>{sc.cluster_name}</TableCell>
                             <TableCell>
                               <Button
                                 variant="outline"
@@ -677,6 +780,7 @@ export default function StorageManagement() {
           </CardContent>
         </Card>
       </main>
+      )}
     </div>
   );
 }

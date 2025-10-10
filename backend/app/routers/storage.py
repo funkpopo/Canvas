@@ -34,6 +34,9 @@ class StorageClassCreate(BaseModel):
     # NFS specific fields
     nfs_server: Optional[str] = None
     nfs_path: Optional[str] = None
+    # Custom provisioner fields
+    custom_provisioner: Optional[bool] = False
+    provisioner_image: Optional[str] = None
 
 # PV相关模型
 class PersistentVolumeInfo(BaseModel):
@@ -132,8 +135,10 @@ async def create_storage_class_endpoint(
         if not cluster:
             raise HTTPException(status_code=404, detail="集群不存在或未激活")
 
-        # 处理NFS存储类
+        # 处理存储类参数
         sc_data = storage_class.dict()
+
+        # 处理NFS存储类
         if storage_class.provisioner == "kubernetes.io/nfs" or storage_class.nfs_server:
             if not storage_class.nfs_server or not storage_class.nfs_path:
                 raise HTTPException(status_code=400, detail="NFS存储类需要提供服务器地址和路径")
@@ -142,6 +147,21 @@ async def create_storage_class_endpoint(
                 'server': storage_class.nfs_server,
                 'path': storage_class.nfs_path
             }
+        # 处理NFS subdir external provisioner
+        elif storage_class.provisioner == "k8s-sigs.io/nfs-subdir-external-provisioner":
+            if not storage_class.nfs_server or not storage_class.nfs_path:
+                raise HTTPException(status_code=400, detail="NFS subdir provisioner需要提供服务器地址和路径")
+            # 设置NFS subdir external provisioner的参数
+            sc_data['parameters'] = {
+                'nfs.server': storage_class.nfs_server,
+                'nfs.path': storage_class.nfs_path
+            }
+            # 如果提供了自定义镜像，使用自定义镜像
+            if storage_class.provisioner_image:
+                sc_data['parameters']['image'] = storage_class.provisioner_image
+            else:
+                # 默认使用eipwork/nfs-subdir-external-provisioner
+                sc_data['parameters']['image'] = 'eipwork/nfs-subdir-external-provisioner'
 
         result = create_storage_class(cluster, sc_data)
         if result:
