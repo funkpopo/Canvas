@@ -72,7 +72,10 @@ export default function StorageManagement() {
     provisioner: "",
     reclaim_policy: "Delete",
     volume_binding_mode: "Immediate",
-    allow_volume_expansion: false
+    allow_volume_expansion: false,
+    // NFS specific fields
+    nfs_server: "",
+    nfs_path: ""
   });
 
   const [pvForm, setPvForm] = useState({
@@ -151,7 +154,9 @@ export default function StorageManagement() {
           provisioner: "",
           reclaim_policy: "Delete",
           volume_binding_mode: "Immediate",
-          allow_volume_expansion: false
+          allow_volume_expansion: false,
+          nfs_server: "",
+          nfs_path: ""
         });
       }
     } catch (error) {
@@ -339,14 +344,42 @@ export default function StorageManagement() {
                           </div>
                           <div className="grid grid-cols-4 items-center gap-4">
                             <Label htmlFor="sc-provisioner" className="text-right">Provisioner</Label>
-                            <Input
-                              id="sc-provisioner"
-                              value={scForm.provisioner}
-                              onChange={(e) => setScForm({...scForm, provisioner: e.target.value})}
-                              className="col-span-3"
-                              placeholder="kubernetes.io/aws-ebs"
-                            />
+                            <Select value={scForm.provisioner} onValueChange={(value) => setScForm({...scForm, provisioner: value, nfs_server: value === "kubernetes.io/nfs" ? scForm.nfs_server : "", nfs_path: value === "kubernetes.io/nfs" ? scForm.nfs_path : ""})}>
+                              <SelectTrigger className="col-span-3">
+                                <SelectValue placeholder="选择Provisioner" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="kubernetes.io/aws-ebs">AWS EBS</SelectItem>
+                                <SelectItem value="kubernetes.io/gce-pd">GCE PD</SelectItem>
+                                <SelectItem value="kubernetes.io/nfs">NFS</SelectItem>
+                                <SelectItem value="kubernetes.io/host-path">Host Path</SelectItem>
+                              </SelectContent>
+                            </Select>
                           </div>
+                          {scForm.provisioner === "kubernetes.io/nfs" && (
+                            <>
+                              <div className="grid grid-cols-4 items-center gap-4">
+                                <Label htmlFor="sc-nfs-server" className="text-right">NFS服务器</Label>
+                                <Input
+                                  id="sc-nfs-server"
+                                  value={scForm.nfs_server}
+                                  onChange={(e) => setScForm({...scForm, nfs_server: e.target.value})}
+                                  className="col-span-3"
+                                  placeholder="192.168.1.100"
+                                />
+                              </div>
+                              <div className="grid grid-cols-4 items-center gap-4">
+                                <Label htmlFor="sc-nfs-path" className="text-right">NFS路径</Label>
+                                <Input
+                                  id="sc-nfs-path"
+                                  value={scForm.nfs_path}
+                                  onChange={(e) => setScForm({...scForm, nfs_path: e.target.value})}
+                                  className="col-span-3"
+                                  placeholder="/export/data"
+                                />
+                              </div>
+                            </>
+                          )}
                           <div className="grid grid-cols-4 items-center gap-4">
                             <Label htmlFor="sc-reclaim" className="text-right">回收策略</Label>
                             <Select value={scForm.reclaim_policy} onValueChange={(value) => setScForm({...scForm, reclaim_policy: value})}>

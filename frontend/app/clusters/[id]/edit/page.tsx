@@ -32,7 +32,7 @@ function EditClusterPageContent() {
     try {
       const token = localStorage.getItem("token");
       const clusterId = params.id as string;
-      const response = await fetch(`http://localhost:8000/api/clusters/${clusterId}`, {
+      const response = await fetch(`http://localhost:8000/api/clusters/${clusterId}/`, {
         headers: {
           "Authorization": `Bearer ${token}`,
         },

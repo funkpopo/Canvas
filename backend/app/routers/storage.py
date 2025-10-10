@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from ..database import get_db
-from ..models import Cluster
+from ..models import Cluster, AuditLog
 from ..auth import get_current_user
 from ..kubernetes import (
     get_storage_classes, create_storage_class, delete_storage_class,
@@ -31,6 +31,9 @@ class StorageClassCreate(BaseModel):
     volume_binding_mode: Optional[str] = "Immediate"
     allow_volume_expansion: Optional[bool] = False
     parameters: Optional[dict] = None
+    # NFS specific fields
+    nfs_server: Optional[str] = None
+    nfs_path: Optional[str] = None
 
 # PV相关模型
 class PersistentVolumeInfo(BaseModel):
@@ -129,7 +132,18 @@ async def create_storage_class_endpoint(
         if not cluster:
             raise HTTPException(status_code=404, detail="集群不存在或未激活")
 
-        result = create_storage_class(cluster, storage_class.dict())
+        # 处理NFS存储类
+        sc_data = storage_class.dict()
+        if storage_class.provisioner == "kubernetes.io/nfs" or storage_class.nfs_server:
+            if not storage_class.nfs_server or not storage_class.nfs_path:
+                raise HTTPException(status_code=400, detail="NFS存储类需要提供服务器地址和路径")
+            # 为NFS设置默认参数
+            sc_data['parameters'] = {
+                'server': storage_class.nfs_server,
+                'path': storage_class.nfs_path
+            }
+
+        result = create_storage_class(cluster, sc_data)
         if result:
             storage_classes = get_storage_classes(cluster)
             for sc in storage_classes:
@@ -420,9 +434,40 @@ async def browse_volume_files_endpoint(
             raise HTTPException(status_code=404, detail="集群不存在或未激活")
 
         files = browse_volume_files(cluster, pv_name, path)
+
+        # 记录审计日志
+        audit_log = AuditLog(
+            user_id=current_user["id"],
+            cluster_id=cluster_id,
+            action="volume_browse",
+            resource_type="persistentvolume",
+            resource_name=pv_name,
+            details=f'{{"path": "{path}"}}',
+            success=True
+        )
+        db.add(audit_log)
+        db.commit()
+
         return {"files": files, "current_path": path}
 
     except Exception as e:
+        # 记录失败的审计日志
+        try:
+            audit_log = AuditLog(
+                user_id=current_user["id"],
+                cluster_id=cluster_id,
+                action="volume_browse",
+                resource_type="persistentvolume",
+                resource_name=pv_name,
+                details=f'{{"path": "{path}"}}',
+                success=False,
+                error_message=str(e)
+            )
+            db.add(audit_log)
+            db.commit()
+        except:
+            pass  # 审计日志失败不应该影响主要功能
+
         raise HTTPException(status_code=500, detail=f"浏览卷文件失败: {str(e)}")
 
 @router.get("/volumes/{pv_name}/files/content")
@@ -441,7 +486,38 @@ async def read_volume_file_endpoint(
             raise HTTPException(status_code=404, detail="集群不存在或未激活")
 
         content = read_volume_file(cluster, pv_name, file_path, max_lines)
+
+        # 记录审计日志
+        audit_log = AuditLog(
+            user_id=current_user["id"],
+            cluster_id=cluster_id,
+            action="volume_read",
+            resource_type="persistentvolume",
+            resource_name=pv_name,
+            details=f'{{"file_path": "{file_path}", "max_lines": {max_lines or "null"}}}',
+            success=True
+        )
+        db.add(audit_log)
+        db.commit()
+
         return {"content": content, "file_path": file_path}
 
     except Exception as e:
+        # 记录失败的审计日志
+        try:
+            audit_log = AuditLog(
+                user_id=current_user["id"],
+                cluster_id=cluster_id,
+                action="volume_read",
+                resource_type="persistentvolume",
+                resource_name=pv_name,
+                details=f'{{"file_path": "{file_path}", "max_lines": {max_lines or "null"}}}',
+                success=False,
+                error_message=str(e)
+            )
+            db.add(audit_log)
+            db.commit()
+        except:
+            pass  # 审计日志失败不应该影响主要功能
+
         raise HTTPException(status_code=500, detail=f"读取文件内容失败: {str(e)}")

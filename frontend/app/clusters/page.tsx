@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Edit, Trash2, TestTube, ArrowLeft, Loader2, Power, PowerOff } from "lucide-react";
 import Link from "next/link";
 import AuthGuard from "@/components/AuthGuard";
+import { clusterApi } from "@/lib/api";
 
 interface Cluster {
   id: number;
@@ -27,15 +28,10 @@ function ClustersPageContent() {
   const fetchClusters = async () => {
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch("http://localhost:8000/api/clusters", {
-        headers: {
-          "Authorization": `Bearer ${token}`,
-        },
-      });
+      const response = await clusterApi.getClusters();
 
-      if (response.ok) {
-        const data = await response.json();
-        setClusters(data);
+      if (response.data) {
+        setClusters(response.data);
       } else {
         console.error("获取集群列表失败");
       }
@@ -53,14 +49,9 @@ function ClustersPageContent() {
 
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch(`http://localhost:8000/api/clusters/${clusterId}`, {
-        method: "DELETE",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-        },
-      });
+      const response = await clusterApi.deleteCluster(clusterId);
 
-      if (response.ok) {
+      if (response.data !== undefined) {
         setClusters(clusters.filter(cluster => cluster.id !== clusterId));
       } else {
         alert("删除集群失败");
@@ -73,19 +64,12 @@ function ClustersPageContent() {
 
   const handleTestConnection = async (clusterId: number, clusterName: string) => {
     try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(`http://localhost:8000/api/clusters/${clusterId}/test-connection`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-        },
-      });
+      const response = await clusterApi.testConnection(clusterId);
 
-      const result = await response.json();
-      if (result.status === "success") {
+      if (response.data) {
         alert(`集群 "${clusterName}" 连接测试成功！`);
       } else {
-        alert(`集群 "${clusterName}" 连接测试失败：${result.message}`);
+        alert(`集群 "${clusterName}" 连接测试失败：${response.error || '未知错误'}`);
       }
     } catch (error) {
       console.error("测试连接出错:", error);
@@ -100,27 +84,18 @@ function ClustersPageContent() {
     }
 
     try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(`http://localhost:8000/api/clusters/${cluster.id}`, {
-        method: "PUT",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          is_active: !cluster.is_active
-        }),
+      const response = await clusterApi.updateCluster(cluster.id, {
+        is_active: !cluster.is_active
       });
 
-      if (response.ok) {
+      if (response.data) {
         // 更新本地状态
         setClusters(clusters.map(c =>
           c.id === cluster.id ? { ...c, is_active: !c.is_active } : c
         ));
         alert(`集群 "${cluster.name}" 已${action}成功！`);
       } else {
-        const error = await response.json();
-        alert(`${action}集群失败: ${error.detail || '未知错误'}`);
+        alert(`${action}集群失败: ${response.error || '未知错误'}`);
       }
     } catch (error) {
       console.error(`${action}集群出错:`, error);

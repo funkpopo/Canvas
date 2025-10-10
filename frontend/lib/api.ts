@@ -1,12 +1,17 @@
 // API 工具函数
 
-const API_BASE_URL = 'http://localhost:8000/api';
+const API_BASE_URL = 'http://localhost:8000/api/';
+
+// 构建完整的API URL
+const buildUrl = (endpoint: string): string => {
+  return `${API_BASE_URL}${endpoint}`.replace(/\/+/g, '/');
+};
 
 // Token验证相关函数
 export const authApi = {
   async verifyToken(): Promise<{valid: boolean, username?: string}> {
     try {
-      const response = await apiClient.post<{valid: boolean, username: string}>('/auth/verify-token', {});
+      const response = await apiClient.post<{valid: boolean, username: string}>('auth/verify-token', {});
       if (response.data) {
         return { valid: response.data.valid, username: response.data.username };
       }
@@ -31,9 +36,16 @@ class ApiClient {
     };
   }
 
+  private buildUrl(endpoint: string): string {
+    // 确保URL拼接时不会有双斜杠
+    const baseUrl = API_BASE_URL.replace(/\/$/, ''); // 移除末尾斜杠
+    const cleanEndpoint = endpoint.replace(/^\//, ''); // 移除开头斜杠
+    return `${baseUrl}/${cleanEndpoint}`;
+  }
+
   async get<T>(endpoint: string): Promise<ApiResponse<T>> {
     try {
-      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      const response = await fetch(this.buildUrl(endpoint), {
         headers: this.getAuthHeaders(),
       });
 
@@ -50,7 +62,7 @@ class ApiClient {
 
   async post<T>(endpoint: string, body: unknown): Promise<ApiResponse<T>> {
     try {
-      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      const response = await fetch(this.buildUrl(endpoint), {
         method: 'POST',
         headers: this.getAuthHeaders(),
         body: JSON.stringify(body),
@@ -70,7 +82,7 @@ class ApiClient {
 
   async put<T>(endpoint: string, body: unknown): Promise<ApiResponse<T>> {
     try {
-      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      const response = await fetch(this.buildUrl(endpoint), {
         method: 'PUT',
         headers: this.getAuthHeaders(),
         body: JSON.stringify(body),
@@ -90,7 +102,7 @@ class ApiClient {
 
   async delete<T>(endpoint: string): Promise<ApiResponse<T>> {
     try {
-      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      const response = await fetch(this.buildUrl(endpoint), {
         method: 'DELETE',
         headers: this.getAuthHeaders(),
       });
@@ -109,30 +121,39 @@ class ApiClient {
 
 export const apiClient = new ApiClient();
 
+// 集群相关类型
+interface Cluster {
+  id: number;
+  name: string;
+  endpoint: string;
+  auth_type: string;
+  is_active: boolean;
+}
+
 // 集群相关 API
 export const clusterApi = {
-  async getClusters() {
-    return apiClient.get('/clusters');
+  async getClusters(): Promise<ApiResponse<Cluster[]>> {
+    return apiClient.get<Cluster[]>('clusters');
   },
 
-  async getCluster(id: number) {
-    return apiClient.get(`/clusters/${id}`);
+  async getCluster(id: number): Promise<ApiResponse<Cluster>> {
+    return apiClient.get<Cluster>(`clusters/${id}`);
   },
 
-  async createCluster(clusterData: Record<string, unknown>) {
-    return apiClient.post('/clusters', clusterData);
+  async createCluster(clusterData: Record<string, unknown>): Promise<ApiResponse<Cluster>> {
+    return apiClient.post<Cluster>('clusters', clusterData);
   },
 
-  async updateCluster(id: number, clusterData: Record<string, unknown>) {
-    return apiClient.put(`/clusters/${id}`, clusterData);
+  async updateCluster(id: number, clusterData: Record<string, unknown>): Promise<ApiResponse<Cluster>> {
+    return apiClient.put<Cluster>(`clusters/${id}`, clusterData);
   },
 
-  async deleteCluster(id: number) {
-    return apiClient.delete(`/clusters/${id}`);
+  async deleteCluster(id: number): Promise<ApiResponse<null>> {
+    return apiClient.delete<null>(`clusters/${id}`);
   },
 
-  async testConnection(id: number) {
-    return apiClient.post(`/clusters/${id}/test-connection`, {});
+  async testConnection(id: number): Promise<ApiResponse<any>> {
+    return apiClient.post<any>(`clusters/${id}/test-connection`, {});
   },
 };
 

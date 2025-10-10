@@ -80,8 +80,8 @@ export default function ClusterForm({ initialData, isEdit = false, clusterId }: 
         return;
       }
       const url = isEdit && clusterId
-        ? `http://localhost:8000/api/clusters/${clusterId}`
-        : "http://localhost:8000/api/clusters";
+        ? `http://localhost:8000/api/clusters/${clusterId}/`
+        : "http://localhost:8000/api/clusters/";
 
       const method = isEdit ? "PUT" : "POST";
 

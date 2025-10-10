@@ -1,8 +1,12 @@
 import tempfile
 import os
+import time
+import json
+import uuid
 from typing import Dict, Any, Optional, List
 from kubernetes import client, config
 from kubernetes.client.rest import ApiException
+from kubernetes.stream import stream
 from .models import Cluster
 
 def create_k8s_client(cluster: Cluster) -> Optional[client.ApiClient]:
@@ -2000,3 +2004,354 @@ def read_volume_file(cluster: Cluster, pv_name: str, file_path: str, max_lines: 
         content = '\n'.join(lines) + f"\n\n[已截断，显示前 {max_lines} 行]"
 
     return content
+
+
+# ========== 卷文件浏览 - 真实实现 ==========
+
+def create_helper_pod_for_volume(cluster: Cluster, pv_name: str, namespace: str = "default") -> Optional[tuple]:
+    """为指定的PV创建一个临时的helper Pod，返回(pod_name, temp_pvc_name)"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return None
+
+    temp_pvc_name = None
+    pod_name = None
+
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+
+        # 获取PV详情以确定如何挂载
+        pv_details = get_pv_details(cluster, pv_name)
+        if not pv_details:
+            print(f"无法获取PV {pv_name} 的详细信息")
+            return None
+
+        # 生成唯一的Pod名称
+        pod_name = f"volume-helper-{pv_name}-{uuid.uuid4().hex[:8]}"
+
+        claim_name = pv_name  # 默认使用PV名称作为PVC名称
+
+        # 如果PV没有绑定的PVC，我们需要创建一个临时的PVC
+        if not pv_details.get('claim') or pv_details['claim'] is None:
+            # 生成临时PVC名称
+            temp_pvc_name = f"temp-pvc-{pv_name}-{uuid.uuid4().hex[:8]}"
+
+            # 创建临时PVC来绑定PV
+            temp_pvc = client.V1PersistentVolumeClaim(
+                metadata=client.V1ObjectMeta(
+                    name=temp_pvc_name,
+                    namespace=namespace,
+                    labels={"app": "volume-helper", "managed-by": "canvas"}
+                ),
+                spec=client.V1PersistentVolumeClaimSpec(
+                    volume_name=pv_name,  # 绑定到指定的PV
+                    access_modes=pv_details.get('access_modes', ['ReadWriteOnce']),
+                    resources=client.V1ResourceRequirements(
+                        requests={"storage": pv_details.get('capacity', '1Gi')}
+                    )
+                )
+            )
+
+            try:
+                core_v1.create_namespaced_persistent_volume_claim(namespace, temp_pvc)
+                claim_name = temp_pvc_name
+            except Exception as e:
+                print(f"创建临时PVC失败: {e}")
+                return None
+
+        # 如果PV有绑定的PVC，使用已有的PVC
+        elif isinstance(pv_details.get('claim'), str) and '/' in pv_details['claim']:
+            claim_namespace, claim_name_from_pv = pv_details['claim'].split('/', 1)
+            claim_name = claim_name_from_pv
+
+        # 创建helper Pod配置
+        pod = client.V1Pod(
+            metadata=client.V1ObjectMeta(
+                name=pod_name,
+                namespace=namespace,
+                labels={"app": "volume-helper", "managed-by": "canvas"}
+            ),
+            spec=client.V1PodSpec(
+                restart_policy="Never",
+                containers=[
+                    client.V1Container(
+                        name="helper",
+                        image="busybox:1.35",  # 使用轻量级的busybox镜像
+                        command=["sleep", "300"],  # 运行5分钟
+                        volume_mounts=[
+                            client.V1VolumeMount(
+                                name="volume",
+                                mount_path="/data"
+                            )
+                        ],
+                        security_context=client.V1SecurityContext(
+                            privileged=False,
+                            allow_privilege_escalation=False,
+                            run_as_non_root=True,
+                            run_as_user=1000,
+                            run_as_group=1000,
+                            capabilities=client.V1Capabilities(
+                                drop=["ALL"]
+                            )
+                        )
+                    )
+                ],
+                volumes=[
+                    client.V1Volume(
+                        name="volume",
+                        persistent_volume_claim=client.V1PersistentVolumeClaimVolumeSource(
+                            claim_name=claim_name
+                        )
+                    )
+                ],
+                # 添加安全策略
+                security_context=client.V1PodSecurityContext(
+                    run_as_non_root=True,
+                    run_as_user=1000,
+                    run_as_group=1000,
+                    fs_group=1000
+                )
+            )
+        )
+
+        # 创建Pod
+        core_v1.create_namespaced_pod(namespace, pod)
+
+        # 等待Pod就绪，最多等待30秒
+        for _ in range(30):
+            pod_status = core_v1.read_namespaced_pod(pod_name, namespace)
+            if pod_status.status.phase == "Running":
+                return (pod_name, temp_pvc_name)
+            elif pod_status.status.phase in ["Failed", "Succeeded"]:
+                # Pod创建失败，清理Pod和临时PVC
+                try:
+                    core_v1.delete_namespaced_pod(pod_name, namespace)
+                except:
+                    pass
+                if temp_pvc_name:
+                    try:
+                        core_v1.delete_namespaced_persistent_volume_claim(temp_pvc_name, namespace)
+                    except:
+                        pass
+                return None
+            time.sleep(1)
+
+        # 超时，清理Pod和临时PVC
+        try:
+            core_v1.delete_namespaced_pod(pod_name, namespace)
+        except:
+            pass
+        if temp_pvc_name:
+            try:
+                core_v1.delete_namespaced_persistent_volume_claim(temp_pvc_name, namespace)
+            except:
+                pass
+        return None
+
+    except Exception as e:
+        print(f"创建helper Pod失败: {e}")
+        # 清理可能已创建的资源
+        if pod_name:
+            try:
+                core_v1.delete_namespaced_pod(pod_name, namespace)
+            except:
+                pass
+        if temp_pvc_name:
+            try:
+                core_v1.delete_namespaced_persistent_volume_claim(temp_pvc_name, namespace)
+            except:
+                pass
+        return None
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def cleanup_helper_pod(cluster: Cluster, pod_name: str, temp_pvc_name: Optional[str] = None, namespace: str = "default") -> bool:
+    """清理helper Pod和临时PVC"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+
+        # 删除Pod
+        try:
+            core_v1.delete_namespaced_pod(pod_name, namespace, grace_period_seconds=0)
+        except Exception as e:
+            print(f"清理helper Pod失败: {e}")
+
+        # 删除临时PVC（如果存在）
+        if temp_pvc_name:
+            try:
+                core_v1.delete_namespaced_persistent_volume_claim(temp_pvc_name, namespace, grace_period_seconds=0)
+            except Exception as e:
+                print(f"清理临时PVC失败: {e}")
+
+        return True
+    except Exception as e:
+        print(f"清理helper资源失败: {e}")
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def execute_command_in_pod(cluster: Cluster, pod_name: str, namespace: str, command: List[str]) -> Optional[str]:
+    """在Pod中执行命令并返回输出"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return None
+
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+
+        # 执行命令
+        exec_command = ['/bin/sh', '-c'] + command
+        resp = stream(
+            core_v1.connect_get_namespaced_pod_exec,
+            pod_name,
+            namespace,
+            command=exec_command,
+            stderr=True,
+            stdin=False,
+            stdout=True,
+            tty=False,
+            _preload_content=False
+        )
+
+        # 读取输出
+        output = ""
+        while resp.is_open():
+            resp.update(timeout=1)
+            if resp.peek_stdout():
+                output += resp.read_stdout()
+            if resp.peek_stderr():
+                output += resp.read_stderr()
+
+        return output
+
+    except Exception as e:
+        print(f"在Pod中执行命令失败: {e}")
+        return None
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def browse_volume_files(cluster: Cluster, pv_name: str, path: str = "/") -> List[Dict[str, Any]]:
+    """浏览卷内文件（真实实现，使用helper Pod）"""
+    helper_resources = None
+    try:
+        # 创建helper Pod
+        helper_resources = create_helper_pod_for_volume(cluster, pv_name)
+        if not helper_resources:
+            print("无法创建helper Pod用于文件浏览")
+            return []
+
+        pod_name, temp_pvc_name = helper_resources
+
+        # 构建ls命令
+        target_path = f"/data{path}" if path != "/" else "/data"
+        command = [
+            f"ls -la --time-style=long-iso '{target_path}' 2>/dev/null || echo 'Path not found'"
+        ]
+
+        # 执行命令
+        output = execute_command_in_pod(cluster, pod_name, "default", command)
+        if not output or "Path not found" in output:
+            return []
+
+        # 解析ls -la输出
+        files = []
+        lines = output.strip().split('\n')[1:]  # 跳过第一行（总计）
+
+        for line in lines:
+            if not line.strip():
+                continue
+
+            parts = line.split()
+            if len(parts) < 8:
+                continue
+
+            permissions = parts[0]
+            file_type = "directory" if permissions.startswith('d') else "file"
+            size = int(parts[4]) if parts[4].isdigit() else None
+            date_time = f"{parts[5]} {parts[6]}" if len(parts) > 6 else None
+            name = ' '.join(parts[7:])  # 处理文件名包含空格的情况
+
+            # 跳过.和..目录
+            if name in ['.', '..']:
+                continue
+
+            files.append({
+                "name": name,
+                "type": file_type,
+                "size": size,
+                "modified_time": date_time,
+                "permissions": permissions
+            })
+
+        return files
+
+    except Exception as e:
+        print(f"浏览卷文件失败: {e}")
+        return []
+    finally:
+        # 清理helper资源
+        if helper_resources:
+            pod_name, temp_pvc_name = helper_resources
+            cleanup_helper_pod(cluster, pod_name, temp_pvc_name)
+
+
+def read_volume_file(cluster: Cluster, pv_name: str, file_path: str, max_lines: Optional[int] = None) -> Optional[str]:
+    """读取卷内文件内容（真实实现，使用helper Pod）"""
+    helper_resources = None
+    try:
+        # 创建helper Pod
+        helper_resources = create_helper_pod_for_volume(cluster, pv_name)
+        if not helper_resources:
+            print("无法创建helper Pod用于文件读取")
+            return None
+
+        pod_name, temp_pvc_name = helper_resources
+
+        # 构建文件路径
+        full_path = f"/data{file_path}"
+
+        # 首先检查文件是否存在和类型
+        check_command = [f"test -f '{full_path}' && echo 'file' || (test -d '{full_path}' && echo 'directory' || echo 'not_found')"]
+        check_output = execute_command_in_pod(cluster, pod_name, "default", check_command)
+
+        if not check_output or "not_found" in check_output.strip():
+            return f"文件不存在: {file_path}"
+
+        if "directory" in check_output.strip():
+            return f"路径是目录而非文件: {file_path}"
+
+        # 读取文件内容
+        if max_lines:
+            command = [f"head -n {max_lines} '{full_path}' 2>/dev/null || echo '无法读取文件'"]
+        else:
+            command = [f"cat '{full_path}' 2>/dev/null || echo '无法读取文件'"]
+
+        content = execute_command_in_pod(cluster, pod_name, "default", command)
+
+        if not content or "无法读取文件" in content:
+            return f"无法读取文件内容: {file_path}"
+
+        # 如果设置了行数限制且内容被截断，添加提示
+        if max_lines and content.count('\n') >= max_lines:
+            content += f"\n\n[已截断，显示前 {max_lines} 行]"
+
+        return content
+
+    except Exception as e:
+        print(f"读取卷文件失败: {e}")
+        return f"读取文件失败: {str(e)}"
+    finally:
+        # 清理helper资源
+        if helper_resources:
+            pod_name, temp_pvc_name = helper_resources
+            cleanup_helper_pod(cluster, pod_name, temp_pvc_name)

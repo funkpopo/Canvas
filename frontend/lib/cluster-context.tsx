@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useAuth } from './auth-context';
+import { clusterApi } from './api';
 
 interface Cluster {
   id: number;
@@ -39,17 +40,12 @@ export function ClusterProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      const response = await fetch("http://localhost:8000/api/clusters", {
-        headers: {
-          "Authorization": `Bearer ${token}`,
-        },
-      });
+      const response = await clusterApi.getClusters();
 
-      if (response.ok) {
-        const data = await response.json();
-        console.log("ClusterContext: Loaded", data.length, "clusters");
-        setClusters(data);
-        const activeClusters = data.filter((c: Cluster) => c.is_active);
+      if (response.data) {
+        console.log("ClusterContext: Loaded", response.data.length, "clusters");
+        setClusters(response.data);
+        const activeClusters = response.data.filter((c: Cluster) => c.is_active);
         if (activeClusters.length > 0) {
           const serverActive = activeClusters[0];
           if (!activeCluster || activeCluster.id !== serverActive.id) {
@@ -59,7 +55,7 @@ export function ClusterProvider({ children }: { children: ReactNode }) {
           _setActiveClusterLocal(null);
         }
       } else {
-        console.error("ClusterContext: Failed to fetch clusters, status:", response.status);
+        console.error("ClusterContext: Failed to fetch clusters, error:", response.error);
         setClusters([]);
         _setActiveClusterLocal(null);
       }
@@ -92,14 +88,7 @@ export function ClusterProvider({ children }: { children: ReactNode }) {
 
       await Promise.all(
         clusters.map((c) =>
-          fetch(`http://localhost:8000/api/clusters/${c.id}`, {
-            method: "PUT",
-            headers: {
-              "Authorization": `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ is_active: c.id === cluster.id }),
-          })
+          clusterApi.updateCluster(c.id, { is_active: c.id === cluster.id })
         )
       );
 
@@ -113,24 +102,14 @@ export function ClusterProvider({ children }: { children: ReactNode }) {
 
   const toggleClusterActive = async (clusterId: number) => {
     try {
-      const token = localStorage.getItem("token");
-      if (!token) return false;
-
       const cluster = clusters.find(c => c.id === clusterId);
       if (!cluster) return false;
 
-      const response = await fetch(`http://localhost:8000/api/clusters/${clusterId}`, {
-        method: "PUT",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          is_active: !cluster.is_active
-        }),
+      const response = await clusterApi.updateCluster(clusterId, {
+        is_active: !cluster.is_active
       });
 
-      if (response.ok) {
+      if (response.data) {
         await refreshClusters();
         return true;
       }
