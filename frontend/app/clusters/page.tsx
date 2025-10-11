@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { Plus, Edit, Trash2, TestTube, ArrowLeft, Loader2, Power, PowerOff } from "lucide-react";
 import Link from "next/link";
 import AuthGuard from "@/components/AuthGuard";
@@ -134,12 +135,15 @@ function ClustersPageContent() {
                 <span className="text-gray-600 dark:text-gray-400">返回仪表板</span>
               </Link>
             </div>
-            <Button asChild>
-              <Link href="/clusters/new">
-                <Plus className="h-4 w-4 mr-2" />
-                添加集群
-              </Link>
-            </Button>
+            <div className="flex items-center space-x-4">
+              <ThemeToggle />
+              <Button asChild>
+                <Link href="/clusters/new">
+                  <Plus className="h-4 w-4 mr-2" />
+                  添加集群
+                </Link>
+              </Button>
+            </div>
           </div>
         </div>
       </header>

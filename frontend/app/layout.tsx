@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ClusterProvider } from "@/lib/cluster-context";
 import { AuthProvider } from "@/lib/auth-context";
+import { ThemeProvider } from "next-themes";
 import { Toaster } from "sonner";
 
 const geistSans = Geist({
@@ -32,16 +33,23 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <AuthProvider>
-          <ClusterProvider>
-            {children}
-            <Toaster />
-          </ClusterProvider>
-        </AuthProvider>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <AuthProvider>
+            <ClusterProvider>
+              {children}
+              <Toaster />
+            </ClusterProvider>
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

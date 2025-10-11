@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { LogOut, Server, FolderPen, Activity, Settings, Database, Loader2 } from "lucide-react";
 import ClusterSelector from "@/components/ClusterSelector";
 import { useAuth } from "@/lib/auth-context";
@@ -85,6 +86,7 @@ export default function Home() {
             </div>
             <div className="flex items-center space-x-4">
               <ClusterSelector />
+              <ThemeToggle />
               <Button variant="outline" onClick={logout}>
                 <LogOut className="h-4 w-4 mr-2" />
                 登出
