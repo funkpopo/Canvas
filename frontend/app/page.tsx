@@ -6,7 +6,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
-import { LogOut, Server, FolderPen, Activity, Settings, Database, Loader2 } from "lucide-react";
+import { LogOut, Server, FolderPen, Activity, Settings, Database, Loader2, Settings2, Cpu, Route, Shield, Lock } from "lucide-react";
 import ClusterSelector from "@/components/ClusterSelector";
 import { useAuth } from "@/lib/auth-context";
 
@@ -196,7 +196,7 @@ export default function Home() {
             <CardDescription>常用Kubernetes管理任务</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <Button variant="outline" className="h-20 flex-col" asChild>
                 <Link href="/nodes">
                   <Server className="h-6 w-6 mb-2" />
@@ -219,6 +219,42 @@ export default function Home() {
                 <Link href="/storage">
                   <Database className="h-6 w-6 mb-2" />
                   存储管理
+                </Link>
+              </Button>
+              <Button variant="outline" className="h-20 flex-col" asChild>
+                <Link href="/services">
+                  <Settings2 className="h-6 w-6 mb-2" />
+                  服务管理
+                </Link>
+              </Button>
+              <Button variant="outline" className="h-20 flex-col" asChild>
+                <Link href="/configmaps">
+                  <Database className="h-6 w-6 mb-2" />
+                  ConfigMaps
+                </Link>
+              </Button>
+              <Button variant="outline" className="h-20 flex-col" asChild>
+                <Link href="/secrets">
+                  <Lock className="h-6 w-6 mb-2" />
+                  Secrets
+                </Link>
+              </Button>
+              <Button variant="outline" className="h-20 flex-col" asChild>
+                <Link href="/ingress">
+                  <Route className="h-6 w-6 mb-2" />
+                  Ingress
+                </Link>
+              </Button>
+              <Button variant="outline" className="h-20 flex-col" asChild>
+                <Link href="/network-policies">
+                  <Shield className="h-6 w-6 mb-2" />
+                  网络策略
+                </Link>
+              </Button>
+              <Button variant="outline" className="h-20 flex-col" asChild>
+                <Link href="/resource-quotas">
+                  <Cpu className="h-6 w-6 mb-2" />
+                  资源配额
                 </Link>
               </Button>
               <Button variant="outline" className="h-20 flex-col" asChild>

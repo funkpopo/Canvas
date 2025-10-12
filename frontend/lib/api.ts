@@ -274,3 +274,272 @@ export const storageApi = {
     return apiClient.get<{content: string, file_path: string}>(url);
   },
 };
+
+// 服务相关类型
+interface Service {
+  name: string;
+  namespace: string;
+  type: string;
+  cluster_ip: string;
+  external_ip: string | null;
+  ports: any[];
+  selector: Record<string, any>;
+  labels: Record<string, any>;
+  age: string;
+  cluster_name: string;
+  cluster_id: number;
+}
+
+// ConfigMap相关类型
+interface ConfigMap {
+  name: string;
+  namespace: string;
+  data: Record<string, any>;
+  labels: Record<string, any>;
+  annotations: Record<string, any>;
+  age: string;
+  cluster_name: string;
+  cluster_id: number;
+}
+
+// Secret相关类型
+interface Secret {
+  name: string;
+  namespace: string;
+  type: string;
+  data_keys: string[];
+  labels: Record<string, any>;
+  annotations: Record<string, any>;
+  age: string;
+  cluster_name: string;
+  cluster_id: number;
+}
+
+interface SecretDetails extends Secret {
+  data: Record<string, any>;
+}
+
+// Ingress相关类型
+interface Ingress {
+  name: string;
+  namespace: string;
+  hosts: string[];
+  tls_hosts: string[];
+  class_name: string | null;
+  labels: Record<string, any>;
+  annotations: Record<string, any>;
+  age: string;
+  cluster_name: string;
+  cluster_id: number;
+}
+
+interface IngressDetails extends Ingress {
+  rules: any[];
+  tls: any[];
+}
+
+// Network Policy相关类型
+interface NetworkPolicy {
+  name: string;
+  namespace: string;
+  pod_selector: Record<string, any>;
+  policy_types: string[];
+  labels: Record<string, any>;
+  annotations: Record<string, any>;
+  age: string;
+  cluster_name: string;
+  cluster_id: number;
+}
+
+interface NetworkPolicyDetails extends NetworkPolicy {
+  ingress: any[];
+  egress: any[];
+}
+
+// Resource Quota相关类型
+interface ResourceQuota {
+  name: string;
+  namespace: string;
+  hard: Record<string, any>;
+  used: Record<string, any>;
+  labels: Record<string, any>;
+  annotations: Record<string, any>;
+  age: string;
+  cluster_name: string;
+  cluster_id: number;
+}
+
+interface ResourceQuotaDetails extends ResourceQuota {
+  scopes: string[];
+  scope_selector: any[];
+}
+
+// 服务相关 API
+export const serviceApi = {
+  async getServices(clusterId?: number, namespace?: string): Promise<ApiResponse<Service[]>> {
+    let params = '';
+    if (clusterId) params += `cluster_id=${clusterId}`;
+    if (namespace) params += `${params ? '&' : ''}namespace=${namespace}`;
+    const query = params ? `?${params}` : '';
+    return apiClient.get<Service[]>(`/services${query}`);
+  },
+
+  async getService(clusterId: number, namespace: string, serviceName: string): Promise<ApiResponse<Service>> {
+    return apiClient.get<Service>(`/services/${namespace}/${serviceName}?cluster_id=${clusterId}`);
+  },
+
+  async createService(clusterId: number, serviceData: Record<string, any>): Promise<ApiResponse<any>> {
+    return apiClient.post<any>(`/services?cluster_id=${clusterId}`, serviceData);
+  },
+
+  async updateService(clusterId: number, namespace: string, serviceName: string, updates: Record<string, any>): Promise<ApiResponse<any>> {
+    return apiClient.put<any>(`/services/${namespace}/${serviceName}?cluster_id=${clusterId}`, updates);
+  },
+
+  async deleteService(clusterId: number, namespace: string, serviceName: string): Promise<ApiResponse<any>> {
+    return apiClient.delete<any>(`/services/${namespace}/${serviceName}?cluster_id=${clusterId}`);
+  },
+
+  async getServiceYaml(clusterId: number, namespace: string, serviceName: string): Promise<ApiResponse<{yaml: string}>> {
+    return apiClient.get<{yaml: string}>(`/services/${namespace}/${serviceName}/yaml?cluster_id=${clusterId}`);
+  },
+
+  async updateServiceYaml(clusterId: number, namespace: string, serviceName: string, yaml: string): Promise<ApiResponse<any>> {
+    return apiClient.put<any>(`/services/${namespace}/${serviceName}/yaml?cluster_id=${clusterId}`, { yaml });
+  },
+};
+
+// ConfigMap相关 API
+export const configmapApi = {
+  async getConfigMaps(clusterId?: number, namespace?: string): Promise<ApiResponse<ConfigMap[]>> {
+    let params = '';
+    if (clusterId) params += `cluster_id=${clusterId}`;
+    if (namespace) params += `${params ? '&' : ''}namespace=${namespace}`;
+    const query = params ? `?${params}` : '';
+    return apiClient.get<ConfigMap[]>(`/configmaps${query}`);
+  },
+
+  async getConfigMap(clusterId: number, namespace: string, configmapName: string): Promise<ApiResponse<ConfigMap>> {
+    return apiClient.get<ConfigMap>(`/configmaps/${namespace}/${configmapName}?cluster_id=${clusterId}`);
+  },
+
+  async createConfigMap(clusterId: number, configmapData: Record<string, any>): Promise<ApiResponse<any>> {
+    return apiClient.post<any>(`/configmaps?cluster_id=${clusterId}`, configmapData);
+  },
+
+  async updateConfigMap(clusterId: number, namespace: string, configmapName: string, updates: Record<string, any>): Promise<ApiResponse<any>> {
+    return apiClient.put<any>(`/configmaps/${namespace}/${configmapName}?cluster_id=${clusterId}`, updates);
+  },
+
+  async deleteConfigMap(clusterId: number, namespace: string, configmapName: string): Promise<ApiResponse<any>> {
+    return apiClient.delete<any>(`/configmaps/${namespace}/${configmapName}?cluster_id=${clusterId}`);
+  },
+};
+
+// Secret相关 API
+export const secretApi = {
+  async getSecrets(clusterId?: number, namespace?: string): Promise<ApiResponse<Secret[]>> {
+    let params = '';
+    if (clusterId) params += `cluster_id=${clusterId}`;
+    if (namespace) params += `${params ? '&' : ''}namespace=${namespace}`;
+    const query = params ? `?${params}` : '';
+    return apiClient.get<Secret[]>(`/secrets${query}`);
+  },
+
+  async getSecret(clusterId: number, namespace: string, secretName: string): Promise<ApiResponse<SecretDetails>> {
+    return apiClient.get<SecretDetails>(`/secrets/${namespace}/${secretName}?cluster_id=${clusterId}`);
+  },
+
+  async createSecret(clusterId: number, secretData: Record<string, any>): Promise<ApiResponse<any>> {
+    return apiClient.post<any>(`/secrets?cluster_id=${clusterId}`, secretData);
+  },
+
+  async updateSecret(clusterId: number, namespace: string, secretName: string, updates: Record<string, any>): Promise<ApiResponse<any>> {
+    return apiClient.put<any>(`/secrets/${namespace}/${secretName}?cluster_id=${clusterId}`, updates);
+  },
+
+  async deleteSecret(clusterId: number, namespace: string, secretName: string): Promise<ApiResponse<any>> {
+    return apiClient.delete<any>(`/secrets/${namespace}/${secretName}?cluster_id=${clusterId}`);
+  },
+};
+
+// Ingress相关 API
+export const ingressApi = {
+  async getIngresses(clusterId?: number, namespace?: string): Promise<ApiResponse<Ingress[]>> {
+    let params = '';
+    if (clusterId) params += `cluster_id=${clusterId}`;
+    if (namespace) params += `${params ? '&' : ''}namespace=${namespace}`;
+    const query = params ? `?${params}` : '';
+    return apiClient.get<Ingress[]>(`/ingress${query}`);
+  },
+
+  async getIngress(clusterId: number, namespace: string, ingressName: string): Promise<ApiResponse<IngressDetails>> {
+    return apiClient.get<IngressDetails>(`/ingress/${namespace}/${ingressName}?cluster_id=${clusterId}`);
+  },
+
+  async createIngress(clusterId: number, ingressData: Record<string, any>): Promise<ApiResponse<any>> {
+    return apiClient.post<any>(`/ingress?cluster_id=${clusterId}`, ingressData);
+  },
+
+  async updateIngress(clusterId: number, namespace: string, ingressName: string, updates: Record<string, any>): Promise<ApiResponse<any>> {
+    return apiClient.put<any>(`/ingress/${namespace}/${ingressName}?cluster_id=${clusterId}`, updates);
+  },
+
+  async deleteIngress(clusterId: number, namespace: string, ingressName: string): Promise<ApiResponse<any>> {
+    return apiClient.delete<any>(`/ingress/${namespace}/${ingressName}?cluster_id=${clusterId}`);
+  },
+};
+
+// Network Policy相关 API
+export const networkPolicyApi = {
+  async getNetworkPolicies(clusterId?: number, namespace?: string): Promise<ApiResponse<NetworkPolicy[]>> {
+    let params = '';
+    if (clusterId) params += `cluster_id=${clusterId}`;
+    if (namespace) params += `${params ? '&' : ''}namespace=${namespace}`;
+    const query = params ? `?${params}` : '';
+    return apiClient.get<NetworkPolicy[]>(`/network-policies${query}`);
+  },
+
+  async getNetworkPolicy(clusterId: number, namespace: string, policyName: string): Promise<ApiResponse<NetworkPolicyDetails>> {
+    return apiClient.get<NetworkPolicyDetails>(`/network-policies/${namespace}/${policyName}?cluster_id=${clusterId}`);
+  },
+
+  async createNetworkPolicy(clusterId: number, policyData: Record<string, any>): Promise<ApiResponse<any>> {
+    return apiClient.post<any>(`/network-policies?cluster_id=${clusterId}`, policyData);
+  },
+
+  async updateNetworkPolicy(clusterId: number, namespace: string, policyName: string, updates: Record<string, any>): Promise<ApiResponse<any>> {
+    return apiClient.put<any>(`/network-policies/${namespace}/${policyName}?cluster_id=${clusterId}`, updates);
+  },
+
+  async deleteNetworkPolicy(clusterId: number, namespace: string, policyName: string): Promise<ApiResponse<any>> {
+    return apiClient.delete<any>(`/network-policies/${namespace}/${policyName}?cluster_id=${clusterId}`);
+  },
+};
+
+// Resource Quota相关 API
+export const resourceQuotaApi = {
+  async getResourceQuotas(clusterId?: number, namespace?: string): Promise<ApiResponse<ResourceQuota[]>> {
+    let params = '';
+    if (clusterId) params += `cluster_id=${clusterId}`;
+    if (namespace) params += `${params ? '&' : ''}namespace=${namespace}`;
+    const query = params ? `?${params}` : '';
+    return apiClient.get<ResourceQuota[]>(`/resource-quotas${query}`);
+  },
+
+  async getResourceQuota(clusterId: number, namespace: string, quotaName: string): Promise<ApiResponse<ResourceQuotaDetails>> {
+    return apiClient.get<ResourceQuotaDetails>(`/resource-quotas/${namespace}/${quotaName}?cluster_id=${clusterId}`);
+  },
+
+  async createResourceQuota(clusterId: number, quotaData: Record<string, any>): Promise<ApiResponse<any>> {
+    return apiClient.post<any>(`/resource-quotas?cluster_id=${clusterId}`, quotaData);
+  },
+
+  async updateResourceQuota(clusterId: number, namespace: string, quotaName: string, updates: Record<string, any>): Promise<ApiResponse<any>> {
+    return apiClient.put<any>(`/resource-quotas/${namespace}/${quotaName}?cluster_id=${clusterId}`, updates);
+  },
+
+  async deleteResourceQuota(clusterId: number, namespace: string, quotaName: string): Promise<ApiResponse<any>> {
+    return apiClient.delete<any>(`/resource-quotas/${namespace}/${quotaName}?cluster_id=${clusterId}`);
+  },
+};

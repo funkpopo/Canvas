@@ -2413,3 +2413,1459 @@ def read_volume_file(cluster: Cluster, pv_name: str, file_path: str, max_lines: 
         if helper_resources:
             pod_name, temp_pvc_name = helper_resources
             cleanup_helper_pod(cluster, pod_name, temp_pvc_name)
+
+
+# ========== 核心资源管理 ==========
+
+# ========== 服务管理 ==========
+
+def get_namespace_services(cluster: Cluster, namespace_name: str) -> List[Dict[str, Any]]:
+    """获取命名空间下的所有服务"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return []
+
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+        services = core_v1.list_namespaced_service(namespace_name)
+
+        result = []
+        for service in services.items:
+            # 计算年龄
+            from datetime import datetime
+            age = "Unknown"
+            if service.metadata.creation_timestamp:
+                created = service.metadata.creation_timestamp.replace(tzinfo=None)
+                now = datetime.now()
+                delta = now - created
+                if delta.days > 0:
+                    age = f"{delta.days}d"
+                elif delta.seconds // 3600 > 0:
+                    age = f"{delta.seconds // 3600}h"
+                elif delta.seconds // 60 > 0:
+                    age = f"{delta.seconds // 60}m"
+                else:
+                    age = f"{delta.seconds}s"
+
+            result.append({
+                "name": service.metadata.name,
+                "namespace": namespace_name,
+                "type": service.spec.type,
+                "cluster_ip": service.spec.cluster_ip,
+                "external_ip": getattr(service.status, 'load_balancer', {}).get('ingress', [{}])[0].get('ip', None) if service.spec.type == 'LoadBalancer' else None,
+                "ports": [{"port": port.port, "target_port": port.target_port, "protocol": port.protocol, "name": getattr(port, 'name', None)} for port in (service.spec.ports or [])],
+                "selector": service.spec.selector or {},
+                "labels": service.metadata.labels or {},
+                "age": age,
+                "cluster_name": cluster.name,
+                "cluster_id": cluster.id
+            })
+
+        return result
+
+    except Exception as e:
+        print(f"获取命名空间服务失败: {e}")
+        return []
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def create_service(cluster: Cluster, namespace: str, service_data: Dict[str, Any]) -> bool:
+    """创建服务"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+
+        # 构建Service对象
+        service = client.V1Service(
+            api_version="v1",
+            kind="Service",
+            metadata=client.V1ObjectMeta(
+                name=service_data["name"],
+                namespace=namespace,
+                labels=service_data.get("labels", {}),
+                annotations=service_data.get("annotations", {})
+            ),
+            spec=client.V1ServiceSpec(
+                type=service_data.get("type", "ClusterIP"),
+                selector=service_data.get("selector", {}),
+                ports=[
+                    client.V1ServicePort(
+                        name=port.get("name"),
+                        port=port["port"],
+                        target_port=port["target_port"],
+                        protocol=port.get("protocol", "TCP")
+                    ) for port in service_data.get("ports", [])
+                ]
+            )
+        )
+
+        # 设置ClusterIP（如果指定）
+        if service_data.get("cluster_ip"):
+            service.spec.cluster_ip = service_data["cluster_ip"]
+
+        # 设置LoadBalancer相关配置
+        if service_data.get("type") == "LoadBalancer":
+            if service_data.get("load_balancer_ip"):
+                service.spec.load_balancer_ip = service_data["load_balancer_ip"]
+            if service_data.get("external_traffic_policy"):
+                service.spec.external_traffic_policy = service_data["external_traffic_policy"]
+
+        # 设置NodePort相关配置
+        if service_data.get("type") == "NodePort":
+            if service_data.get("external_traffic_policy"):
+                service.spec.external_traffic_policy = service_data["external_traffic_policy"]
+
+        # 设置会话亲和性
+        if service_data.get("session_affinity"):
+            service.spec.session_affinity = service_data["session_affinity"]
+            if service_data.get("session_affinity_config"):
+                service.spec.session_affinity_config = client.V1SessionAffinityConfig(
+                    client_ip=client.V1ClientIPConfig(
+                        timeout_seconds=service_data["session_affinity_config"].get("timeout_seconds", 10800)
+                    )
+                )
+
+        core_v1.create_namespaced_service(namespace, service)
+        return True
+
+    except Exception as e:
+        print(f"创建服务失败: {e}")
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def delete_service(cluster: Cluster, namespace: str, service_name: str) -> bool:
+    """删除服务"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+        core_v1.delete_namespaced_service(service_name, namespace)
+        return True
+
+    except Exception as e:
+        print(f"删除服务失败: {e}")
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def get_service_yaml(cluster: Cluster, namespace: str, service_name: str) -> Optional[str]:
+    """获取服务的YAML配置"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return None
+
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+        service = core_v1.read_namespaced_service(service_name, namespace)
+
+        # 将对象转换为字典
+        service_dict = client.ApiClient().sanitize_for_serialization(service)
+
+        # 使用yaml库转换为YAML字符串
+        import yaml
+        return yaml.dump(service_dict, default_flow_style=False)
+
+    except Exception as e:
+        print(f"获取服务YAML失败: {e}")
+        return None
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def update_service_yaml(cluster: Cluster, namespace: str, service_name: str, yaml_content: str) -> bool:
+    """通过YAML更新服务"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        import yaml
+        service_dict = yaml.safe_load(yaml_content)
+
+        # 使用patch更新服务
+        core_v1 = client.CoreV1Api(client_instance)
+        core_v1.patch_namespaced_service(service_name, namespace, service_dict)
+        return True
+
+    except Exception as e:
+        print(f"更新服务YAML失败: {e}")
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+# ========== ConfigMaps管理 ==========
+
+def get_namespace_configmaps(cluster: Cluster, namespace_name: str) -> List[Dict[str, Any]]:
+    """获取命名空间下的所有ConfigMaps"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return []
+
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+        configmaps = core_v1.list_namespaced_config_map(namespace_name)
+
+        result = []
+        for cm in configmaps.items:
+            # 计算年龄
+            from datetime import datetime
+            age = "Unknown"
+            if cm.metadata.creation_timestamp:
+                created = cm.metadata.creation_timestamp.replace(tzinfo=None)
+                now = datetime.now()
+                delta = now - created
+                if delta.days > 0:
+                    age = f"{delta.days}d"
+                elif delta.seconds // 3600 > 0:
+                    age = f"{delta.seconds // 3600}h"
+                elif delta.seconds // 60 > 0:
+                    age = f"{delta.seconds // 60}m"
+                else:
+                    age = f"{delta.seconds}s"
+
+            result.append({
+                "name": cm.metadata.name,
+                "namespace": namespace_name,
+                "data": cm.data or {},
+                "labels": cm.metadata.labels or {},
+                "annotations": cm.metadata.annotations or {},
+                "age": age,
+                "cluster_name": cluster.name,
+                "cluster_id": cluster.id
+            })
+
+        return result
+
+    except Exception as e:
+        print(f"获取命名空间ConfigMaps失败: {e}")
+        return []
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def get_configmap_details(cluster: Cluster, namespace: str, configmap_name: str) -> Optional[Dict[str, Any]]:
+    """获取ConfigMap详细信息"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return None
+
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+        cm = core_v1.read_namespaced_config_map(configmap_name, namespace)
+
+        # 计算年龄
+        from datetime import datetime
+        age = "Unknown"
+        if cm.metadata.creation_timestamp:
+            created = cm.metadata.creation_timestamp.replace(tzinfo=None)
+            now = datetime.now()
+            delta = now - created
+            if delta.days > 0:
+                age = f"{delta.days}d"
+            elif delta.seconds // 3600 > 0:
+                age = f"{delta.seconds // 3600}h"
+            elif delta.seconds // 60 > 0:
+                age = f"{delta.seconds // 60}m"
+            else:
+                age = f"{delta.seconds}s"
+
+        return {
+            "name": cm.metadata.name,
+            "namespace": namespace,
+            "data": cm.data or {},
+            "labels": cm.metadata.labels or {},
+            "annotations": cm.metadata.annotations or {},
+            "age": age,
+            "cluster_name": cluster.name,
+            "cluster_id": cluster.id
+        }
+
+    except Exception as e:
+        print(f"获取ConfigMap详情失败: {e}")
+        return None
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def create_configmap(cluster: Cluster, namespace: str, configmap_data: Dict[str, Any]) -> bool:
+    """创建ConfigMap"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+
+        configmap = client.V1ConfigMap(
+            api_version="v1",
+            kind="ConfigMap",
+            metadata=client.V1ObjectMeta(
+                name=configmap_data["name"],
+                namespace=namespace,
+                labels=configmap_data.get("labels", {}),
+                annotations=configmap_data.get("annotations", {})
+            ),
+            data=configmap_data.get("data", {})
+        )
+
+        core_v1.create_namespaced_config_map(namespace, configmap)
+        return True
+
+    except Exception as e:
+        print(f"创建ConfigMap失败: {e}")
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def update_configmap(cluster: Cluster, namespace: str, configmap_name: str, updates: Dict[str, Any]) -> bool:
+    """更新ConfigMap"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+
+        # 获取现有ConfigMap
+        existing_cm = core_v1.read_namespaced_config_map(configmap_name, namespace)
+
+        # 构建更新对象
+        patch = {
+            "metadata": {
+                "labels": updates.get("labels", existing_cm.metadata.labels or {}),
+                "annotations": updates.get("annotations", existing_cm.metadata.annotations or {})
+            },
+            "data": updates.get("data", existing_cm.data or {})
+        }
+
+        core_v1.patch_namespaced_config_map(configmap_name, namespace, patch)
+        return True
+
+    except Exception as e:
+        print(f"更新ConfigMap失败: {e}")
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def delete_configmap(cluster: Cluster, namespace: str, configmap_name: str) -> bool:
+    """删除ConfigMap"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+        core_v1.delete_namespaced_config_map(configmap_name, namespace)
+        return True
+
+    except Exception as e:
+        print(f"删除ConfigMap失败: {e}")
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+# ========== Secrets管理 ==========
+
+def get_namespace_secrets(cluster: Cluster, namespace_name: str) -> List[Dict[str, Any]]:
+    """获取命名空间下的所有Secrets"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return []
+
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+        secrets = core_v1.list_namespaced_secret(namespace_name)
+
+        result = []
+        for secret in secrets.items:
+            # 计算年龄
+            from datetime import datetime
+            age = "Unknown"
+            if secret.metadata.creation_timestamp:
+                created = secret.metadata.creation_timestamp.replace(tzinfo=None)
+                now = datetime.now()
+                delta = now - created
+                if delta.days > 0:
+                    age = f"{delta.days}d"
+                elif delta.seconds // 3600 > 0:
+                    age = f"{delta.seconds // 3600}h"
+                elif delta.seconds // 60 > 0:
+                    age = f"{delta.seconds // 60}m"
+                else:
+                    age = f"{delta.seconds}s"
+
+            result.append({
+                "name": secret.metadata.name,
+                "namespace": namespace_name,
+                "type": secret.type,
+                "data_keys": list(secret.data.keys()) if secret.data else [],
+                "labels": secret.metadata.labels or {},
+                "annotations": secret.metadata.annotations or {},
+                "age": age,
+                "cluster_name": cluster.name,
+                "cluster_id": cluster.id
+            })
+
+        return result
+
+    except Exception as e:
+        print(f"获取命名空间Secrets失败: {e}")
+        return []
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def get_secret_details(cluster: Cluster, namespace: str, secret_name: str) -> Optional[Dict[str, Any]]:
+    """获取Secret详细信息"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return None
+
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+        secret = core_v1.read_namespaced_secret(secret_name, namespace)
+
+        # 计算年龄
+        from datetime import datetime
+        age = "Unknown"
+        if secret.metadata.creation_timestamp:
+            created = secret.metadata.creation_timestamp.replace(tzinfo=None)
+            now = datetime.now()
+            delta = now - created
+            if delta.days > 0:
+                age = f"{delta.days}d"
+            elif delta.seconds // 3600 > 0:
+                age = f"{delta.seconds // 3600}h"
+            elif delta.seconds // 60 > 0:
+                age = f"{delta.seconds // 60}m"
+            else:
+                age = f"{delta.seconds}s"
+
+        # 解码base64数据（前端需要时再编码）
+        decoded_data = {}
+        if secret.data:
+            import base64
+            for key, value in secret.data.items():
+                try:
+                    decoded_data[key] = base64.b64decode(value).decode('utf-8')
+                except:
+                    decoded_data[key] = value  # 如果解码失败，保持原样
+
+        return {
+            "name": secret.metadata.name,
+            "namespace": namespace,
+            "type": secret.type,
+            "data": decoded_data,
+            "labels": secret.metadata.labels or {},
+            "annotations": secret.metadata.annotations or {},
+            "age": age,
+            "cluster_name": cluster.name,
+            "cluster_id": cluster.id
+        }
+
+    except Exception as e:
+        print(f"获取Secret详情失败: {e}")
+        return None
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def create_secret(cluster: Cluster, namespace: str, secret_data: Dict[str, Any]) -> bool:
+    """创建Secret"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+
+        # 对数据进行base64编码
+        import base64
+        encoded_data = {}
+        if secret_data.get("data"):
+            for key, value in secret_data["data"].items():
+                encoded_data[key] = base64.b64encode(value.encode('utf-8')).decode('utf-8')
+
+        secret = client.V1Secret(
+            api_version="v1",
+            kind="Secret",
+            metadata=client.V1ObjectMeta(
+                name=secret_data["name"],
+                namespace=namespace,
+                labels=secret_data.get("labels", {}),
+                annotations=secret_data.get("annotations", {})
+            ),
+            type=secret_data.get("type", "Opaque"),
+            data=encoded_data
+        )
+
+        core_v1.create_namespaced_secret(namespace, secret)
+        return True
+
+    except Exception as e:
+        print(f"创建Secret失败: {e}")
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def update_secret(cluster: Cluster, namespace: str, secret_name: str, updates: Dict[str, Any]) -> bool:
+    """更新Secret"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+
+        # 获取现有Secret
+        existing_secret = core_v1.read_namespaced_secret(secret_name, namespace)
+
+        # 构建更新对象
+        patch = {
+            "metadata": {
+                "labels": updates.get("labels", existing_secret.metadata.labels or {}),
+                "annotations": updates.get("annotations", existing_secret.metadata.annotations or {})
+            }
+        }
+
+        # 如果提供了新数据，编码后更新
+        if updates.get("data"):
+            import base64
+            encoded_data = {}
+            for key, value in updates["data"].items():
+                encoded_data[key] = base64.b64encode(value.encode('utf-8')).decode('utf-8')
+            patch["data"] = encoded_data
+
+        core_v1.patch_namespaced_secret(secret_name, namespace, patch)
+        return True
+
+    except Exception as e:
+        print(f"更新Secret失败: {e}")
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def delete_secret(cluster: Cluster, namespace: str, secret_name: str) -> bool:
+    """删除Secret"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+        core_v1.delete_namespaced_secret(secret_name, namespace)
+        return True
+
+    except Exception as e:
+        print(f"删除Secret失败: {e}")
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+# ========== Ingress管理 ==========
+
+def get_namespace_ingresses(cluster: Cluster, namespace_name: str) -> List[Dict[str, Any]]:
+    """获取命名空间下的所有Ingress"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return []
+
+    try:
+        networking_v1 = client.NetworkingV1Api(client_instance)
+        ingresses = networking_v1.list_namespaced_ingress(namespace_name)
+
+        result = []
+        for ingress in ingresses.items:
+            # 计算年龄
+            from datetime import datetime
+            age = "Unknown"
+            if ingress.metadata.creation_timestamp:
+                created = ingress.metadata.creation_timestamp.replace(tzinfo=None)
+                now = datetime.now()
+                delta = now - created
+                if delta.days > 0:
+                    age = f"{delta.days}d"
+                elif delta.seconds // 3600 > 0:
+                    age = f"{delta.seconds // 3600}h"
+                elif delta.seconds // 60 > 0:
+                    age = f"{delta.seconds // 60}m"
+                else:
+                    age = f"{delta.seconds}s"
+
+            # 提取主机和路径信息
+            hosts = []
+            tls_hosts = []
+            if ingress.spec.rules:
+                for rule in ingress.spec.rules:
+                    if rule.host:
+                        hosts.append(rule.host)
+                    if rule.http and rule.http.paths:
+                        for path in rule.http.paths:
+                            hosts.append(f"{rule.host or '*'}{path.path}")
+
+            if ingress.spec.tls:
+                for tls in ingress.spec.tls:
+                    tls_hosts.extend(tls.hosts or [])
+
+            result.append({
+                "name": ingress.metadata.name,
+                "namespace": namespace_name,
+                "hosts": hosts,
+                "tls_hosts": tls_hosts,
+                "class_name": ingress.spec.ingress_class_name,
+                "labels": ingress.metadata.labels or {},
+                "annotations": ingress.metadata.annotations or {},
+                "age": age,
+                "cluster_name": cluster.name,
+                "cluster_id": cluster.id
+            })
+
+        return result
+
+    except Exception as e:
+        print(f"获取命名空间Ingress失败: {e}")
+        return []
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def get_ingress_details(cluster: Cluster, namespace: str, ingress_name: str) -> Optional[Dict[str, Any]]:
+    """获取Ingress详细信息"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return None
+
+    try:
+        networking_v1 = client.NetworkingV1Api(client_instance)
+        ingress = networking_v1.read_namespaced_ingress(ingress_name, namespace)
+
+        # 计算年龄
+        from datetime import datetime
+        age = "Unknown"
+        if ingress.metadata.creation_timestamp:
+            created = ingress.metadata.creation_timestamp.replace(tzinfo=None)
+            now = datetime.now()
+            delta = now - created
+            if delta.days > 0:
+                age = f"{delta.days}d"
+            elif delta.seconds // 3600 > 0:
+                age = f"{delta.seconds // 3600}h"
+            elif delta.seconds // 60 > 0:
+                age = f"{delta.seconds // 60}m"
+            else:
+                age = f"{delta.seconds}s"
+
+        # 构建规则详细信息
+        rules = []
+        if ingress.spec.rules:
+            for rule in ingress.spec.rules:
+                rule_info = {
+                    "host": rule.host,
+                    "paths": []
+                }
+                if rule.http and rule.http.paths:
+                    for path in rule.http.paths:
+                        rule_info["paths"].append({
+                            "path": path.path,
+                            "path_type": path.path_type,
+                            "service_name": path.backend.service.name if path.backend.service else None,
+                            "service_port": path.backend.service.port.number if path.backend.service and path.backend.service.port else None
+                        })
+                rules.append(rule_info)
+
+        # 构建TLS信息
+        tls_info = []
+        if ingress.spec.tls:
+            for tls in ingress.spec.tls:
+                tls_info.append({
+                    "hosts": tls.hosts or [],
+                    "secret_name": tls.secret_name
+                })
+
+        return {
+            "name": ingress.metadata.name,
+            "namespace": namespace,
+            "class_name": ingress.spec.ingress_class_name,
+            "rules": rules,
+            "tls": tls_info,
+            "labels": ingress.metadata.labels or {},
+            "annotations": ingress.metadata.annotations or {},
+            "age": age,
+            "cluster_name": cluster.name,
+            "cluster_id": cluster.id
+        }
+
+    except Exception as e:
+        print(f"获取Ingress详情失败: {e}")
+        return None
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def create_ingress(cluster: Cluster, namespace: str, ingress_data: Dict[str, Any]) -> bool:
+    """创建Ingress"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        networking_v1 = client.NetworkingV1Api(client_instance)
+
+        # 构建规则
+        rules = []
+        if ingress_data.get("rules"):
+            for rule in ingress_data["rules"]:
+                http_paths = []
+                if rule.get("paths"):
+                    for path in rule["paths"]:
+                        http_paths.append(client.V1HTTPIngressPath(
+                            path=path["path"],
+                            path_type=path.get("path_type", "Prefix"),
+                            backend=client.V1IngressBackend(
+                                service=client.V1IngressServiceBackend(
+                                    name=path["service_name"],
+                                    port=client.V1ServiceBackendPort(
+                                        number=path["service_port"]
+                                    )
+                                )
+                            )
+                        ))
+
+                rules.append(client.V1IngressRule(
+                    host=rule.get("host"),
+                    http=client.V1HTTPIngressRuleValue(
+                        paths=http_paths
+                    )
+                ))
+
+        # 构建TLS配置
+        tls = []
+        if ingress_data.get("tls"):
+            for tls_config in ingress_data["tls"]:
+                tls.append(client.V1IngressTLS(
+                    hosts=tls_config.get("hosts", []),
+                    secret_name=tls_config.get("secret_name")
+                ))
+
+        ingress = client.V1Ingress(
+            api_version="networking.k8s.io/v1",
+            kind="Ingress",
+            metadata=client.V1ObjectMeta(
+                name=ingress_data["name"],
+                namespace=namespace,
+                labels=ingress_data.get("labels", {}),
+                annotations=ingress_data.get("annotations", {})
+            ),
+            spec=client.V1IngressSpec(
+                ingress_class_name=ingress_data.get("class_name"),
+                rules=rules,
+                tls=tls
+            )
+        )
+
+        networking_v1.create_namespaced_ingress(namespace, ingress)
+        return True
+
+    except Exception as e:
+        print(f"创建Ingress失败: {e}")
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def update_ingress(cluster: Cluster, namespace: str, ingress_name: str, updates: Dict[str, Any]) -> bool:
+    """更新Ingress"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        networking_v1 = client.NetworkingV1Api(client_instance)
+
+        # 获取现有Ingress
+        existing_ingress = networking_v1.read_namespaced_ingress(ingress_name, namespace)
+
+        # 构建更新对象
+        patch = {
+            "metadata": {
+                "labels": updates.get("labels", existing_ingress.metadata.labels or {}),
+                "annotations": updates.get("annotations", existing_ingress.metadata.annotations or {})
+            }
+        }
+
+        # 如果提供了规则和TLS配置，则更新spec
+        if updates.get("rules") or updates.get("tls") or updates.get("class_name"):
+            spec_patch = {}
+
+            if updates.get("class_name"):
+                spec_patch["ingress_class_name"] = updates["class_name"]
+
+            if updates.get("rules"):
+                rules = []
+                for rule in updates["rules"]:
+                    http_paths = []
+                    if rule.get("paths"):
+                        for path in rule["paths"]:
+                            http_paths.append(client.V1HTTPIngressPath(
+                                path=path["path"],
+                                path_type=path.get("path_type", "Prefix"),
+                                backend=client.V1IngressBackend(
+                                    service=client.V1IngressServiceBackend(
+                                        name=path["service_name"],
+                                        port=client.V1ServiceBackendPort(
+                                            number=path["service_port"]
+                                        )
+                                    )
+                                )
+                            ))
+
+                    rules.append(client.V1IngressRule(
+                        host=rule.get("host"),
+                        http=client.V1HTTPIngressRuleValue(
+                            paths=http_paths
+                        )
+                    ))
+                spec_patch["rules"] = rules
+
+            if updates.get("tls"):
+                tls = []
+                for tls_config in updates["tls"]:
+                    tls.append(client.V1IngressTLS(
+                        hosts=tls_config.get("hosts", []),
+                        secret_name=tls_config.get("secret_name")
+                    ))
+                spec_patch["tls"] = tls
+
+            patch["spec"] = spec_patch
+
+        networking_v1.patch_namespaced_ingress(ingress_name, namespace, patch)
+        return True
+
+    except Exception as e:
+        print(f"更新Ingress失败: {e}")
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def delete_ingress(cluster: Cluster, namespace: str, ingress_name: str) -> bool:
+    """删除Ingress"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        networking_v1 = client.NetworkingV1Api(client_instance)
+        networking_v1.delete_namespaced_ingress(ingress_name, namespace)
+        return True
+
+    except Exception as e:
+        print(f"删除Ingress失败: {e}")
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+# ========== Network Policies管理 ==========
+
+def get_namespace_network_policies(cluster: Cluster, namespace_name: str) -> List[Dict[str, Any]]:
+    """获取命名空间下的所有Network Policies"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return []
+
+    try:
+        networking_v1 = client.NetworkingV1Api(client_instance)
+        policies = networking_v1.list_namespaced_network_policy(namespace_name)
+
+        result = []
+        for policy in policies.items:
+            # 计算年龄
+            from datetime import datetime
+            age = "Unknown"
+            if policy.metadata.creation_timestamp:
+                created = policy.metadata.creation_timestamp.replace(tzinfo=None)
+                now = datetime.now()
+                delta = now - created
+                if delta.days > 0:
+                    age = f"{delta.days}d"
+                elif delta.seconds // 3600 > 0:
+                    age = f"{delta.seconds // 3600}h"
+                elif delta.seconds // 60 > 0:
+                    age = f"{delta.seconds // 60}m"
+                else:
+                    age = f"{delta.seconds}s"
+
+            result.append({
+                "name": policy.metadata.name,
+                "namespace": namespace_name,
+                "pod_selector": policy.spec.pod_selector.match_labels if policy.spec.pod_selector else {},
+                "policy_types": policy.spec.policy_types or [],
+                "labels": policy.metadata.labels or {},
+                "annotations": policy.metadata.annotations or {},
+                "age": age,
+                "cluster_name": cluster.name,
+                "cluster_id": cluster.id
+            })
+
+        return result
+
+    except Exception as e:
+        print(f"获取命名空间Network Policies失败: {e}")
+        return []
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def get_network_policy_details(cluster: Cluster, namespace: str, policy_name: str) -> Optional[Dict[str, Any]]:
+    """获取Network Policy详细信息"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return None
+
+    try:
+        networking_v1 = client.NetworkingV1Api(client_instance)
+        policy = networking_v1.read_namespaced_network_policy(policy_name, namespace)
+
+        # 计算年龄
+        from datetime import datetime
+        age = "Unknown"
+        if policy.metadata.creation_timestamp:
+            created = policy.metadata.creation_timestamp.replace(tzinfo=None)
+            now = datetime.now()
+            delta = now - created
+            if delta.days > 0:
+                age = f"{delta.days}d"
+            elif delta.seconds // 3600 > 0:
+                age = f"{delta.seconds // 3600}h"
+            elif delta.seconds // 60 > 0:
+                age = f"{delta.seconds // 60}m"
+            else:
+                age = f"{delta.seconds}s"
+
+        # 构建ingress规则信息
+        ingress_rules = []
+        if policy.spec.ingress:
+            for ingress in policy.spec.ingress:
+                rule = {
+                    "from": [],
+                    "ports": []
+                }
+
+                if ingress.from_:
+                    for from_rule in ingress.from_:
+                        from_info = {}
+                        if from_rule.pod_selector:
+                            from_info["pod_selector"] = from_rule.pod_selector.match_labels
+                        if from_rule.namespace_selector:
+                            from_info["namespace_selector"] = from_rule.namespace_selector.match_labels
+                        if from_rule.ip_block:
+                            from_info["ip_block"] = {
+                                "cidr": from_rule.ip_block.cidr,
+                                "except": from_rule.ip_block.except_
+                            }
+                        rule["from"].append(from_info)
+
+                if ingress.ports:
+                    for port in ingress.ports:
+                        port_info = {}
+                        if port.port:
+                            port_info["port"] = port.port
+                        if port.protocol:
+                            port_info["protocol"] = port.protocol
+                        rule["ports"].append(port_info)
+
+                ingress_rules.append(rule)
+
+        # 构建egress规则信息
+        egress_rules = []
+        if policy.spec.egress:
+            for egress in policy.spec.egress:
+                rule = {
+                    "to": [],
+                    "ports": []
+                }
+
+                if egress.to:
+                    for to_rule in egress.to:
+                        to_info = {}
+                        if to_rule.pod_selector:
+                            to_info["pod_selector"] = to_rule.pod_selector.match_labels
+                        if to_rule.namespace_selector:
+                            to_info["namespace_selector"] = to_rule.namespace_selector.match_labels
+                        if to_rule.ip_block:
+                            to_info["ip_block"] = {
+                                "cidr": to_rule.ip_block.cidr,
+                                "except": to_rule.ip_block.except_
+                            }
+                        rule["to"].append(to_info)
+
+                if egress.ports:
+                    for port in egress.ports:
+                        port_info = {}
+                        if port.port:
+                            port_info["port"] = port.port
+                        if port.protocol:
+                            port_info["protocol"] = port.protocol
+                        rule["ports"].append(port_info)
+
+                egress_rules.append(rule)
+
+        return {
+            "name": policy.metadata.name,
+            "namespace": namespace,
+            "pod_selector": policy.spec.pod_selector.match_labels if policy.spec.pod_selector else {},
+            "policy_types": policy.spec.policy_types or [],
+            "ingress": ingress_rules,
+            "egress": egress_rules,
+            "labels": policy.metadata.labels or {},
+            "annotations": policy.metadata.annotations or {},
+            "age": age,
+            "cluster_name": cluster.name,
+            "cluster_id": cluster.id
+        }
+
+    except Exception as e:
+        print(f"获取Network Policy详情失败: {e}")
+        return None
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def create_network_policy(cluster: Cluster, namespace: str, policy_data: Dict[str, Any]) -> bool:
+    """创建Network Policy"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        networking_v1 = client.NetworkingV1Api(client_instance)
+
+        # 构建pod selector
+        pod_selector = None
+        if policy_data.get("pod_selector"):
+            pod_selector = client.V1LabelSelector(
+                match_labels=policy_data["pod_selector"]
+            )
+
+        # 构建ingress规则
+        ingress_rules = []
+        if policy_data.get("ingress"):
+            for ingress in policy_data["ingress"]:
+                from_rules = []
+                if ingress.get("from"):
+                    for from_rule in ingress["from"]:
+                        peer = client.V1NetworkPolicyPeer()
+                        if from_rule.get("pod_selector"):
+                            peer.pod_selector = client.V1LabelSelector(match_labels=from_rule["pod_selector"])
+                        if from_rule.get("namespace_selector"):
+                            peer.namespace_selector = client.V1LabelSelector(match_labels=from_rule["namespace_selector"])
+                        if from_rule.get("ip_block"):
+                            peer.ip_block = client.V1IPBlock(
+                                cidr=from_rule["ip_block"]["cidr"],
+                                except_=from_rule["ip_block"].get("except")
+                            )
+                        from_rules.append(peer)
+
+                ports = []
+                if ingress.get("ports"):
+                    for port in ingress["ports"]:
+                        ports.append(client.V1NetworkPolicyPort(
+                            port=port.get("port"),
+                            protocol=port.get("protocol", "TCP")
+                        ))
+
+                ingress_rules.append(client.V1NetworkPolicyIngressRule(
+                    from_=from_rules,
+                    ports=ports
+                ))
+
+        # 构建egress规则
+        egress_rules = []
+        if policy_data.get("egress"):
+            for egress in policy_data["egress"]:
+                to_rules = []
+                if egress.get("to"):
+                    for to_rule in egress["to"]:
+                        peer = client.V1NetworkPolicyPeer()
+                        if to_rule.get("pod_selector"):
+                            peer.pod_selector = client.V1LabelSelector(match_labels=to_rule["pod_selector"])
+                        if to_rule.get("namespace_selector"):
+                            peer.namespace_selector = client.V1LabelSelector(match_labels=to_rule["namespace_selector"])
+                        if to_rule.get("ip_block"):
+                            peer.ip_block = client.V1IPBlock(
+                                cidr=to_rule["ip_block"]["cidr"],
+                                except_=to_rule["ip_block"].get("except")
+                            )
+                        to_rules.append(peer)
+
+                ports = []
+                if egress.get("ports"):
+                    for port in egress["ports"]:
+                        ports.append(client.V1NetworkPolicyPort(
+                            port=port.get("port"),
+                            protocol=port.get("protocol", "TCP")
+                        ))
+
+                egress_rules.append(client.V1NetworkPolicyEgressRule(
+                    to=to_rules,
+                    ports=ports
+                ))
+
+        policy = client.V1NetworkPolicy(
+            api_version="networking.k8s.io/v1",
+            kind="NetworkPolicy",
+            metadata=client.V1ObjectMeta(
+                name=policy_data["name"],
+                namespace=namespace,
+                labels=policy_data.get("labels", {}),
+                annotations=policy_data.get("annotations", {})
+            ),
+            spec=client.V1NetworkPolicySpec(
+                pod_selector=pod_selector,
+                policy_types=policy_data.get("policy_types", []),
+                ingress=ingress_rules,
+                egress=egress_rules
+            )
+        )
+
+        networking_v1.create_namespaced_network_policy(namespace, policy)
+        return True
+
+    except Exception as e:
+        print(f"创建Network Policy失败: {e}")
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def update_network_policy(cluster: Cluster, namespace: str, policy_name: str, updates: Dict[str, Any]) -> bool:
+    """更新Network Policy"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        networking_v1 = client.NetworkingV1Api(client_instance)
+
+        # 获取现有Network Policy
+        existing_policy = networking_v1.read_namespaced_network_policy(policy_name, namespace)
+
+        # 构建更新对象
+        patch = {
+            "metadata": {
+                "labels": updates.get("labels", existing_policy.metadata.labels or {}),
+                "annotations": updates.get("annotations", existing_policy.metadata.annotations or {})
+            }
+        }
+
+        # 如果提供了spec更新
+        if any(key in updates for key in ["pod_selector", "policy_types", "ingress", "egress"]):
+            spec_patch = {}
+
+            if updates.get("pod_selector"):
+                spec_patch["pod_selector"] = {"match_labels": updates["pod_selector"]}
+
+            if updates.get("policy_types"):
+                spec_patch["policy_types"] = updates["policy_types"]
+
+            # 这里简化处理，实际项目中可能需要完整的规则重建
+            if updates.get("ingress") or updates.get("egress"):
+                # 重新构建完整的spec
+                if updates.get("ingress"):
+                    spec_patch["ingress"] = updates["ingress"]
+                if updates.get("egress"):
+                    spec_patch["egress"] = updates["egress"]
+
+            patch["spec"] = spec_patch
+
+        networking_v1.patch_namespaced_network_policy(policy_name, namespace, patch)
+        return True
+
+    except Exception as e:
+        print(f"更新Network Policy失败: {e}")
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def delete_network_policy(cluster: Cluster, namespace: str, policy_name: str) -> bool:
+    """删除Network Policy"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        networking_v1 = client.NetworkingV1Api(client_instance)
+        networking_v1.delete_namespaced_network_policy(policy_name, namespace)
+        return True
+
+    except Exception as e:
+        print(f"删除Network Policy失败: {e}")
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+# ========== Resource Quotas管理 ==========
+
+def get_namespace_resource_quotas(cluster: Cluster, namespace_name: str) -> List[Dict[str, Any]]:
+    """获取命名空间下的所有Resource Quotas"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return []
+
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+        quotas = core_v1.list_namespaced_resource_quota(namespace_name)
+
+        result = []
+        for quota in quotas.items:
+            # 计算年龄
+            from datetime import datetime
+            age = "Unknown"
+            if quota.metadata.creation_timestamp:
+                created = quota.metadata.creation_timestamp.replace(tzinfo=None)
+                now = datetime.now()
+                delta = now - created
+                if delta.days > 0:
+                    age = f"{delta.days}d"
+                elif delta.seconds // 3600 > 0:
+                    age = f"{delta.seconds // 3600}h"
+                elif delta.seconds // 60 > 0:
+                    age = f"{delta.seconds // 60}m"
+                else:
+                    age = f"{delta.seconds}s"
+
+            result.append({
+                "name": quota.metadata.name,
+                "namespace": namespace_name,
+                "hard": quota.spec.hard or {},
+                "used": quota.status.used or {},
+                "labels": quota.metadata.labels or {},
+                "annotations": quota.metadata.annotations or {},
+                "age": age,
+                "cluster_name": cluster.name,
+                "cluster_id": cluster.id
+            })
+
+        return result
+
+    except Exception as e:
+        print(f"获取命名空间Resource Quotas失败: {e}")
+        return []
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def get_resource_quota_details(cluster: Cluster, namespace: str, quota_name: str) -> Optional[Dict[str, Any]]:
+    """获取Resource Quota详细信息"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return None
+
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+        quota = core_v1.read_namespaced_resource_quota(quota_name, namespace)
+
+        # 计算年龄
+        from datetime import datetime
+        age = "Unknown"
+        if quota.metadata.creation_timestamp:
+            created = quota.metadata.creation_timestamp.replace(tzinfo=None)
+            now = datetime.now()
+            delta = now - created
+            if delta.days > 0:
+                age = f"{delta.days}d"
+            elif delta.seconds // 3600 > 0:
+                age = f"{delta.seconds // 3600}h"
+            elif delta.seconds // 60 > 0:
+                age = f"{delta.seconds // 60}m"
+            else:
+                age = f"{delta.seconds}s"
+
+        return {
+            "name": quota.metadata.name,
+            "namespace": namespace,
+            "hard": quota.spec.hard or {},
+            "used": quota.status.used or {},
+            "scopes": quota.spec.scopes or [],
+            "scope_selector": quota.spec.scope_selector.match_expressions if quota.spec.scope_selector else [],
+            "labels": quota.metadata.labels or {},
+            "annotations": quota.metadata.annotations or {},
+            "age": age,
+            "cluster_name": cluster.name,
+            "cluster_id": cluster.id
+        }
+
+    except Exception as e:
+        print(f"获取Resource Quota详情失败: {e}")
+        return None
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def create_resource_quota(cluster: Cluster, namespace: str, quota_data: Dict[str, Any]) -> bool:
+    """创建Resource Quota"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+
+        # 构建scope selector
+        scope_selector = None
+        if quota_data.get("scope_selector"):
+            match_expressions = []
+            for expr in quota_data["scope_selector"]:
+                match_expressions.append(client.V1ScopedResourceSelectorRequirement(
+                    scope_name=expr["scope_name"],
+                    operator=expr["operator"],
+                    values=expr.get("values", [])
+                ))
+
+            scope_selector = client.V1ScopeSelector(
+                match_expressions=match_expressions
+            )
+
+        quota = client.V1ResourceQuota(
+            api_version="v1",
+            kind="ResourceQuota",
+            metadata=client.V1ObjectMeta(
+                name=quota_data["name"],
+                namespace=namespace,
+                labels=quota_data.get("labels", {}),
+                annotations=quota_data.get("annotations", {})
+            ),
+            spec=client.V1ResourceQuotaSpec(
+                hard=quota_data.get("hard", {}),
+                scopes=quota_data.get("scopes", []),
+                scope_selector=scope_selector
+            )
+        )
+
+        core_v1.create_namespaced_resource_quota(namespace, quota)
+        return True
+
+    except Exception as e:
+        print(f"创建Resource Quota失败: {e}")
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def update_resource_quota(cluster: Cluster, namespace: str, quota_name: str, updates: Dict[str, Any]) -> bool:
+    """更新Resource Quota"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+
+        # 获取现有Resource Quota
+        existing_quota = core_v1.read_namespaced_resource_quota(quota_name, namespace)
+
+        # 构建更新对象
+        patch = {
+            "metadata": {
+                "labels": updates.get("labels", existing_quota.metadata.labels or {}),
+                "annotations": updates.get("annotations", existing_quota.metadata.annotations or {})
+            }
+        }
+
+        # 如果提供了spec更新
+        if any(key in updates for key in ["hard", "scopes", "scope_selector"]):
+            spec_patch = {}
+
+            if updates.get("hard"):
+                spec_patch["hard"] = updates["hard"]
+
+            if updates.get("scopes"):
+                spec_patch["scopes"] = updates["scopes"]
+
+            if updates.get("scope_selector"):
+                match_expressions = []
+                for expr in updates["scope_selector"]:
+                    match_expressions.append(client.V1ScopedResourceSelectorRequirement(
+                        scope_name=expr["scope_name"],
+                        operator=expr["operator"],
+                        values=expr.get("values", [])
+                    ))
+                spec_patch["scope_selector"] = {"match_expressions": match_expressions}
+
+            patch["spec"] = spec_patch
+
+        core_v1.patch_namespaced_resource_quota(quota_name, namespace, patch)
+        return True
+
+    except Exception as e:
+        print(f"更新Resource Quota失败: {e}")
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def delete_resource_quota(cluster: Cluster, namespace: str, quota_name: str) -> bool:
+    """删除Resource Quota"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+        core_v1.delete_namespaced_resource_quota(quota_name, namespace)
+        return True
+
+    except Exception as e:
+        print(f"删除Resource Quota失败: {e}")
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
