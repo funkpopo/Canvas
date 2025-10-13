@@ -5,7 +5,9 @@ from ..database import get_db
 from ..models import Cluster, AuditLog
 from ..auth import get_current_user
 from ..kubernetes import (
-    get_namespace_ingresses, get_ingress_details, create_ingress, update_ingress, delete_ingress
+    get_namespace_ingresses, get_ingress_details, create_ingress, update_ingress, delete_ingress,
+    check_controller_status, install_ingress_controller, uninstall_ingress_controller,
+    get_ingress_classes, create_ingress_class, update_ingress_class, delete_ingress_class
 )
 from pydantic import BaseModel
 
@@ -57,6 +59,48 @@ class IngressUpdate(BaseModel):
     class_name: Optional[str] = None
     rules: Optional[List[dict]] = None
     tls: Optional[List[dict]] = None
+    labels: Optional[dict] = None
+    annotations: Optional[dict] = None
+
+# Controller相关模型
+class ControllerStatus(BaseModel):
+    installed: bool
+    namespace: str
+    deployment_exists: bool
+    service_exists: bool
+    ingressclass_exists: bool
+    webhook_exists: bool
+    version: Optional[str] = None
+    namespace_exists: bool = False
+    error: Optional[str] = None
+
+class ControllerInstallResult(BaseModel):
+    success: bool
+    message: str
+    steps: List[str]
+    error: Optional[str] = None
+
+class ControllerInstallRequest(BaseModel):
+    version: Optional[str] = "latest"
+
+# IngressClass相关模型
+class IngressClassInfo(BaseModel):
+    name: str
+    controller: str
+    is_default: bool
+    labels: dict
+    annotations: dict
+    age: str
+
+class IngressClassCreate(BaseModel):
+    name: str
+    controller: str
+    labels: Optional[dict] = None
+    annotations: Optional[dict] = None
+    parameters: Optional[dict] = None
+
+class IngressClassUpdate(BaseModel):
+    controller: Optional[str] = None
     labels: Optional[dict] = None
     annotations: Optional[dict] = None
 
@@ -264,3 +308,245 @@ async def delete_existing_ingress(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"删除Ingress失败: {str(e)}")
+
+
+# ========== Controller管理 ==========
+
+@router.get("/controller/status", response_model=ControllerStatus)
+async def get_controller_status(
+    cluster_id: int = Query(..., description="集群ID"),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """检查Ingress Controller安装状态"""
+    try:
+        cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
+        if not cluster:
+            raise HTTPException(status_code=404, detail="集群不存在或未激活")
+
+        status = check_controller_status(cluster)
+        return ControllerStatus(**status)
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取Controller状态失败: {str(e)}")
+
+
+@router.post("/controller/install", response_model=ControllerInstallResult)
+async def install_controller(
+    request: ControllerInstallRequest,
+    cluster_id: int = Query(..., description="集群ID"),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """安装Ingress Controller"""
+    try:
+        cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
+        if not cluster:
+            raise HTTPException(status_code=404, detail="集群不存在或未激活")
+
+        result = install_ingress_controller(cluster, request.version or "latest")
+
+        if result["success"]:
+            # 记录审计日志
+            audit_log = AuditLog(
+                user_id=current_user["id"],
+                action="CREATE",
+                resource_type="IngressController",
+                resource_name="ingress-nginx",
+                cluster_id=cluster_id,
+                details=f"安装Ingress Controller版本 {request.version or 'latest'}"
+            )
+            db.add(audit_log)
+            db.commit()
+
+        return ControllerInstallResult(**result)
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"安装Controller失败: {str(e)}")
+
+
+@router.delete("/controller", response_model=ControllerInstallResult)
+async def uninstall_controller(
+    cluster_id: int = Query(..., description="集群ID"),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """卸载Ingress Controller"""
+    try:
+        cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
+        if not cluster:
+            raise HTTPException(status_code=404, detail="集群不存在或未激活")
+
+        result = uninstall_ingress_controller(cluster)
+
+        if result["success"]:
+            # 记录审计日志
+            audit_log = AuditLog(
+                user_id=current_user["id"],
+                action="DELETE",
+                resource_type="IngressController",
+                resource_name="ingress-nginx",
+                cluster_id=cluster_id,
+                details="卸载Ingress Controller"
+            )
+            db.add(audit_log)
+            db.commit()
+
+        return ControllerInstallResult(**result)
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"卸载Controller失败: {str(e)}")
+
+
+# ========== IngressClass管理 ==========
+
+@router.get("/classes", response_model=List[IngressClassInfo])
+async def get_ingress_classes_list(
+    cluster_id: int = Query(..., description="集群ID"),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """获取IngressClass列表"""
+    try:
+        cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
+        if not cluster:
+            raise HTTPException(status_code=404, detail="集群不存在或未激活")
+
+        classes = get_ingress_classes(cluster)
+        return [IngressClassInfo(**cls) for cls in classes]
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取IngressClass列表失败: {str(e)}")
+
+
+@router.post("/classes", response_model=dict)
+async def create_new_ingress_class(
+    class_data: IngressClassCreate,
+    cluster_id: int = Query(..., description="集群ID"),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """创建IngressClass"""
+    try:
+        cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
+        if not cluster:
+            raise HTTPException(status_code=404, detail="集群不存在或未激活")
+
+        class_dict = {
+            "name": class_data.name,
+            "controller": class_data.controller,
+            "labels": class_data.labels or {},
+            "annotations": class_data.annotations or {},
+            "parameters": class_data.parameters
+        }
+
+        success = create_ingress_class(cluster, class_dict)
+        if not success:
+            raise HTTPException(status_code=500, detail="创建IngressClass失败")
+
+        # 记录审计日志
+        audit_log = AuditLog(
+            user_id=current_user["id"],
+            action="CREATE",
+            resource_type="IngressClass",
+            resource_name=class_data.name,
+            cluster_id=cluster_id,
+            details=f"创建IngressClass {class_data.name} 使用控制器 {class_data.controller}"
+        )
+        db.add(audit_log)
+        db.commit()
+
+        return {"message": "IngressClass创建成功"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"创建IngressClass失败: {str(e)}")
+
+
+@router.put("/classes/{class_name}", response_model=dict)
+async def update_existing_ingress_class(
+    class_name: str,
+    updates: IngressClassUpdate,
+    cluster_id: int = Query(..., description="集群ID"),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """更新IngressClass"""
+    try:
+        cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
+        if not cluster:
+            raise HTTPException(status_code=404, detail="集群不存在或未激活")
+
+        update_dict = {}
+        if updates.controller is not None:
+            update_dict["controller"] = updates.controller
+        if updates.labels is not None:
+            update_dict["labels"] = updates.labels
+        if updates.annotations is not None:
+            update_dict["annotations"] = updates.annotations
+
+        success = update_ingress_class(cluster, class_name, update_dict)
+        if not success:
+            raise HTTPException(status_code=500, detail="更新IngressClass失败")
+
+        # 记录审计日志
+        audit_log = AuditLog(
+            user_id=current_user["id"],
+            action="UPDATE",
+            resource_type="IngressClass",
+            resource_name=class_name,
+            cluster_id=cluster_id,
+            details=f"更新IngressClass {class_name}"
+        )
+        db.add(audit_log)
+        db.commit()
+
+        return {"message": "IngressClass更新成功"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"更新IngressClass失败: {str(e)}")
+
+
+@router.delete("/classes/{class_name}", response_model=dict)
+async def delete_existing_ingress_class(
+    class_name: str,
+    cluster_id: int = Query(..., description="集群ID"),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """删除IngressClass"""
+    try:
+        cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
+        if not cluster:
+            raise HTTPException(status_code=404, detail="集群不存在或未激活")
+
+        success = delete_ingress_class(cluster, class_name)
+        if not success:
+            raise HTTPException(status_code=500, detail="删除IngressClass失败")
+
+        # 记录审计日志
+        audit_log = AuditLog(
+            user_id=current_user["id"],
+            action="DELETE",
+            resource_type="IngressClass",
+            resource_name=class_name,
+            cluster_id=cluster_id,
+            details=f"删除IngressClass {class_name}"
+        )
+        db.add(audit_log)
+        db.commit()
+
+        return {"message": "IngressClass删除成功"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"删除IngressClass失败: {str(e)}")

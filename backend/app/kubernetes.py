@@ -3987,3 +3987,685 @@ def delete_resource_quota(cluster: Cluster, namespace: str, quota_name: str) -> 
     finally:
         if client_instance:
             client_instance.close()
+
+
+# ========== Ingress Controller 管理 ==========
+
+def check_controller_status(cluster: Cluster) -> Dict[str, Any]:
+    """检查Ingress Controller安装状态"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return {"installed": False, "error": "无法连接到集群"}
+
+    status = {
+        "installed": False,
+        "namespace": "ingress-nginx",
+        "deployment_exists": False,
+        "service_exists": False,
+        "ingressclass_exists": False,
+        "webhook_exists": False,
+        "version": None,
+        "error": None
+    }
+
+    try:
+        apps_v1 = client.AppsV1Api(client_instance)
+        core_v1 = client.CoreV1Api(client_instance)
+        networking_v1 = client.NetworkingV1Api(client_instance)
+
+        # 检查命名空间是否存在
+        try:
+            core_v1.read_namespace("ingress-nginx")
+            status["namespace_exists"] = True
+        except ApiException as e:
+            if e.status != 404:
+                status["error"] = f"检查命名空间失败: {e}"
+            status["namespace_exists"] = False
+            return status
+
+        # 检查Deployment
+        try:
+            deployment = apps_v1.read_namespaced_deployment("ingress-nginx-controller", "ingress-nginx")
+            status["deployment_exists"] = True
+            # 获取版本信息
+            if deployment.spec.template.spec.containers:
+                container = deployment.spec.template.spec.containers[0]
+                status["version"] = container.image.split(":")[-1] if ":" in container.image else "latest"
+        except ApiException as e:
+            if e.status != 404:
+                status["error"] = f"检查Deployment失败: {e}"
+
+        # 检查Service
+        try:
+            core_v1.read_namespaced_service("ingress-nginx-controller", "ingress-nginx")
+            status["service_exists"] = True
+        except ApiException as e:
+            if e.status != 404:
+                status["error"] = f"检查Service失败: {e}"
+
+        # 检查IngressClass
+        try:
+            ingress_classes = networking_v1.list_ingress_class()
+            for ic in ingress_classes.items:
+                if ic.metadata.name == "nginx":
+                    status["ingressclass_exists"] = True
+                    break
+        except ApiException as e:
+            if e.status != 404:
+                status["error"] = f"检查IngressClass失败: {e}"
+
+        # 检查Webhook
+        try:
+            apps_v1.read_namespaced_deployment("ingress-nginx-admission-create", "ingress-nginx")
+            status["webhook_exists"] = True
+        except ApiException:
+            pass
+
+        # 判断是否完全安装
+        status["installed"] = (status["deployment_exists"] and
+                              status["service_exists"] and
+                              status["ingressclass_exists"])
+
+        return status
+
+    except Exception as e:
+        status["error"] = f"检查Controller状态失败: {e}"
+        return status
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def install_ingress_controller(cluster: Cluster, version: str = "latest") -> Dict[str, Any]:
+    """安装Ingress Nginx Controller"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return {"success": False, "error": "无法连接到集群"}
+
+    result = {
+        "success": False,
+        "message": "",
+        "steps": [],
+        "error": None
+    }
+
+    try:
+        apps_v1 = client.AppsV1Api(client_instance)
+        core_v1 = client.CoreV1Api(client_instance)
+        rbac_v1 = client.RbacAuthorizationV1Api(client_instance)
+        networking_v1 = client.NetworkingV1Api(client_instance)
+
+        # 步骤1: 创建命名空间
+        result["steps"].append("创建ingress-nginx命名空间")
+        try:
+            namespace = client.V1Namespace(
+                api_version="v1",
+                kind="Namespace",
+                metadata=client.V1ObjectMeta(name="ingress-nginx")
+            )
+            core_v1.create_namespace(namespace)
+            result["steps"].append("✓ 命名空间创建成功")
+        except ApiException as e:
+            if e.status == 409:  # Already exists
+                result["steps"].append("✓ 命名空间已存在")
+            else:
+                result["error"] = f"创建命名空间失败: {e}"
+                return result
+
+        # 步骤2: 创建ServiceAccount
+        result["steps"].append("创建ServiceAccount")
+        try:
+            sa = client.V1ServiceAccount(
+                api_version="v1",
+                kind="ServiceAccount",
+                metadata=client.V1ObjectMeta(
+                    name="ingress-nginx",
+                    namespace="ingress-nginx"
+                )
+            )
+            core_v1.create_namespaced_service_account("ingress-nginx", sa)
+            result["steps"].append("✓ ServiceAccount创建成功")
+        except ApiException as e:
+            if e.status == 409:
+                result["steps"].append("✓ ServiceAccount已存在")
+            else:
+                result["error"] = f"创建ServiceAccount失败: {e}"
+                return result
+
+        # 步骤3: 创建ClusterRole
+        result["steps"].append("创建ClusterRole")
+        try:
+            cluster_role = client.V1ClusterRole(
+                api_version="rbac.authorization.k8s.io/v1",
+                kind="ClusterRole",
+                metadata=client.V1ObjectMeta(name="ingress-nginx"),
+                rules=[
+                    client.V1PolicyRule(
+                        api_groups=[""],
+                        resources=["configmaps", "endpoints", "nodes", "pods", "secrets"],
+                        verbs=["list", "watch"]
+                    ),
+                    client.V1PolicyRule(
+                        api_groups=[""],
+                        resources=["nodes/proxy"],
+                        verbs=["get"]
+                    ),
+                    client.V1PolicyRule(
+                        api_groups=[""],
+                        resources=["services", "events", "namespaces"],
+                        verbs=["get", "list", "watch"]
+                    ),
+                    client.V1PolicyRule(
+                        api_groups=["networking.k8s.io"],
+                        resources=["ingresses", "ingressclasses"],
+                        verbs=["get", "list", "watch"]
+                    ),
+                    client.V1PolicyRule(
+                        api_groups=["networking.k8s.io"],
+                        resources=["ingresses/status"],
+                        verbs=["update"]
+                    ),
+                    client.V1PolicyRule(
+                        api_groups=["networking.k8s.io"],
+                        resources=["ingressclasses"],
+                        verbs=["get", "list", "watch"]
+                    ),
+                    client.V1PolicyRule(
+                        api_groups=[""],
+                        resources=["events"],
+                        verbs=["create", "patch"]
+                    ),
+                    client.V1PolicyRule(
+                        api_groups=["coordination.k8s.io"],
+                        resources=["leases"],
+                        verbs=["get", "list", "watch", "create", "update"]
+                    )
+                ]
+            )
+            rbac_v1.create_cluster_role(cluster_role)
+            result["steps"].append("✓ ClusterRole创建成功")
+        except ApiException as e:
+            if e.status == 409:
+                result["steps"].append("✓ ClusterRole已存在")
+            else:
+                result["error"] = f"创建ClusterRole失败: {e}"
+                return result
+
+        # 步骤4: 创建ClusterRoleBinding
+        result["steps"].append("创建ClusterRoleBinding")
+        try:
+            role_binding = client.V1ClusterRoleBinding(
+                api_version="rbac.authorization.k8s.io/v1",
+                kind="ClusterRoleBinding",
+                metadata=client.V1ObjectMeta(name="ingress-nginx"),
+                role_ref=client.V1RoleRef(
+                    api_group="rbac.authorization.k8s.io",
+                    kind="ClusterRole",
+                    name="ingress-nginx"
+                ),
+                subjects=[
+                    client.V1Subject(
+                        kind="ServiceAccount",
+                        name="ingress-nginx",
+                        namespace="ingress-nginx"
+                    )
+                ]
+            )
+            rbac_v1.create_cluster_role_binding(role_binding)
+            result["steps"].append("✓ ClusterRoleBinding创建成功")
+        except ApiException as e:
+            if e.status == 409:
+                result["steps"].append("✓ ClusterRoleBinding已存在")
+            else:
+                result["error"] = f"创建ClusterRoleBinding失败: {e}"
+                return result
+
+        # 步骤5: 创建ConfigMap
+        result["steps"].append("创建ConfigMap")
+        try:
+            config_map = client.V1ConfigMap(
+                api_version="v1",
+                kind="ConfigMap",
+                metadata=client.V1ObjectMeta(
+                    name="ingress-nginx-controller",
+                    namespace="ingress-nginx"
+                ),
+                data={
+                    "use-forwarded-headers": "true",
+                    "proxy-real-ip-cidr": "0.0.0.0/0"
+                }
+            )
+            core_v1.create_namespaced_config_map("ingress-nginx", config_map)
+            result["steps"].append("✓ ConfigMap创建成功")
+        except ApiException as e:
+            if e.status == 409:
+                result["steps"].append("✓ ConfigMap已存在")
+            else:
+                result["error"] = f"创建ConfigMap失败: {e}"
+                return result
+
+        # 步骤6: 创建Service
+        result["steps"].append("创建Service")
+        try:
+            service = client.V1Service(
+                api_version="v1",
+                kind="Service",
+                metadata=client.V1ObjectMeta(
+                    name="ingress-nginx-controller",
+                    namespace="ingress-nginx",
+                    labels={"app.kubernetes.io/name": "ingress-nginx"}
+                ),
+                spec=client.V1ServiceSpec(
+                    type="NodePort",
+                    ports=[
+                        client.V1ServicePort(
+                            name="http",
+                            port=80,
+                            target_port=80,
+                            protocol="TCP"
+                        ),
+                        client.V1ServicePort(
+                            name="https",
+                            port=443,
+                            target_port=443,
+                            protocol="TCP"
+                        )
+                    ],
+                    selector={"app.kubernetes.io/name": "ingress-nginx"}
+                )
+            )
+            core_v1.create_namespaced_service("ingress-nginx", service)
+            result["steps"].append("✓ Service创建成功")
+        except ApiException as e:
+            if e.status == 409:
+                result["steps"].append("✓ Service已存在")
+            else:
+                result["error"] = f"创建Service失败: {e}"
+                return result
+
+        # 步骤7: 创建Deployment
+        result["steps"].append("创建Deployment")
+        try:
+            image_tag = version if version != "latest" else "v1.9.6"
+            deployment = client.V1Deployment(
+                api_version="apps/v1",
+                kind="Deployment",
+                metadata=client.V1ObjectMeta(
+                    name="ingress-nginx-controller",
+                    namespace="ingress-nginx",
+                    labels={"app.kubernetes.io/name": "ingress-nginx"}
+                ),
+                spec=client.V1DeploymentSpec(
+                    replicas=1,
+                    selector=client.V1LabelSelector(
+                        match_labels={"app.kubernetes.io/name": "ingress-nginx"}
+                    ),
+                    template=client.V1PodTemplateSpec(
+                        metadata=client.V1ObjectMeta(
+                            labels={"app.kubernetes.io/name": "ingress-nginx"}
+                        ),
+                        spec=client.V1PodSpec(
+                            service_account_name="ingress-nginx",
+                            containers=[
+                                client.V1Container(
+                                    name="controller",
+                                    image=f"registry.k8s.io/ingress-nginx/controller:{image_tag}",
+                                    ports=[
+                                        client.V1ContainerPort(
+                                            name="http",
+                                            container_port=80,
+                                            protocol="TCP"
+                                        ),
+                                        client.V1ContainerPort(
+                                            name="https",
+                                            container_port=443,
+                                            protocol="TCP"
+                                        ),
+                                        client.V1ContainerPort(
+                                            name="webhook",
+                                            container_port=8443,
+                                            protocol="TCP"
+                                        )
+                                    ],
+                                    env=[
+                                        client.V1EnvVar(
+                                            name="POD_NAME",
+                                            value_from=client.V1EnvVarSource(
+                                                field_ref=client.V1ObjectFieldSelector(field_path="metadata.name")
+                                            )
+                                        ),
+                                        client.V1EnvVar(
+                                            name="POD_NAMESPACE",
+                                            value_from=client.V1EnvVarSource(
+                                                field_ref=client.V1ObjectFieldSelector(field_path="metadata.namespace")
+                                            )
+                                        )
+                                    ],
+                                    liveness_probe=client.V1Probe(
+                                        http_get=client.V1HTTPGetAction(
+                                            path="/healthz",
+                                            port=10254,
+                                            scheme="HTTP"
+                                        ),
+                                        initial_delay_seconds=10,
+                                        period_seconds=10,
+                                        timeout_seconds=1,
+                                        success_threshold=1,
+                                        failure_threshold=3
+                                    ),
+                                    readiness_probe=client.V1Probe(
+                                        http_get=client.V1HTTPGetAction(
+                                            path="/healthz",
+                                            port=10254,
+                                            scheme="HTTP"
+                                        ),
+                                        initial_delay_seconds=10,
+                                        period_seconds=10,
+                                        timeout_seconds=1,
+                                        success_threshold=1,
+                                        failure_threshold=3
+                                    ),
+                                    security_context=client.V1SecurityContext(
+                                        allow_privilege_escalation=True,
+                                        capabilities=client.V1Capabilities(
+                                            drop=["ALL"],
+                                            add=["NET_BIND_SERVICE"]
+                                        ),
+                                        run_as_user=101
+                                    )
+                                )
+                            ],
+                            node_selector={"kubernetes.io/os": "linux"},
+                            tolerations=[
+                                client.V1Toleration(
+                                    key="node-role.kubernetes.io/master",
+                                    operator="Equal",
+                                    value="true",
+                                    effect="NoSchedule"
+                                ),
+                                client.V1Toleration(
+                                    key="node-role.kubernetes.io/control-plane",
+                                    operator="Equal",
+                                    value="true",
+                                    effect="NoSchedule"
+                                )
+                            ]
+                        )
+                    )
+                )
+            )
+            apps_v1.create_namespaced_deployment("ingress-nginx", deployment)
+            result["steps"].append("✓ Deployment创建成功")
+        except ApiException as e:
+            if e.status == 409:
+                result["steps"].append("✓ Deployment已存在")
+            else:
+                result["error"] = f"创建Deployment失败: {e}"
+                return result
+
+        # 步骤8: 创建IngressClass
+        result["steps"].append("创建IngressClass")
+        try:
+            ingress_class = client.V1IngressClass(
+                api_version="networking.k8s.io/v1",
+                kind="IngressClass",
+                metadata=client.V1ObjectMeta(
+                    name="nginx",
+                    annotations={"ingressclass.kubernetes.io/is-default-class": "true"}
+                ),
+                spec=client.V1IngressClassSpec(
+                    controller="k8s.io/ingress-nginx"
+                )
+            )
+            networking_v1.create_ingress_class(ingress_class)
+            result["steps"].append("✓ IngressClass创建成功")
+        except ApiException as e:
+            if e.status == 409:
+                result["steps"].append("✓ IngressClass已存在")
+            else:
+                result["error"] = f"创建IngressClass失败: {e}"
+                return result
+
+        # 步骤9: 创建Webhook相关资源 (简化版本)
+        result["steps"].append("创建Admission Webhook")
+        try:
+            # 创建webhook证书生成Job
+            job = client.V1Job(
+                api_version="batch/v1",
+                kind="Job",
+                metadata=client.V1ObjectMeta(
+                    name="ingress-nginx-admission-create",
+                    namespace="ingress-nginx"
+                ),
+                spec=client.V1JobSpec(
+                    template=client.V1PodTemplateSpec(
+                        spec=client.V1PodSpec(
+                            containers=[
+                                client.V1Container(
+                                    name="create",
+                                    image="registry.k8s.io/ingress-nginx/kube-webhook-certgen:v20231011-8b53cabe0",
+                                    command=["/generate-certificates"],
+                                    env=[
+                                        client.V1EnvVar(
+                                            name="CERTIFICATE_NAMESPACE",
+                                            value="ingress-nginx"
+                                        )
+                                    ]
+                                )
+                            ],
+                            restart_policy="OnFailure",
+                            service_account_name="ingress-nginx"
+                        )
+                    )
+                )
+            )
+            batch_v1 = client.BatchV1Api(client_instance)
+            batch_v1.create_namespaced_job("ingress-nginx", job)
+            result["steps"].append("✓ Admission Webhook创建成功")
+        except ApiException as e:
+            if e.status == 409:
+                result["steps"].append("✓ Admission Webhook已存在")
+            else:
+                result["steps"].append(f"⚠ Admission Webhook创建失败 (可选): {e}")
+
+        result["success"] = True
+        result["message"] = "Ingress Nginx Controller安装完成"
+        return result
+
+    except Exception as e:
+        result["error"] = f"安装Controller失败: {e}"
+        return result
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def uninstall_ingress_controller(cluster: Cluster) -> Dict[str, Any]:
+    """卸载Ingress Nginx Controller"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return {"success": False, "error": "无法连接到集群"}
+
+    result = {
+        "success": False,
+        "message": "",
+        "steps": [],
+        "error": None
+    }
+
+    try:
+        apps_v1 = client.AppsV1Api(client_instance)
+        core_v1 = client.CoreV1Api(client_instance)
+        rbac_v1 = client.RbacAuthorizationV1Api(client_instance)
+        networking_v1 = client.NetworkingV1Api(client_instance)
+
+        # 删除顺序与安装相反
+        steps = [
+            ("删除Admission Webhook Job", lambda: core_v1.delete_collection_namespaced_pod("ingress-nginx", label_selector="job-name=ingress-nginx-admission-create")),
+            ("删除Job", lambda: client.BatchV1Api(client_instance).delete_namespaced_job("ingress-nginx-admission-create", "ingress-nginx")),
+            ("删除IngressClass", lambda: networking_v1.delete_ingress_class("nginx")),
+            ("删除Deployment", lambda: apps_v1.delete_namespaced_deployment("ingress-nginx-controller", "ingress-nginx")),
+            ("删除Service", lambda: core_v1.delete_namespaced_service("ingress-nginx-controller", "ingress-nginx")),
+            ("删除ConfigMap", lambda: core_v1.delete_namespaced_config_map("ingress-nginx-controller", "ingress-nginx")),
+            ("删除ClusterRoleBinding", lambda: rbac_v1.delete_cluster_role_binding("ingress-nginx")),
+            ("删除ClusterRole", lambda: rbac_v1.delete_cluster_role("ingress-nginx")),
+            ("删除ServiceAccount", lambda: core_v1.delete_namespaced_service_account("ingress-nginx", "ingress-nginx")),
+            ("删除命名空间", lambda: core_v1.delete_namespace("ingress-nginx"))
+        ]
+
+        for step_name, delete_func in steps:
+            result["steps"].append(step_name)
+            try:
+                delete_func()
+                result["steps"].append(f"✓ {step_name}成功")
+            except ApiException as e:
+                if e.status == 404:
+                    result["steps"].append(f"✓ {step_name} (已不存在)")
+                else:
+                    result["steps"].append(f"⚠ {step_name}失败: {e}")
+            except Exception as e:
+                result["steps"].append(f"⚠ {step_name}失败: {e}")
+
+        result["success"] = True
+        result["message"] = "Ingress Nginx Controller卸载完成"
+        return result
+
+    except Exception as e:
+        result["error"] = f"卸载Controller失败: {e}"
+        return result
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+# ========== IngressClass 管理 ==========
+
+def get_ingress_classes(cluster: Cluster) -> List[Dict[str, Any]]:
+    """获取所有IngressClass"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return []
+
+    try:
+        networking_v1 = client.NetworkingV1Api(client_instance)
+        ingress_classes = networking_v1.list_ingress_class()
+
+        result = []
+        for ic in ingress_classes.items:
+            # 计算年龄
+            from datetime import datetime
+            age = "Unknown"
+            if ic.metadata.creation_timestamp:
+                created = ic.metadata.creation_timestamp.replace(tzinfo=None)
+                now = datetime.now()
+                delta = now - created
+                if delta.days > 0:
+                    age = f"{delta.days}d"
+                elif delta.seconds // 3600 > 0:
+                    age = f"{delta.seconds // 3600}h"
+                elif delta.seconds // 60 > 0:
+                    age = f"{delta.seconds // 60}m"
+                else:
+                    age = f"{delta.seconds}s"
+
+            result.append({
+                "name": ic.metadata.name,
+                "controller": ic.spec.controller,
+                "is_default": ic.metadata.annotations.get("ingressclass.kubernetes.io/is-default-class", "false") == "true",
+                "labels": ic.metadata.labels or {},
+                "annotations": ic.metadata.annotations or {},
+                "age": age
+            })
+
+        return result
+
+    except Exception as e:
+        print(f"获取IngressClass列表失败: {e}")
+        return []
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def create_ingress_class(cluster: Cluster, class_data: Dict[str, Any]) -> bool:
+    """创建IngressClass"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        networking_v1 = client.NetworkingV1Api(client_instance)
+
+        ingress_class = client.V1IngressClass(
+            api_version="networking.k8s.io/v1",
+            kind="IngressClass",
+            metadata=client.V1ObjectMeta(
+                name=class_data["name"],
+                labels=class_data.get("labels", {}),
+                annotations=class_data.get("annotations", {})
+            ),
+            spec=client.V1IngressClassSpec(
+                controller=class_data["controller"],
+                parameters=class_data.get("parameters")
+            )
+        )
+
+        networking_v1.create_ingress_class(ingress_class)
+        return True
+
+    except Exception as e:
+        print(f"创建IngressClass失败: {e}")
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def update_ingress_class(cluster: Cluster, class_name: str, updates: Dict[str, Any]) -> bool:
+    """更新IngressClass"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        networking_v1 = client.NetworkingV1Api(client_instance)
+
+        # 构建patch对象
+        patch = {
+            "metadata": {
+                "labels": updates.get("labels", {}),
+                "annotations": updates.get("annotations", {})
+            }
+        }
+
+        if "controller" in updates:
+            patch["spec"] = {"controller": updates["controller"]}
+
+        networking_v1.patch_ingress_class(class_name, patch)
+        return True
+
+    except Exception as e:
+        print(f"更新IngressClass失败: {e}")
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def delete_ingress_class(cluster: Cluster, class_name: str) -> bool:
+    """删除IngressClass"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        networking_v1 = client.NetworkingV1Api(client_instance)
+        networking_v1.delete_ingress_class(class_name)
+        return True
+
+    except Exception as e:
+        print(f"删除IngressClass失败: {e}")
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()

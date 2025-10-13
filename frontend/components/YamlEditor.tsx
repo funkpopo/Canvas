@@ -17,6 +17,8 @@ interface YamlEditorProps {
   template?: string;
   onApplyTemplate?: () => void;
   className?: string;
+  readOnly?: boolean;
+  height?: string;
 }
 
 export default function YamlEditor({
@@ -28,7 +30,9 @@ export default function YamlEditor({
   label = "YAML配置",
   template,
   onApplyTemplate,
-  className = ""
+  className = "",
+  readOnly = false,
+  height = "300px"
 }: YamlEditorProps) {
   const [isValid, setIsValid] = useState(true);
 
@@ -105,9 +109,14 @@ export default function YamlEditor({
       <Textarea
         placeholder={placeholder}
         value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className={`font-mono text-sm min-h-[300px] ${!isValid || error ? 'border-red-500' : ''}`}
-        style={{ fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace' }}
+        onChange={(e) => !readOnly && onChange(e.target.value)}
+        readOnly={readOnly}
+        className={`font-mono text-sm ${!isValid || error ? 'border-red-500' : ''}`}
+        style={{
+          fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace',
+          minHeight: height,
+          height: height
+        }}
       />
 
       {error && (

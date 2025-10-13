@@ -504,6 +504,36 @@ export const ingressApi = {
   async deleteIngress(clusterId: number, namespace: string, ingressName: string): Promise<ApiResponse<any>> {
     return apiClient.delete<any>(`/ingress/${namespace}/${ingressName}?cluster_id=${clusterId}`);
   },
+
+  // Controller管理
+  async getControllerStatus(clusterId: number): Promise<ApiResponse<any>> {
+    return apiClient.get<any>(`/ingress/controller/status?cluster_id=${clusterId}`);
+  },
+
+  async installController(clusterId: number, request: { version: string }): Promise<ApiResponse<any>> {
+    return apiClient.post<any>(`/ingress/controller/install?cluster_id=${clusterId}`, request);
+  },
+
+  async uninstallController(clusterId: number): Promise<ApiResponse<any>> {
+    return apiClient.delete<any>(`/ingress/controller?cluster_id=${clusterId}`);
+  },
+
+  // IngressClass管理
+  async getIngressClasses(clusterId: number): Promise<ApiResponse<any[]>> {
+    return apiClient.get<any[]>(`/ingress/classes?cluster_id=${clusterId}`);
+  },
+
+  async createIngressClass(clusterId: number, classData: Record<string, any>): Promise<ApiResponse<any>> {
+    return apiClient.post<any>(`/ingress/classes?cluster_id=${clusterId}`, classData);
+  },
+
+  async updateIngressClass(clusterId: number, className: string, updates: Record<string, any>): Promise<ApiResponse<any>> {
+    return apiClient.put<any>(`/ingress/classes/${className}?cluster_id=${clusterId}`, updates);
+  },
+
+  async deleteIngressClass(clusterId: number, className: string): Promise<ApiResponse<any>> {
+    return apiClient.delete<any>(`/ingress/classes/${className}?cluster_id=${clusterId}`);
+  },
 };
 
 // Network Policy相关 API

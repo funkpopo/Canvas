@@ -7,10 +7,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Plus, Trash2, Eye, Loader2, Route } from "lucide-react";
+import { Plus, Trash2, Eye, Loader2, Route, Settings } from "lucide-react";
 import ClusterSelector from "@/components/ClusterSelector";
+import ControllerManager from "@/components/ControllerManager";
+import IngressEditor from "@/components/IngressEditor";
 import { useAuth } from "@/lib/auth-context";
 import { useCluster } from "@/lib/cluster-context";
 import { ingressApi } from "@/lib/api";
@@ -40,6 +43,9 @@ export default function IngressManagement() {
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [selectedIngress, setSelectedIngress] = useState<any | null>(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+
+  // 创建Ingress对话框状态
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
 
   const { user } = useAuth();
   const { clusters } = useCluster();
@@ -154,9 +160,9 @@ export default function IngressManagement() {
         <div>
           <h1 className="text-3xl font-bold flex items-center gap-2">
             <Route className="w-8 h-8" />
-            Ingress管理
+            Ingress生态系统管理
           </h1>
-          <p className="text-muted-foreground">管理Kubernetes集群中的入口控制器</p>
+          <p className="text-muted-foreground">管理Kubernetes集群中的入口控制器和Ingress资源</p>
         </div>
         <div className="flex items-center gap-4">
           <ClusterSelector
@@ -176,7 +182,20 @@ export default function IngressManagement() {
         </div>
       </div>
 
-      <Card>
+      <Tabs defaultValue="ingress" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="ingress" className="flex items-center gap-2">
+            <Route className="w-4 h-4" />
+            Ingress管理
+          </TabsTrigger>
+          <TabsTrigger value="controller" className="flex items-center gap-2">
+            <Settings className="w-4 h-4" />
+            Controller管理
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="ingress" className="space-y-4">
+          <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
@@ -185,9 +204,9 @@ export default function IngressManagement() {
                 {selectedNamespace ? `命名空间: ${selectedNamespace}` : "请选择命名空间"}
               </CardDescription>
             </div>
-            <Button disabled>
+            <Button onClick={() => setIsCreateOpen(true)}>
               <Plus className="w-4 h-4 mr-2" />
-              创建Ingress (开发中)
+              创建Ingress
             </Button>
           </div>
         </CardHeader>
@@ -371,6 +390,23 @@ export default function IngressManagement() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+        </TabsContent>
+
+        <TabsContent value="controller" className="space-y-4">
+          <ControllerManager clusterId={selectedClusterId} />
+        </TabsContent>
+      </Tabs>
+
+      {/* 创建Ingress对话框 */}
+      <IngressEditor
+        open={isCreateOpen}
+        onOpenChange={setIsCreateOpen}
+        namespace={selectedNamespace}
+        clusterId={selectedClusterId}
+        onSuccess={fetchIngresses}
+        mode="create"
+      />
     </div>
   );
 }
