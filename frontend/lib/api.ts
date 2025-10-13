@@ -448,6 +448,10 @@ export const secretApi = {
     return apiClient.post<any>(`/secrets?cluster_id=${clusterId}`, secretData);
   },
 
+  async createSecretYaml(clusterId: number, yamlContent: string): Promise<ApiResponse<any>> {
+    return apiClient.post<any>(`/secrets/yaml?cluster_id=${clusterId}`, { yaml_content: yamlContent });
+  },
+
   async updateSecret(clusterId: number, namespace: string, secretName: string, updates: Record<string, any>): Promise<ApiResponse<any>> {
     return apiClient.put<any>(`/secrets/${namespace}/${secretName}?cluster_id=${clusterId}`, updates);
   },

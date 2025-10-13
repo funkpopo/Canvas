@@ -140,7 +140,7 @@ export default function SecretsManagement() {
       }
 
       // 使用YAML API创建Secret
-      const response = await secretApi.updateSecretYaml(selectedClusterId, namespace, name, yamlContent);
+      const response = await secretApi.createSecretYaml(selectedClusterId, yamlContent);
       if (response.data) {
         toast.success("Secret创建成功");
         setIsCreateOpen(false);

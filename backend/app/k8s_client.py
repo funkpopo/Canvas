@@ -2098,7 +2098,9 @@ def get_namespace_secrets(cluster: Cluster, namespace: str) -> List[Dict[str, An
                 "data_keys": data_keys,
                 "labels": dict(secret.metadata.labels) if secret.metadata.labels else {},
                 "annotations": dict(secret.metadata.annotations) if secret.metadata.annotations else {},
-                "age": age
+                "age": age,
+                "cluster_name": cluster.name,
+                "cluster_id": cluster.id
             }
             secret_list.append(secret_info)
 
@@ -2155,7 +2157,9 @@ def get_secret_details(cluster: Cluster, namespace: str, secret_name: str) -> Op
             "data": data,
             "labels": dict(secret.metadata.labels) if secret.metadata.labels else {},
             "annotations": dict(secret.metadata.annotations) if secret.metadata.annotations else {},
-            "age": age
+            "age": age,
+            "cluster_name": cluster.name,
+            "cluster_id": cluster.id
         }
 
     except Exception as e:
@@ -2232,15 +2236,120 @@ def delete_secret(cluster: Cluster, namespace: str, secret_name: str) -> bool:
 
 
 def get_secret_yaml(cluster: Cluster, namespace: str, secret_name: str) -> Optional[str]:
-    """获取Secret YAML（暂未实现）"""
-    print(f"get_secret_yaml 暂未实现: {namespace}/{secret_name}")
-    return None
+    """获取Secret YAML"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return None
+
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+        secret = core_v1.read_namespaced_secret(secret_name, namespace)
+
+        # 转换为YAML格式
+        yaml_content = yaml.dump(secret.to_dict(), default_flow_style=False)
+        return yaml_content
+
+    except Exception as e:
+        print(f"获取Secret YAML失败: {e}")
+        return None
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def create_secret_yaml(cluster: Cluster, yaml_content: str) -> bool:
+    """通过YAML创建Secret"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        # 解析YAML内容
+        secret_dict = yaml.safe_load(yaml_content)
+        if not secret_dict:
+            print("YAML内容无效")
+            return False
+
+        # 提取metadata
+        metadata = secret_dict.get('metadata', {})
+        name = metadata.get('name')
+        namespace = metadata.get('namespace', 'default')
+
+        if not name:
+            print("Secret名称不能为空")
+            return False
+
+        core_v1 = client.CoreV1Api(client_instance)
+
+        # 创建Secret对象
+        secret = client.V1Secret(
+            metadata=client.V1ObjectMeta(
+                name=name,
+                namespace=namespace,
+                labels=metadata.get('labels'),
+                annotations=metadata.get('annotations')
+            ),
+            type=secret_dict.get('type', 'Opaque'),
+            data=secret_dict.get('data', {}),
+            string_data=secret_dict.get('stringData', {})
+        )
+
+        core_v1.create_namespaced_secret(namespace, secret)
+        return True
+
+    except Exception as e:
+        print(f"通过YAML创建Secret失败: {e}")
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
 
 
 def update_secret_yaml(cluster: Cluster, namespace: str, secret_name: str, yaml_content: str) -> bool:
-    """更新Secret YAML（暂未实现）"""
-    print(f"update_secret_yaml 暂未实现: {namespace}/{secret_name}")
-    return False
+    """更新Secret YAML"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        # 解析YAML内容
+        secret_dict = yaml.safe_load(yaml_content)
+        if not secret_dict:
+            print("YAML内容无效")
+            return False
+
+        # 验证Secret名称匹配
+        metadata = secret_dict.get('metadata', {})
+        yaml_secret_name = metadata.get('name')
+        if yaml_secret_name != secret_name:
+            print(f"Secret名称不匹配: YAML中为{yaml_secret_name}, 请求为{secret_name}")
+            return False
+
+        core_v1 = client.CoreV1Api(client_instance)
+
+        # 创建Secret对象
+        secret = client.V1Secret(
+            metadata=client.V1ObjectMeta(
+                name=secret_name,
+                namespace=namespace,
+                labels=metadata.get('labels'),
+                annotations=metadata.get('annotations')
+            ),
+            type=secret_dict.get('type', 'Opaque'),
+            data=secret_dict.get('data', {}),
+            string_data=secret_dict.get('stringData', {})
+        )
+
+        # 更新Secret
+        core_v1.replace_namespaced_secret(secret_name, namespace, secret)
+        return True
+
+    except Exception as e:
+        print(f"更新Secret YAML失败: {e}")
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
 
 
 # ========== Network Policy相关函数 ==========
