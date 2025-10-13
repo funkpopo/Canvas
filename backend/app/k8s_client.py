@@ -2449,6 +2449,106 @@ def get_network_policy_details(cluster: Cluster, namespace: str, policy_name: st
             client_instance.close()
 
 
+def _build_network_policy_rules(rules_data: List[dict]) -> List[client.V1NetworkPolicyIngressRule]:
+    """构建Network Policy规则"""
+    rules = []
+    for rule_data in rules_data:
+        rule = client.V1NetworkPolicyIngressRule()
+
+        # 处理from字段 (podSelector, namespaceSelector, ipBlock)
+        if 'from' in rule_data and rule_data['from']:
+            rule._from = []
+            for from_item in rule_data['from']:
+                peer = client.V1NetworkPolicyPeer()
+
+                if 'podSelector' in from_item and from_item['podSelector']:
+                    peer.pod_selector = client.V1LabelSelector(
+                        match_labels=from_item['podSelector']
+                    )
+
+                if 'namespaceSelector' in from_item and from_item['namespaceSelector']:
+                    peer.namespace_selector = client.V1LabelSelector(
+                        match_labels=from_item['namespaceSelector']
+                    )
+
+                if 'ipBlock' in from_item and from_item['ipBlock']:
+                    ip_block = client.V1NetworkPolicyIPBlock(
+                        cidr=from_item['ipBlock'].get('cidr', ''),
+                        except_=from_item['ipBlock'].get('except', [])
+                    )
+                    peer.ip_block = ip_block
+
+                rule._from.append(peer)
+
+        # 处理ports字段
+        if 'ports' in rule_data and rule_data['ports']:
+            rule.ports = []
+            for port_data in rule_data['ports']:
+                port = client.V1NetworkPolicyPort()
+
+                if 'port' in port_data:
+                    port.port = port_data['port']
+                if 'protocol' in port_data:
+                    port.protocol = port_data['protocol']
+                if 'endPort' in port_data:
+                    port.end_port = port_data['endPort']
+
+                rule.ports.append(port)
+
+        rules.append(rule)
+
+    return rules
+
+def _build_network_policy_egress_rules(rules_data: List[dict]) -> List[client.V1NetworkPolicyEgressRule]:
+    """构建Network Policy出站规则"""
+    rules = []
+    for rule_data in rules_data:
+        rule = client.V1NetworkPolicyEgressRule()
+
+        # 处理to字段 (podSelector, namespaceSelector, ipBlock)
+        if 'to' in rule_data and rule_data['to']:
+            rule.to = []
+            for to_item in rule_data['to']:
+                peer = client.V1NetworkPolicyPeer()
+
+                if 'podSelector' in to_item and to_item['podSelector']:
+                    peer.pod_selector = client.V1LabelSelector(
+                        match_labels=to_item['podSelector']
+                    )
+
+                if 'namespaceSelector' in to_item and to_item['namespaceSelector']:
+                    peer.namespace_selector = client.V1LabelSelector(
+                        match_labels=to_item['namespaceSelector']
+                    )
+
+                if 'ipBlock' in to_item and to_item['ipBlock']:
+                    ip_block = client.V1NetworkPolicyIPBlock(
+                        cidr=to_item['ipBlock'].get('cidr', ''),
+                        except_=to_item['ipBlock'].get('except', [])
+                    )
+                    peer.ip_block = ip_block
+
+                rule.to.append(peer)
+
+        # 处理ports字段
+        if 'ports' in rule_data and rule_data['ports']:
+            rule.ports = []
+            for port_data in rule_data['ports']:
+                port = client.V1NetworkPolicyPort()
+
+                if 'port' in port_data:
+                    port.port = port_data['port']
+                if 'protocol' in port_data:
+                    port.protocol = port_data['protocol']
+                if 'endPort' in port_data:
+                    port.end_port = port_data['endPort']
+
+                rule.ports.append(port)
+
+        rules.append(rule)
+
+    return rules
+
 def create_network_policy(cluster: Cluster, policy_data: dict) -> bool:
     """创建Network Policy"""
     client_instance = create_k8s_client(cluster)
@@ -2464,11 +2564,13 @@ def create_network_policy(cluster: Cluster, policy_data: dict) -> bool:
             policy_types=policy_data.get('policy_types', [])
         )
 
-        # 简化处理ingress和egress规则
+        # 处理ingress规则
         if policy_data.get('ingress'):
-            policy_spec.ingress = []
+            policy_spec.ingress = _build_network_policy_rules(policy_data['ingress'])
+
+        # 处理egress规则
         if policy_data.get('egress'):
-            policy_spec.egress = []
+            policy_spec.egress = _build_network_policy_egress_rules(policy_data['egress'])
 
         policy = client.V1NetworkPolicy(
             metadata=client.V1ObjectMeta(
@@ -2491,9 +2593,45 @@ def create_network_policy(cluster: Cluster, policy_data: dict) -> bool:
 
 
 def update_network_policy(cluster: Cluster, namespace: str, policy_name: str, update_data: dict) -> bool:
-    """更新Network Policy（暂未实现）"""
-    print(f"update_network_policy 暂未实现: {namespace}/{policy_name}")
-    return False
+    """更新Network Policy"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        networking_v1 = client.NetworkingV1Api(client_instance)
+
+        # 获取现有的Network Policy
+        existing_policy = networking_v1.read_namespaced_network_policy(policy_name, namespace)
+
+        # 更新metadata
+        if 'labels' in update_data and update_data['labels'] is not None:
+            existing_policy.metadata.labels = update_data['labels']
+        if 'annotations' in update_data and update_data['annotations'] is not None:
+            existing_policy.metadata.annotations = update_data['annotations']
+
+        # 更新spec
+        if 'pod_selector' in update_data and update_data['pod_selector'] is not None:
+            existing_policy.spec.pod_selector = client.V1LabelSelector(
+                match_labels=update_data['pod_selector']
+            )
+        if 'policy_types' in update_data and update_data['policy_types'] is not None:
+            existing_policy.spec.policy_types = update_data['policy_types']
+        if 'ingress' in update_data and update_data['ingress'] is not None:
+            existing_policy.spec.ingress = update_data['ingress']
+        if 'egress' in update_data and update_data['egress'] is not None:
+            existing_policy.spec.egress = update_data['egress']
+
+        # 执行更新
+        networking_v1.replace_namespaced_network_policy(policy_name, namespace, existing_policy)
+        return True
+
+    except Exception as e:
+        print(f"更新Network Policy失败: {e}")
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
 
 
 def delete_network_policy(cluster: Cluster, namespace: str, policy_name: str) -> bool:

@@ -10,8 +10,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Plus, Trash2, Eye, Loader2, Shield, ArrowLeft } from "lucide-react";
+import { Plus, Trash2, Eye, Edit, Loader2, Shield, ArrowLeft } from "lucide-react";
 import ClusterSelector from "@/components/ClusterSelector";
+import NetworkPolicyForm from "@/components/NetworkPolicyForm";
 import { useAuth } from "@/lib/auth-context";
 import { useCluster } from "@/lib/cluster-context";
 import { networkPolicyApi } from "@/lib/api";
@@ -40,6 +41,11 @@ export default function NetworkPoliciesManagement() {
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [selectedPolicy, setSelectedPolicy] = useState<any | null>(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+
+  // 创建/编辑对话框状态
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editingPolicy, setEditingPolicy] = useState<any | null>(null);
 
   const { user } = useAuth();
   const { clusters } = useCluster();
@@ -137,6 +143,58 @@ export default function NetworkPoliciesManagement() {
     }
   };
 
+  // 创建Network Policy
+  const handleCreateNetworkPolicy = async (policyData: any) => {
+    if (!selectedClusterId) return;
+
+    const response = await networkPolicyApi.createNetworkPolicy(selectedClusterId, policyData);
+    if (!response.error) {
+      toast.success("Network Policy创建成功");
+      setIsCreateOpen(false);
+      fetchNetworkPolicies();
+    } else {
+      toast.error(`创建Network Policy失败: ${response.error}`);
+    }
+  };
+
+  // 编辑Network Policy
+  const handleEditNetworkPolicy = async (policy: NetworkPolicy) => {
+    try {
+      setIsPreviewLoading(true);
+      const response = await networkPolicyApi.getNetworkPolicy(policy.cluster_id, policy.namespace, policy.name);
+      if (response.data) {
+        setEditingPolicy(response.data);
+        setIsEditOpen(true);
+      } else {
+        toast.error(`获取Network Policy详情失败: ${response.error}`);
+      }
+    } catch {
+      toast.error("获取Network Policy详情失败");
+    } finally {
+      setIsPreviewLoading(false);
+    }
+  };
+
+  // 更新Network Policy
+  const handleUpdateNetworkPolicy = async (policyData: any) => {
+    if (!selectedClusterId || !editingPolicy) return;
+
+    const response = await networkPolicyApi.updateNetworkPolicy(
+      selectedClusterId,
+      editingPolicy.namespace,
+      editingPolicy.name,
+      policyData
+    );
+    if (!response.error) {
+      toast.success("Network Policy更新成功");
+      setIsEditOpen(false);
+      setEditingPolicy(null);
+      fetchNetworkPolicies();
+    } else {
+      toast.error(`更新Network Policy失败: ${response.error}`);
+    }
+  };
+
   if (!user) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -201,9 +259,9 @@ export default function NetworkPoliciesManagement() {
                 {selectedNamespace ? `命名空间: ${selectedNamespace}` : "请选择命名空间"}
               </CardDescription>
             </div>
-            <Button disabled>
+            <Button onClick={() => setIsCreateOpen(true)}>
               <Plus className="w-4 h-4 mr-2" />
-              创建Network Policy (开发中)
+              创建Network Policy
             </Button>
           </div>
         </CardHeader>
@@ -258,14 +316,25 @@ export default function NetworkPoliciesManagement() {
                           size="sm"
                           onClick={() => handleViewNetworkPolicy(policy)}
                           disabled={isPreviewLoading}
+                          title="查看详情"
                         >
                           <Eye className="w-4 h-4" />
                         </Button>
                         <Button
                           variant="outline"
                           size="sm"
+                          onClick={() => handleEditNetworkPolicy(policy)}
+                          disabled={isPreviewLoading}
+                          title="编辑"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
                           onClick={() => handleDeleteNetworkPolicy(policy)}
                           className="text-red-600 hover:text-red-700"
+                          title="删除"
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>
@@ -433,6 +502,32 @@ export default function NetworkPoliciesManagement() {
           <DialogFooter>
             <Button onClick={() => setIsPreviewOpen(false)}>关闭</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 创建Network Policy对话框 */}
+      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+          <DialogTitle className="sr-only">创建Network Policy</DialogTitle>
+          <NetworkPolicyForm
+            onSubmit={handleCreateNetworkPolicy}
+            onCancel={() => setIsCreateOpen(false)}
+            namespaces={namespaces}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {/* 编辑Network Policy对话框 */}
+      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+          <DialogTitle className="sr-only">编辑Network Policy</DialogTitle>
+          <NetworkPolicyForm
+            onSubmit={handleUpdateNetworkPolicy}
+            onCancel={() => setIsEditOpen(false)}
+            initialData={editingPolicy}
+            isEditing={true}
+            namespaces={namespaces}
+          />
         </DialogContent>
       </Dialog>
     </div>
