@@ -4,14 +4,13 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2, Eye, Loader2, Code } from "lucide-react";
+import { Plus, Trash2, Eye, Loader2 } from "lucide-react";
 import ClusterSelector from "@/components/ClusterSelector";
 import { useAuth } from "@/lib/auth-context";
 import { useCluster } from "@/lib/cluster-context";
@@ -33,7 +32,7 @@ export default function ConfigMapsManagement() {
   const [configmaps, setConfigmaps] = useState<ConfigMap[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedClusterId, setSelectedClusterId] = useState<number | null>(null);
-  const [selectedNamespace, setSelectedNamespace] = useState<string>("");
+  const [selectedNamespace, setSelectedNamespace] = useState<string>("default");
   const [namespaces, setNamespaces] = useState<string[]>([]);
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -60,7 +59,7 @@ export default function ConfigMapsManagement() {
       } else if (response.error) {
         toast.error(`获取ConfigMap列表失败: ${response.error}`);
       }
-    } catch (error) {
+    } catch {
       toast.error("获取ConfigMap列表失败");
     } finally {
       setIsLoading(false);
@@ -69,7 +68,26 @@ export default function ConfigMapsManagement() {
 
   const fetchNamespaces = async () => {
     if (!selectedClusterId) return;
-    setNamespaces(["default", "kube-system", "kube-public", "kube-node-lease"]);
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(`http://localhost:8000/api/namespaces?cluster_id=${selectedClusterId}`, {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const namespaceNames = data.map((ns: any) => ns.name);
+        setNamespaces(namespaceNames);
+      } else {
+        console.error("获取命名空间列表失败");
+        setNamespaces(["default"]);
+      }
+    } catch {
+      console.error("获取命名空间列表出错");
+      setNamespaces(["default"]);
+    }
   };
 
   useEffect(() => {
@@ -81,9 +99,12 @@ export default function ConfigMapsManagement() {
   useEffect(() => {
     if (selectedClusterId) {
       fetchNamespaces();
-      if (selectedNamespace) {
-        fetchConfigMaps();
-      }
+    }
+  }, [selectedClusterId]);
+
+  useEffect(() => {
+    if (selectedClusterId && selectedNamespace) {
+      fetchConfigMaps();
     }
   }, [selectedClusterId, selectedNamespace]);
 
@@ -100,7 +121,7 @@ export default function ConfigMapsManagement() {
       } else {
         toast.error(`创建ConfigMap失败: ${response.error}`);
       }
-    } catch (error) {
+    } catch {
       toast.error("创建ConfigMap失败");
     }
   };
@@ -114,7 +135,7 @@ export default function ConfigMapsManagement() {
       } else {
         toast.error(`删除ConfigMap失败: ${response.error}`);
       }
-    } catch (error) {
+    } catch {
       toast.error("删除ConfigMap失败");
     }
   };
@@ -122,7 +143,7 @@ export default function ConfigMapsManagement() {
   const resetForm = () => {
     setCmForm({
       name: "",
-      namespace: selectedNamespace,
+      namespace: selectedNamespace || "default",
       data: {},
       labels: {},
       annotations: {}
@@ -175,12 +196,12 @@ export default function ConfigMapsManagement() {
               </CardDescription>
             </div>
             <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-              <DialogTrigger asChild>
-                <Button onClick={() => { resetForm(); setIsCreateOpen(true); }}>
-                  <Plus className="w-4 h-4 mr-2" />
-                  创建ConfigMap
-                </Button>
-              </DialogTrigger>
+                <DialogTrigger asChild>
+                  <Button onClick={() => { resetForm(); setIsCreateOpen(true); }} disabled={!selectedNamespace}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    创建ConfigMap
+                  </Button>
+                </DialogTrigger>
               <DialogContent className="max-w-2xl">
                 <DialogHeader>
                   <DialogTitle>创建ConfigMap</DialogTitle>
