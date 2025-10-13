@@ -5,6 +5,8 @@ import { ClusterProvider } from "@/lib/cluster-context";
 import { AuthProvider } from "@/lib/auth-context";
 import { ThemeProvider } from "next-themes";
 import { Toaster } from "sonner";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { ClientOnly } from "@/components/ClientOnly";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -33,7 +35,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning={true}>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
@@ -43,12 +45,16 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <AuthProvider>
-            <ClusterProvider>
-              {children}
-              <Toaster />
-            </ClusterProvider>
-          </AuthProvider>
+          <ErrorBoundary>
+            <AuthProvider>
+              <ClusterProvider>
+                {children}
+                <ClientOnly>
+                  <Toaster />
+                </ClientOnly>
+              </ClusterProvider>
+            </AuthProvider>
+          </ErrorBoundary>
         </ThemeProvider>
       </body>
     </html>

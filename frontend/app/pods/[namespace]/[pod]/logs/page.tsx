@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, Download, RefreshCw, Terminal } from "lucide-react";
+import { useCluster } from "@/lib/cluster-context";
 
 export default function PodLogsPage() {
   const params = useParams();
@@ -107,15 +108,25 @@ export default function PodLogsPage() {
   };
 
   const downloadLogs = () => {
-    const blob = new Blob([logs], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${podName}-${namespace}-logs.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    try {
+      const blob = new Blob([logs], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${podName}-${namespace}-logs.txt`;
+      a.style.display = 'none';
+
+      // Check if document.body exists before manipulating
+      if (document.body) {
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }
+
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('下载日志失败:', error);
+    }
   };
 
   const formatLogs = (logs: string) => {
@@ -227,4 +238,3 @@ export default function PodLogsPage() {
     </div>
   );
 }
-import { useCluster } from "@/lib/cluster-context";
