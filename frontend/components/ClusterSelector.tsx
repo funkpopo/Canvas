@@ -5,7 +5,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Loader2 } from "lucide-react";
 
-export default function ClusterSelector() {
+interface ClusterSelectorProps {
+  value?: string;
+  onValueChange?: (value: string) => void;
+}
+
+export default function ClusterSelector({ value, onValueChange }: ClusterSelectorProps) {
   const { clusters, activeCluster, setActiveCluster, refreshClusters, isLoading } = useCluster();
 
   if (isLoading) {
@@ -36,10 +41,14 @@ export default function ClusterSelector() {
     <div className="flex items-center space-x-2">
       <span className="text-sm font-medium">当前集群:</span>
       <Select
-        value={activeCluster?.id.toString() || ""}
+        value={value || activeCluster?.id.toString() || ""}
         onValueChange={(value) => {
-          const cluster = clusters.find(c => c.id.toString() === value);
-          setActiveCluster(cluster || null);
+          if (onValueChange) {
+            onValueChange(value);
+          } else {
+            const cluster = clusters.find(c => c.id.toString() === value);
+            setActiveCluster(cluster || null);
+          }
         }}
       >
         <SelectTrigger className="min-w-48 max-w-64">
