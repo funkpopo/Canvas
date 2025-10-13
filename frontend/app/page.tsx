@@ -6,7 +6,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
-import { LogOut, Server, FolderPen, Activity, Settings, Database, Loader2, Settings2, Cpu, Route, Shield, Lock } from "lucide-react";
+import { LogOut, Server, FolderPen, Activity, Settings, Database, Loader2, Settings2, Cpu, Shield, Lock } from "lucide-react";
 import ClusterSelector from "@/components/ClusterSelector";
 import { useAuth } from "@/lib/auth-context";
 
@@ -237,12 +237,6 @@ export default function Home() {
                 <Link href="/secrets">
                   <Lock className="h-6 w-6 mb-2" />
                   Secrets
-                </Link>
-              </Button>
-              <Button variant="outline" className="h-20 flex-col" asChild>
-                <Link href="/ingress">
-                  <Route className="h-6 w-6 mb-2" />
-                  Ingress
                 </Link>
               </Button>
               <Button variant="outline" className="h-20 flex-col" asChild>

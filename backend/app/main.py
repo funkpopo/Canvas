@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from .database import create_tables, init_default_user
-from .routers import auth, clusters, stats, nodes, namespaces, pods, deployments, storage, services, configmaps, secrets, ingress, network_policies, resource_quotas
+from .routers import auth, clusters, stats, nodes, namespaces, pods, deployments, storage, services, configmaps, secrets, network_policies, resource_quotas
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -44,7 +44,6 @@ app.include_router(storage.router, prefix="/api/storage", tags=["storage"])
 app.include_router(services.router, prefix="/api/services", tags=["services"])
 app.include_router(configmaps.router, prefix="/api/configmaps", tags=["configmaps"])
 app.include_router(secrets.router, prefix="/api/secrets", tags=["secrets"])
-app.include_router(ingress.router, prefix="/api/ingress", tags=["ingress"])
 app.include_router(network_policies.router, prefix="/api/network-policies", tags=["network-policies"])
 app.include_router(resource_quotas.router, prefix="/api/resource-quotas", tags=["resource-quotas"])
 

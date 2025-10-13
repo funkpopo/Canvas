@@ -4,7 +4,7 @@ from typing import List, Optional
 from ..database import get_db
 from ..models import Cluster, AuditLog, User
 from ..auth import get_current_user
-from ..kubernetes import (
+from ..k8s_client import (
     get_namespace_secrets, get_secret_details, create_secret, update_secret, delete_secret,
     get_secret_yaml, update_secret_yaml
 )

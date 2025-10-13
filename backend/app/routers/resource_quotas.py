@@ -4,7 +4,7 @@ from typing import List, Optional
 from ..database import get_db
 from ..models import Cluster, AuditLog, User
 from ..auth import get_current_user
-from ..kubernetes import (
+from ..k8s_client import (
     get_namespace_resource_quotas, get_resource_quota_details, create_resource_quota, update_resource_quota, delete_resource_quota
 )
 from pydantic import BaseModel

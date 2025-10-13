@@ -319,24 +319,6 @@ interface SecretDetails extends Secret {
   data: Record<string, any>;
 }
 
-// Ingress相关类型
-interface Ingress {
-  name: string;
-  namespace: string;
-  hosts: string[];
-  tls_hosts: string[];
-  class_name: string | null;
-  labels: Record<string, any>;
-  annotations: Record<string, any>;
-  age: string;
-  cluster_name: string;
-  cluster_id: number;
-}
-
-interface IngressDetails extends Ingress {
-  rules: any[];
-  tls: any[];
-}
 
 // Network Policy相关类型
 interface NetworkPolicy {
@@ -479,62 +461,6 @@ export const secretApi = {
   },
 };
 
-// Ingress相关 API
-export const ingressApi = {
-  async getIngresses(clusterId?: number, namespace?: string): Promise<ApiResponse<Ingress[]>> {
-    let params = '';
-    if (clusterId) params += `cluster_id=${clusterId}`;
-    if (namespace) params += `${params ? '&' : ''}namespace=${namespace}`;
-    const query = params ? `?${params}` : '';
-    return apiClient.get<Ingress[]>(`/ingress${query}`);
-  },
-
-  async getIngress(clusterId: number, namespace: string, ingressName: string): Promise<ApiResponse<IngressDetails>> {
-    return apiClient.get<IngressDetails>(`/ingress/${namespace}/${ingressName}?cluster_id=${clusterId}`);
-  },
-
-  async createIngress(clusterId: number, ingressData: Record<string, any>): Promise<ApiResponse<any>> {
-    return apiClient.post<any>(`/ingress?cluster_id=${clusterId}`, ingressData);
-  },
-
-  async updateIngress(clusterId: number, namespace: string, ingressName: string, updates: Record<string, any>): Promise<ApiResponse<any>> {
-    return apiClient.put<any>(`/ingress/${namespace}/${ingressName}?cluster_id=${clusterId}`, updates);
-  },
-
-  async deleteIngress(clusterId: number, namespace: string, ingressName: string): Promise<ApiResponse<any>> {
-    return apiClient.delete<any>(`/ingress/${namespace}/${ingressName}?cluster_id=${clusterId}`);
-  },
-
-  // Controller管理
-  async getControllerStatus(clusterId: number): Promise<ApiResponse<any>> {
-    return apiClient.get<any>(`/ingress/controller/status?cluster_id=${clusterId}`);
-  },
-
-  async installController(clusterId: number, request: { version?: string; image?: string }): Promise<ApiResponse<any>> {
-    return apiClient.post<any>(`/ingress/controller/install?cluster_id=${clusterId}`, request);
-  },
-
-  async uninstallController(clusterId: number): Promise<ApiResponse<any>> {
-    return apiClient.delete<any>(`/ingress/controller?cluster_id=${clusterId}`);
-  },
-
-  // IngressClass管理
-  async getIngressClasses(clusterId: number): Promise<ApiResponse<any[]>> {
-    return apiClient.get<any[]>(`/ingress/classes?cluster_id=${clusterId}`);
-  },
-
-  async createIngressClass(clusterId: number, classData: Record<string, any>): Promise<ApiResponse<any>> {
-    return apiClient.post<any>(`/ingress/classes?cluster_id=${clusterId}`, classData);
-  },
-
-  async updateIngressClass(clusterId: number, className: string, updates: Record<string, any>): Promise<ApiResponse<any>> {
-    return apiClient.put<any>(`/ingress/classes/${className}?cluster_id=${clusterId}`, updates);
-  },
-
-  async deleteIngressClass(clusterId: number, className: string): Promise<ApiResponse<any>> {
-    return apiClient.delete<any>(`/ingress/classes/${className}?cluster_id=${clusterId}`);
-  },
-};
 
 // Network Policy相关 API
 export const networkPolicyApi = {

@@ -114,7 +114,7 @@ async def test_cluster_connection(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    from ..kubernetes import test_cluster_connection as test_conn
+    from ..k8s_client import test_cluster_connection as test_conn
     cluster = db.query(Cluster).filter(Cluster.id == cluster_id).first()
     if not cluster:
         raise HTTPException(status_code=404, detail="集群不存在")

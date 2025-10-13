@@ -5,7 +5,7 @@ from typing import List, Optional
 from ..database import get_db
 from ..models import Cluster
 from ..auth import get_current_user
-from ..kubernetes import get_pods_info, get_pod_details, get_pod_logs, restart_pod, delete_pod
+from ..k8s_client import get_pods_info, get_pod_details, get_pod_logs, restart_pod, delete_pod
 from pydantic import BaseModel
 
 router = APIRouter()
