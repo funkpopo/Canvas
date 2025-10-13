@@ -18,6 +18,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useCluster } from "@/lib/cluster-context";
 import { ingressApi } from "@/lib/api";
 import { toast } from "sonner";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 interface Ingress {
   name: string;
@@ -46,6 +47,14 @@ export default function IngressManagement() {
 
   // 创建Ingress对话框状态
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+
+  // 删除确认对话框状态
+  const [confirmDialog, setConfirmDialog] = useState({
+    open: false,
+    title: "",
+    description: "",
+    onConfirm: () => {},
+  });
 
   const { user } = useAuth();
   const { clusters } = useCluster();
@@ -111,18 +120,25 @@ export default function IngressManagement() {
     }
   }, [selectedClusterId, selectedNamespace]);
 
-  const handleDeleteIngress = async (ingress: Ingress) => {
-    try {
-      const response = await ingressApi.deleteIngress(ingress.cluster_id, ingress.namespace, ingress.name);
-      if (response.data) {
-        toast.success("Ingress删除成功");
-        fetchIngresses();
-      } else {
-        toast.error(`删除Ingress失败: ${response.error}`);
-      }
-    } catch {
-      toast.error("删除Ingress失败");
-    }
+  const handleDeleteIngress = (ingress: Ingress) => {
+    setConfirmDialog({
+      open: true,
+      title: "确认删除",
+      description: `确定要删除Ingress "${ingress.namespace}/${ingress.name}" 吗？此操作无法撤销。`,
+      onConfirm: async () => {
+        try {
+          const response = await ingressApi.deleteIngress(ingress.cluster_id, ingress.namespace, ingress.name);
+          if (response.data) {
+            toast.success("Ingress删除成功");
+            fetchIngresses();
+          } else {
+            toast.error(`删除Ingress失败: ${response.error}`);
+          }
+        } catch {
+          toast.error("删除Ingress失败");
+        }
+      },
+    });
   };
 
   // 查看Ingress详情
@@ -406,6 +422,17 @@ export default function IngressManagement() {
         clusterId={selectedClusterId}
         onSuccess={fetchIngresses}
         mode="create"
+      />
+
+      {/* 删除确认对话框 */}
+      <ConfirmDialog
+        open={confirmDialog.open}
+        onOpenChange={(open) => setConfirmDialog(prev => ({ ...prev, open }))}
+        title={confirmDialog.title}
+        description={confirmDialog.description}
+        onConfirm={confirmDialog.onConfirm}
+        confirmText="删除"
+        variant="destructive"
       />
     </div>
   );

@@ -24,6 +24,7 @@ const VERSION_OPTIONS = [
   { value: "v1.9.6", label: "v1.9.6 (稳定)" },
   { value: "v1.8.5", label: "v1.8.5" },
   { value: "v1.7.1", label: "v1.7.1" },
+  { value: "custom", label: "自定义镜像" },
 ];
 
 export default function ControllerInstaller({
@@ -34,6 +35,7 @@ export default function ControllerInstaller({
 }: ControllerInstallerProps) {
   const [version, setVersion] = useState("latest");
   const [customVersion, setCustomVersion] = useState("");
+  const [customImage, setCustomImage] = useState("");
   const [isInstalling, setIsInstalling] = useState(false);
   const [installResult, setInstallResult] = useState<any>(null);
   const [currentStep, setCurrentStep] = useState(0);
@@ -41,14 +43,17 @@ export default function ControllerInstaller({
   const handleInstall = async () => {
     if (!clusterId) return;
 
-    const installVersion = version === "custom" ? customVersion : version;
+    // 如果选择自定义镜像，使用image参数；否则使用version参数
+    const installData = version === "custom"
+      ? { image: customImage }
+      : { version: version };
 
     setIsInstalling(true);
     setInstallResult(null);
     setCurrentStep(0);
 
     try {
-      const response = await ingressApi.installController(clusterId, { version: installVersion });
+      const response = await ingressApi.installController(clusterId, installData);
 
       if (response.data) {
         setInstallResult(response.data);
@@ -74,6 +79,9 @@ export default function ControllerInstaller({
     setInstallResult(null);
     setIsInstalling(false);
     setCurrentStep(0);
+    setVersion("latest");
+    setCustomVersion("");
+    setCustomImage("");
     onOpenChange(false);
   };
 
@@ -134,20 +142,22 @@ export default function ControllerInstaller({
                       {option.label}
                     </SelectItem>
                   ))}
-                  <SelectItem value="custom">自定义版本</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             {version === "custom" && (
               <div className="space-y-2">
-                <Label htmlFor="customVersion">自定义版本</Label>
+                <Label htmlFor="customImage">自定义镜像</Label>
                 <Input
-                  id="customVersion"
-                  placeholder="例如: v1.9.6"
-                  value={customVersion}
-                  onChange={(e) => setCustomVersion(e.target.value)}
+                  id="customImage"
+                  placeholder="例如: docker.io/nginx/nginx-ingress:v1.9.6"
+                  value={customImage}
+                  onChange={(e) => setCustomImage(e.target.value)}
                 />
+                <p className="text-xs text-muted-foreground">
+                  输入完整的镜像名称，包括仓库地址和标签
+                </p>
               </div>
             )}
 

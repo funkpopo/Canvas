@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from ..database import get_db
-from ..models import Cluster, AuditLog
+from ..models import Cluster, AuditLog, User
 from ..auth import get_current_user
 from ..kubernetes import (
     get_namespace_configmaps, get_configmap_details, create_configmap, update_configmap, delete_configmap,
@@ -43,7 +43,7 @@ async def get_configmaps(
     cluster_id: Optional[int] = Query(None, description="集群ID，不传则获取所有活跃集群"),
     namespace: Optional[str] = Query(None, description="命名空间名称"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """获取ConfigMap列表"""
     try:
@@ -81,7 +81,7 @@ async def get_configmap(
     configmap_name: str,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """获取ConfigMap详细信息"""
     try:
@@ -106,7 +106,7 @@ async def create_new_configmap(
     configmap_data: ConfigMapCreate,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """创建ConfigMap"""
     try:
@@ -128,7 +128,7 @@ async def create_new_configmap(
 
         # 记录审计日志
         audit_log = AuditLog(
-            user_id=current_user["id"],
+            user_id=current_user.id,
             action="CREATE",
             resource_type="ConfigMap",
             resource_name=f"{configmap_data.namespace}/{configmap_data.name}",
@@ -154,7 +154,7 @@ async def update_existing_configmap(
     updates: ConfigMapUpdate,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """更新ConfigMap"""
     try:
@@ -177,7 +177,7 @@ async def update_existing_configmap(
 
         # 记录审计日志
         audit_log = AuditLog(
-            user_id=current_user["id"],
+            user_id=current_user.id,
             action="UPDATE",
             resource_type="ConfigMap",
             resource_name=f"{namespace}/{configmap_name}",
@@ -202,7 +202,7 @@ async def delete_existing_configmap(
     configmap_name: str,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """删除ConfigMap"""
     try:
@@ -216,7 +216,7 @@ async def delete_existing_configmap(
 
         # 记录审计日志
         audit_log = AuditLog(
-            user_id=current_user["id"],
+            user_id=current_user.id,
             action="DELETE",
             resource_type="ConfigMap",
             resource_name=f"{namespace}/{configmap_name}",
@@ -245,7 +245,7 @@ async def get_configmap_yaml_config(
     configmap_name: str,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """获取ConfigMap的YAML配置"""
     try:
@@ -272,7 +272,7 @@ async def update_configmap_yaml_config(
     yaml_data: YamlUpdateRequest,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """通过YAML更新ConfigMap"""
     try:
@@ -290,7 +290,7 @@ async def update_configmap_yaml_config(
 
         # 记录审计日志
         audit_log = AuditLog(
-            user_id=current_user["id"],
+            user_id=current_user.id,
             action="UPDATE",
             resource_type="ConfigMap",
             resource_name=f"{namespace}/{configmap_name}",

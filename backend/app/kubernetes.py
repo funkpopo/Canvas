@@ -4076,7 +4076,7 @@ def check_controller_status(cluster: Cluster) -> Dict[str, Any]:
             client_instance.close()
 
 
-def install_ingress_controller(cluster: Cluster, version: str = "latest") -> Dict[str, Any]:
+def install_ingress_controller(cluster: Cluster, version: str = "latest", image: str = None) -> Dict[str, Any]:
     """安装Ingress Nginx Controller"""
     client_instance = create_k8s_client(cluster)
     if not client_instance:
@@ -4286,7 +4286,13 @@ def install_ingress_controller(cluster: Cluster, version: str = "latest") -> Dic
         # 步骤7: 创建Deployment
         result["steps"].append("创建Deployment")
         try:
-            image_tag = version if version != "latest" else "v1.9.6"
+            # 确定使用的镜像
+            if image:
+                controller_image = image
+            else:
+                image_tag = version if version != "latest" else "v1.9.6"
+                controller_image = f"registry.k8s.io/ingress-nginx/controller:{image_tag}"
+
             deployment = client.V1Deployment(
                 api_version="apps/v1",
                 kind="Deployment",
@@ -4309,7 +4315,7 @@ def install_ingress_controller(cluster: Cluster, version: str = "latest") -> Dic
                             containers=[
                                 client.V1Container(
                                     name="controller",
-                                    image=f"registry.k8s.io/ingress-nginx/controller:{image_tag}",
+                                    image=controller_image,
                                     ports=[
                                         client.V1ContainerPort(
                                             name="http",
@@ -4569,11 +4575,11 @@ def get_ingress_classes(cluster: Cluster) -> List[Dict[str, Any]]:
                     age = f"{delta.seconds}s"
 
             result.append({
-                "name": ic.metadata.name,
-                "controller": ic.spec.controller,
-                "is_default": ic.metadata.annotations.get("ingressclass.kubernetes.io/is-default-class", "false") == "true",
-                "labels": ic.metadata.labels or {},
-                "annotations": ic.metadata.annotations or {},
+                "name": ic.metadata.name if ic.metadata else "unknown",
+                "controller": ic.spec.controller if ic.spec else "unknown",
+                "is_default": ic.metadata.annotations.get("ingressclass.kubernetes.io/is-default-class", "false") == "true" if ic.metadata and ic.metadata.annotations else False,
+                "labels": ic.metadata.labels or {} if ic.metadata else {},
+                "annotations": ic.metadata.annotations or {} if ic.metadata else {},
                 "age": age
             })
 
@@ -4595,6 +4601,16 @@ def create_ingress_class(cluster: Cluster, class_data: Dict[str, Any]) -> bool:
 
     try:
         networking_v1 = client.NetworkingV1Api(client_instance)
+
+        # 检查IngressClass是否已存在
+        try:
+            existing = networking_v1.read_ingress_class(class_data["name"])
+            if existing:
+                print(f"IngressClass '{class_data['name']}' 已存在")
+                return False
+        except Exception:
+            # 如果不存在，会抛出异常，这是正常的
+            pass
 
         ingress_class = client.V1IngressClass(
             api_version="networking.k8s.io/v1",

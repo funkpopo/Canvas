@@ -510,7 +510,7 @@ export const ingressApi = {
     return apiClient.get<any>(`/ingress/controller/status?cluster_id=${clusterId}`);
   },
 
-  async installController(clusterId: number, request: { version: string }): Promise<ApiResponse<any>> {
+  async installController(clusterId: number, request: { version?: string; image?: string }): Promise<ApiResponse<any>> {
     return apiClient.post<any>(`/ingress/controller/install?cluster_id=${clusterId}`, request);
   },
 

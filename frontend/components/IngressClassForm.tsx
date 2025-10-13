@@ -85,6 +85,24 @@ export default function IngressClassForm({
       return;
     }
 
+    // 检查名称是否有效
+    if (formData.name.trim() === "1" || /^\d+$/.test(formData.name.trim())) {
+      toast.error("IngressClass名称不能只是数字，请使用有意义的名称");
+      return;
+    }
+
+    // 检查IngressClass是否已存在
+    try {
+      const existingClasses = await ingressApi.getIngressClasses(clusterId);
+      if (existingClasses.data && existingClasses.data.some((cls: any) => cls.name === formData.name.trim())) {
+        toast.error(`IngressClass '${formData.name}' 已存在，请选择其他名称`);
+        return;
+      }
+    } catch (error) {
+      // 如果检查失败，继续创建（可能没有权限或其他问题）
+      console.warn("无法检查IngressClass是否存在:", error);
+    }
+
     setIsSubmitting(true);
     try {
       const submitData = {

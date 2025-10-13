@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from ..database import get_db
-from ..models import Cluster, AuditLog
+from ..models import Cluster, AuditLog, User
 from ..auth import get_current_user
 from ..kubernetes import (
     get_namespace_secrets, get_secret_details, create_secret, update_secret, delete_secret,
@@ -57,7 +57,7 @@ async def get_secrets(
     cluster_id: Optional[int] = Query(None, description="集群ID，不传则获取所有活跃集群"),
     namespace: Optional[str] = Query(None, description="命名空间名称"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """获取Secret列表"""
     try:
@@ -95,7 +95,7 @@ async def get_secret(
     secret_name: str,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """获取Secret详细信息"""
     try:
@@ -120,7 +120,7 @@ async def create_new_secret(
     secret_data: SecretCreate,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """创建Secret"""
     try:
@@ -143,7 +143,7 @@ async def create_new_secret(
 
         # 记录审计日志
         audit_log = AuditLog(
-            user_id=current_user["id"],
+            user_id=current_user.id,
             action="CREATE",
             resource_type="Secret",
             resource_name=f"{secret_data.namespace}/{secret_data.name}",
@@ -169,7 +169,7 @@ async def update_existing_secret(
     updates: SecretUpdate,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """更新Secret"""
     try:
@@ -194,7 +194,7 @@ async def update_existing_secret(
 
         # 记录审计日志
         audit_log = AuditLog(
-            user_id=current_user["id"],
+            user_id=current_user.id,
             action="UPDATE",
             resource_type="Secret",
             resource_name=f"{namespace}/{secret_name}",
@@ -219,7 +219,7 @@ async def delete_existing_secret(
     secret_name: str,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """删除Secret"""
     try:
@@ -233,7 +233,7 @@ async def delete_existing_secret(
 
         # 记录审计日志
         audit_log = AuditLog(
-            user_id=current_user["id"],
+            user_id=current_user.id,
             action="DELETE",
             resource_type="Secret",
             resource_name=f"{namespace}/{secret_name}",
@@ -262,7 +262,7 @@ async def get_secret_yaml_config(
     secret_name: str,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """获取Secret的YAML配置"""
     try:
@@ -289,7 +289,7 @@ async def update_secret_yaml_config(
     yaml_data: YamlUpdateRequest,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """通过YAML更新Secret"""
     try:
@@ -307,7 +307,7 @@ async def update_secret_yaml_config(
 
         # 记录审计日志
         audit_log = AuditLog(
-            user_id=current_user["id"],
+            user_id=current_user.id,
             action="UPDATE",
             resource_type="Secret",
             resource_name=f"{namespace}/{secret_name}",

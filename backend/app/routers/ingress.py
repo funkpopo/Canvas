@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from ..database import get_db
-from ..models import Cluster, AuditLog
+from ..models import Cluster, AuditLog, User
 from ..auth import get_current_user
 from ..kubernetes import (
     get_namespace_ingresses, get_ingress_details, create_ingress, update_ingress, delete_ingress,
@@ -82,6 +82,7 @@ class ControllerInstallResult(BaseModel):
 
 class ControllerInstallRequest(BaseModel):
     version: Optional[str] = "latest"
+    image: Optional[str] = None
 
 # IngressClass相关模型
 class IngressClassInfo(BaseModel):
@@ -112,7 +113,7 @@ async def get_ingresses(
     cluster_id: Optional[int] = Query(None, description="集群ID，不传则获取所有活跃集群"),
     namespace: Optional[str] = Query(None, description="命名空间名称"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """获取Ingress列表"""
     try:
@@ -150,7 +151,7 @@ async def get_ingress(
     ingress_name: str,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """获取Ingress详细信息"""
     try:
@@ -175,7 +176,7 @@ async def create_new_ingress(
     ingress_data: IngressCreate,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """创建Ingress"""
     try:
@@ -199,7 +200,7 @@ async def create_new_ingress(
 
         # 记录审计日志
         audit_log = AuditLog(
-            user_id=current_user["id"],
+            user_id=current_user.id,
             action="CREATE",
             resource_type="Ingress",
             resource_name=f"{ingress_data.namespace}/{ingress_data.name}",
@@ -225,7 +226,7 @@ async def update_existing_ingress(
     updates: IngressUpdate,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """更新Ingress"""
     try:
@@ -252,7 +253,7 @@ async def update_existing_ingress(
 
         # 记录审计日志
         audit_log = AuditLog(
-            user_id=current_user["id"],
+            user_id=current_user.id,
             action="UPDATE",
             resource_type="Ingress",
             resource_name=f"{namespace}/{ingress_name}",
@@ -277,7 +278,7 @@ async def delete_existing_ingress(
     ingress_name: str,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """删除Ingress"""
     try:
@@ -291,7 +292,7 @@ async def delete_existing_ingress(
 
         # 记录审计日志
         audit_log = AuditLog(
-            user_id=current_user["id"],
+            user_id=current_user.id,
             action="DELETE",
             resource_type="Ingress",
             resource_name=f"{namespace}/{ingress_name}",
@@ -316,7 +317,7 @@ async def delete_existing_ingress(
 async def get_controller_status(
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """检查Ingress Controller安装状态"""
     try:
@@ -336,7 +337,7 @@ async def install_controller(
     request: ControllerInstallRequest,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """安装Ingress Controller"""
     try:
@@ -344,17 +345,18 @@ async def install_controller(
         if not cluster:
             raise HTTPException(status_code=404, detail="集群不存在或未激活")
 
-        result = install_ingress_controller(cluster, request.version or "latest")
+        result = install_ingress_controller(cluster, request.version or "latest", request.image)
 
         if result["success"]:
             # 记录审计日志
+            image_info = request.image or f"registry.k8s.io/ingress-nginx/controller:{request.version or 'latest'}"
             audit_log = AuditLog(
-                user_id=current_user["id"],
+                user_id=current_user.id,
                 action="CREATE",
                 resource_type="IngressController",
                 resource_name="ingress-nginx",
                 cluster_id=cluster_id,
-                details=f"安装Ingress Controller版本 {request.version or 'latest'}"
+                details=f"安装Ingress Controller镜像 {image_info}"
             )
             db.add(audit_log)
             db.commit()
@@ -370,7 +372,7 @@ async def install_controller(
 async def uninstall_controller(
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """卸载Ingress Controller"""
     try:
@@ -383,7 +385,7 @@ async def uninstall_controller(
         if result["success"]:
             # 记录审计日志
             audit_log = AuditLog(
-                user_id=current_user["id"],
+                user_id=current_user.id,
                 action="DELETE",
                 resource_type="IngressController",
                 resource_name="ingress-nginx",
@@ -406,7 +408,7 @@ async def uninstall_controller(
 async def get_ingress_classes_list(
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """获取IngressClass列表"""
     try:
@@ -426,7 +428,7 @@ async def create_new_ingress_class(
     class_data: IngressClassCreate,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """创建IngressClass"""
     try:
@@ -444,11 +446,11 @@ async def create_new_ingress_class(
 
         success = create_ingress_class(cluster, class_dict)
         if not success:
-            raise HTTPException(status_code=500, detail="创建IngressClass失败")
+            raise HTTPException(status_code=400, detail=f"IngressClass '{class_data.name}' 已存在或创建失败")
 
         # 记录审计日志
         audit_log = AuditLog(
-            user_id=current_user["id"],
+            user_id=current_user.id,
             action="CREATE",
             resource_type="IngressClass",
             resource_name=class_data.name,
@@ -473,7 +475,7 @@ async def update_existing_ingress_class(
     updates: IngressClassUpdate,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """更新IngressClass"""
     try:
@@ -495,7 +497,7 @@ async def update_existing_ingress_class(
 
         # 记录审计日志
         audit_log = AuditLog(
-            user_id=current_user["id"],
+            user_id=current_user.id,
             action="UPDATE",
             resource_type="IngressClass",
             resource_name=class_name,
@@ -519,7 +521,7 @@ async def delete_existing_ingress_class(
     class_name: str,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """删除IngressClass"""
     try:
@@ -529,11 +531,11 @@ async def delete_existing_ingress_class(
 
         success = delete_ingress_class(cluster, class_name)
         if not success:
-            raise HTTPException(status_code=500, detail="删除IngressClass失败")
+            raise HTTPException(status_code=404, detail=f"IngressClass '{class_name}' 不存在或删除失败")
 
         # 记录审计日志
         audit_log = AuditLog(
-            user_id=current_user["id"],
+            user_id=current_user.id,
             action="DELETE",
             resource_type="IngressClass",
             resource_name=class_name,

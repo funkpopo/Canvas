@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from ..database import get_db
-from ..models import Cluster, AuditLog
+from ..models import Cluster, AuditLog, User
 from ..auth import get_current_user
 from ..kubernetes import (
     get_namespace_resource_quotas, get_resource_quota_details, create_resource_quota, update_resource_quota, delete_resource_quota
@@ -60,7 +60,7 @@ async def get_resource_quotas(
     cluster_id: Optional[int] = Query(None, description="集群ID，不传则获取所有活跃集群"),
     namespace: Optional[str] = Query(None, description="命名空间名称"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """获取Resource Quota列表"""
     try:
@@ -98,7 +98,7 @@ async def get_resource_quota(
     quota_name: str,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """获取Resource Quota详细信息"""
     try:
@@ -123,7 +123,7 @@ async def create_new_resource_quota(
     quota_data: ResourceQuotaCreate,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """创建Resource Quota"""
     try:
@@ -147,7 +147,7 @@ async def create_new_resource_quota(
 
         # 记录审计日志
         audit_log = AuditLog(
-            user_id=current_user["id"],
+            user_id=current_user.id,
             action="CREATE",
             resource_type="ResourceQuota",
             resource_name=f"{quota_data.namespace}/{quota_data.name}",
@@ -173,7 +173,7 @@ async def update_existing_resource_quota(
     updates: ResourceQuotaUpdate,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """更新Resource Quota"""
     try:
@@ -200,7 +200,7 @@ async def update_existing_resource_quota(
 
         # 记录审计日志
         audit_log = AuditLog(
-            user_id=current_user["id"],
+            user_id=current_user.id,
             action="UPDATE",
             resource_type="ResourceQuota",
             resource_name=f"{namespace}/{quota_name}",
@@ -225,7 +225,7 @@ async def delete_existing_resource_quota(
     quota_name: str,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """删除Resource Quota"""
     try:
@@ -239,7 +239,7 @@ async def delete_existing_resource_quota(
 
         # 记录审计日志
         audit_log = AuditLog(
-            user_id=current_user["id"],
+            user_id=current_user.id,
             action="DELETE",
             resource_type="ResourceQuota",
             resource_name=f"{namespace}/{quota_name}",

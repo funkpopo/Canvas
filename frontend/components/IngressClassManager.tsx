@@ -10,6 +10,7 @@ import { Plus, Trash2, Edit, Loader2, Layers, Star } from "lucide-react";
 import { ingressApi } from "@/lib/api";
 import { toast } from "sonner";
 import IngressClassForm from "@/components/IngressClassForm";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 interface IngressClassData {
   name: string;
@@ -29,6 +30,12 @@ export default function IngressClassManager({ clusterId }: IngressClassManagerPr
   const [isLoading, setIsLoading] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingClass, setEditingClass] = useState<IngressClassData | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState({
+    open: false,
+    title: "",
+    description: "",
+    onConfirm: () => {},
+  });
 
   const fetchClasses = async () => {
     if (!clusterId) return;
@@ -62,24 +69,27 @@ export default function IngressClassManager({ clusterId }: IngressClassManagerPr
     fetchClasses();
   };
 
-  const handleDeleteClass = async (className: string) => {
+  const handleDeleteClass = (className: string) => {
     if (!clusterId) return;
 
-    if (!confirm(`确定要删除IngressClass "${className}" 吗？`)) {
-      return;
-    }
-
-    try {
-      const response = await ingressApi.deleteIngressClass(clusterId, className);
-      if (response.data) {
-        toast.success("IngressClass删除成功");
-        fetchClasses();
-      } else {
-        toast.error(`删除失败: ${response.error}`);
-      }
-    } catch (error) {
-      toast.error("删除IngressClass失败");
-    }
+    setConfirmDialog({
+      open: true,
+      title: "确认删除",
+      description: `确定要删除IngressClass "${className}" 吗？此操作无法撤销。`,
+      onConfirm: async () => {
+        try {
+          const response = await ingressApi.deleteIngressClass(clusterId, className);
+          if (response.data) {
+            toast.success("IngressClass删除成功");
+            fetchClasses();
+          } else {
+            toast.error(`删除失败: ${response.error}`);
+          }
+        } catch (error) {
+          toast.error("删除IngressClass失败");
+        }
+      },
+    });
   };
 
   return (
@@ -207,6 +217,17 @@ export default function IngressClassManager({ clusterId }: IngressClassManagerPr
           />
         </DialogContent>
       </Dialog>
+
+      {/* 删除确认对话框 */}
+      <ConfirmDialog
+        open={confirmDialog.open}
+        onOpenChange={(open) => setConfirmDialog(prev => ({ ...prev, open }))}
+        title={confirmDialog.title}
+        description={confirmDialog.description}
+        onConfirm={confirmDialog.onConfirm}
+        confirmText="删除"
+        variant="destructive"
+      />
     </div>
   );
 }

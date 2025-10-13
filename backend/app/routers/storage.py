@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from ..database import get_db
-from ..models import Cluster, AuditLog
+from ..models import Cluster, AuditLog, User
 from ..auth import get_current_user
 from ..kubernetes import (
     get_storage_classes, create_storage_class, delete_storage_class,
@@ -93,7 +93,7 @@ class FileItem(BaseModel):
 async def get_storage_classes_list(
     cluster_id: Optional[int] = Query(None, description="集群ID，不传则获取所有活跃集群"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """获取存储类列表"""
     try:
@@ -127,7 +127,7 @@ async def create_storage_class_endpoint(
     storage_class: StorageClassCreate,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """创建存储类"""
     try:
@@ -184,7 +184,7 @@ async def delete_storage_class_endpoint(
     storage_class_name: str,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """删除存储类"""
     try:
@@ -209,7 +209,7 @@ async def delete_storage_class_endpoint(
 async def get_persistent_volumes_list(
     cluster_id: Optional[int] = Query(None, description="集群ID，不传则获取所有活跃集群"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """获取持久卷列表"""
     try:
@@ -243,7 +243,7 @@ async def get_pv_details_endpoint(
     pv_name: str,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """获取PV详情"""
     try:
@@ -269,7 +269,7 @@ async def create_pv_endpoint(
     pv: PVCreate,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """创建持久卷"""
     try:
@@ -298,7 +298,7 @@ async def delete_pv_endpoint(
     pv_name: str,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """删除持久卷"""
     try:
@@ -324,7 +324,7 @@ async def get_persistent_volume_claims_list(
     cluster_id: Optional[int] = Query(None, description="集群ID，不传则获取所有活跃集群"),
     namespace: Optional[str] = Query(None, description="命名空间过滤"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """获取持久卷声明列表"""
     try:
@@ -362,7 +362,7 @@ async def get_pvc_details_endpoint(
     pvc_name: str,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """获取PVC详情"""
     try:
@@ -388,7 +388,7 @@ async def create_pvc_endpoint(
     pvc: PVCCreate,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """创建持久卷声明"""
     try:
@@ -418,7 +418,7 @@ async def delete_pvc_endpoint(
     pvc_name: str,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """删除持久卷声明"""
     try:
@@ -445,7 +445,7 @@ async def browse_volume_files_endpoint(
     path: str = Query("/", description="浏览路径"),
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """浏览卷内文件"""
     try:
@@ -457,7 +457,7 @@ async def browse_volume_files_endpoint(
 
         # 记录审计日志
         audit_log = AuditLog(
-            user_id=current_user["id"],
+            user_id=current_user.id,
             cluster_id=cluster_id,
             action="volume_browse",
             resource_type="persistentvolume",
@@ -474,7 +474,7 @@ async def browse_volume_files_endpoint(
         # 记录失败的审计日志
         try:
             audit_log = AuditLog(
-                user_id=current_user["id"],
+                user_id=current_user.id,
                 cluster_id=cluster_id,
                 action="volume_browse",
                 resource_type="persistentvolume",
@@ -497,7 +497,7 @@ async def read_volume_file_endpoint(
     cluster_id: int = Query(..., description="集群ID"),
     max_lines: Optional[int] = Query(None, description="最大行数限制"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """读取卷内文件内容"""
     try:
@@ -509,7 +509,7 @@ async def read_volume_file_endpoint(
 
         # 记录审计日志
         audit_log = AuditLog(
-            user_id=current_user["id"],
+            user_id=current_user.id,
             cluster_id=cluster_id,
             action="volume_read",
             resource_type="persistentvolume",
@@ -526,7 +526,7 @@ async def read_volume_file_endpoint(
         # 记录失败的审计日志
         try:
             audit_log = AuditLog(
-                user_id=current_user["id"],
+                user_id=current_user.id,
                 cluster_id=cluster_id,
                 action="volume_read",
                 resource_type="persistentvolume",
