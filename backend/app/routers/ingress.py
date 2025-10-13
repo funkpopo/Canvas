@@ -524,16 +524,22 @@ async def delete_existing_ingress_class(
     current_user: User = Depends(get_current_user)
 ):
     """删除IngressClass"""
+    print(f"开始删除IngressClass: {class_name}, cluster_id: {cluster_id}, user_id: {current_user.id}")
     try:
         cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
         if not cluster:
+            print(f"集群不存在或未激活: {cluster_id}")
             raise HTTPException(status_code=404, detail="集群不存在或未激活")
 
+        print(f"调用delete_ingress_class函数")
         success = delete_ingress_class(cluster, class_name)
+        print(f"delete_ingress_class返回: {success}")
         if not success:
+            print(f"IngressClass删除失败，返回404错误")
             raise HTTPException(status_code=404, detail=f"IngressClass '{class_name}' 不存在或删除失败")
 
         # 记录审计日志
+        print(f"开始记录审计日志")
         audit_log = AuditLog(
             user_id=current_user.id,
             action="DELETE",
@@ -544,11 +550,14 @@ async def delete_existing_ingress_class(
         )
         db.add(audit_log)
         db.commit()
+        print(f"审计日志记录成功")
 
         return {"message": "IngressClass删除成功"}
 
     except HTTPException:
+        print(f"HTTPException: {str(e)}")
         raise
     except Exception as e:
+        print(f"未知异常: {str(e)}")
         db.rollback()
         raise HTTPException(status_code=500, detail=f"删除IngressClass失败: {str(e)}")

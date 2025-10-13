@@ -4672,15 +4672,17 @@ def delete_ingress_class(cluster: Cluster, class_name: str) -> bool:
     """删除IngressClass"""
     client_instance = create_k8s_client(cluster)
     if not client_instance:
+        print(f"无法创建Kubernetes客户端连接到集群 {cluster.name}")
         return False
 
     try:
         networking_v1 = client.NetworkingV1Api(client_instance)
         networking_v1.delete_ingress_class(class_name)
+        print(f"成功删除IngressClass: {class_name}")
         return True
 
     except Exception as e:
-        print(f"删除IngressClass失败: {e}")
+        print(f"删除IngressClass失败: {class_name}, 错误: {str(e)}")
         return False
     finally:
         if client_instance:

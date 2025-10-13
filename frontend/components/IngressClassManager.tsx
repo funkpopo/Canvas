@@ -80,13 +80,13 @@ export default function IngressClassManager({ clusterId }: IngressClassManagerPr
         try {
           const response = await ingressApi.deleteIngressClass(clusterId, className);
           if (response.data) {
-            toast.success("IngressClass删除成功");
+            toast.success(`IngressClass "${className}" 删除成功`);
             fetchClasses();
           } else {
-            toast.error(`删除失败: ${response.error}`);
+            toast.error(`删除IngressClass失败: ${response.error}`);
           }
         } catch (error) {
-          toast.error("删除IngressClass失败");
+          toast.error(`删除IngressClass "${className}" 时发生错误`);
         }
       },
     });
