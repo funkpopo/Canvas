@@ -481,11 +481,11 @@ data:
                   {selectedCm.data && Object.keys(selectedCm.data).length > 0 ? (
                     <div className="space-y-2">
                       {Object.entries(selectedCm.data).map(([key, value]) => (
-                        <div key={key} className="bg-gray-50 p-3 rounded">
+                        <div key={key} className="bg-gray-50 dark:bg-gray-800 p-3 rounded">
                           <div className="flex items-center gap-2 mb-2">
                             <span className="font-medium text-sm">{key}</span>
                           </div>
-                          <div className="bg-white p-2 rounded text-sm font-mono whitespace-pre-wrap border">
+                          <div className="bg-black p-3 rounded text-xs font-mono whitespace-pre-wrap text-gray-100">
                             {String(value)}
                           </div>
                         </div>
@@ -501,7 +501,7 @@ data:
                 <Label className="font-medium">标签</Label>
                 <div className="mt-1">
                   {selectedCm.labels && Object.keys(selectedCm.labels).length > 0 ? (
-                    <div className="bg-gray-50 p-2 rounded text-sm font-mono">
+                    <div className="bg-black p-3 rounded text-xs font-mono text-gray-100">
                       {JSON.stringify(selectedCm.labels, null, 2)}
                     </div>
                   ) : (
@@ -514,7 +514,7 @@ data:
                 <Label className="font-medium">注解</Label>
                 <div className="mt-1">
                   {selectedCm.annotations && Object.keys(selectedCm.annotations).length > 0 ? (
-                    <div className="bg-gray-50 p-2 rounded text-sm font-mono">
+                    <div className="bg-black p-3 rounded text-xs font-mono text-gray-100">
                       {JSON.stringify(selectedCm.annotations, null, 2)}
                     </div>
                   ) : (
@@ -542,7 +542,7 @@ data:
             <Textarea
               value={yamlPreview}
               readOnly
-              className="font-mono text-sm min-h-[400px]"
+              className="font-mono text-xs min-h-[400px] bg-black text-gray-100"
             />
           </div>
           <DialogFooter>
