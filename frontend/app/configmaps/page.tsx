@@ -10,8 +10,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2, Eye, Loader2 } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Plus, Trash2, Eye, Loader2, FileText, Code } from "lucide-react";
 import ClusterSelector from "@/components/ClusterSelector";
+import YamlEditor from "@/components/YamlEditor";
 import { useAuth } from "@/lib/auth-context";
 import { useCluster } from "@/lib/cluster-context";
 import { configmapApi } from "@/lib/api";
@@ -43,6 +45,17 @@ export default function ConfigMapsManagement() {
     labels: {} as Record<string, any>,
     annotations: {} as Record<string, any>
   });
+
+  // YAML编辑状态
+  const [yamlContent, setYamlContent] = useState("");
+  const [yamlError, setYamlError] = useState("");
+
+  // 预览对话框状态
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [selectedCm, setSelectedCm] = useState<any | null>(null);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const [yamlPreview, setYamlPreview] = useState("");
+  const [isYamlPreviewOpen, setIsYamlPreviewOpen] = useState(false);
 
   const { user } = useAuth();
   const { clusters } = useCluster();
@@ -108,24 +121,6 @@ export default function ConfigMapsManagement() {
     }
   }, [selectedClusterId, selectedNamespace]);
 
-  const handleCreateConfigMap = async () => {
-    if (!selectedClusterId) return;
-
-    try {
-      const response = await configmapApi.createConfigMap(selectedClusterId, cmForm);
-      if (response.data) {
-        toast.success("ConfigMap创建成功");
-        setIsCreateOpen(false);
-        resetForm();
-        fetchConfigMaps();
-      } else {
-        toast.error(`创建ConfigMap失败: ${response.error}`);
-      }
-    } catch {
-      toast.error("创建ConfigMap失败");
-    }
-  };
-
   const handleDeleteConfigMap = async (cm: ConfigMap) => {
     try {
       const response = await configmapApi.deleteConfigMap(cm.cluster_id, cm.namespace, cm.name);
@@ -140,14 +135,135 @@ export default function ConfigMapsManagement() {
     }
   };
 
+  // 查看ConfigMap详情
+  const handleViewConfigMap = async (cm: ConfigMap) => {
+    try {
+      setIsPreviewLoading(true);
+      const response = await configmapApi.getConfigMap(cm.cluster_id, cm.namespace, cm.name);
+      if (response.data) {
+        setSelectedCm(response.data);
+        setIsPreviewOpen(true);
+      } else {
+        toast.error(`获取ConfigMap详情失败: ${response.error}`);
+      }
+    } catch {
+      toast.error("获取ConfigMap详情失败");
+    } finally {
+      setIsPreviewLoading(false);
+    }
+  };
+
+  // 查看ConfigMap YAML
+  const handleViewYaml = async (cm: ConfigMap) => {
+    try {
+      setIsPreviewLoading(true);
+      const response = await configmapApi.getConfigMapYaml(cm.cluster_id, cm.namespace, cm.name);
+      if (response.data) {
+        setYamlPreview(response.data.yaml);
+        setSelectedCm(cm);
+        setIsYamlPreviewOpen(true);
+      } else {
+        toast.error(`获取ConfigMap YAML失败: ${response.error}`);
+      }
+    } catch {
+      toast.error("获取ConfigMap YAML失败");
+    } finally {
+      setIsPreviewLoading(false);
+    }
+  };
+
   const resetForm = () => {
-    setCmForm({
+    const initialForm = {
       name: "",
       namespace: selectedNamespace || "default",
       data: {},
       labels: {},
       annotations: {}
-    });
+    };
+
+    setCmForm(initialForm);
+    setYamlContent(`apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-config
+  namespace: ${initialForm.namespace}
+data: {}
+`);
+    setYamlError("");
+  };
+
+  // 处理YAML变化
+  const handleYamlChange = (value: string) => {
+    setYamlContent(value);
+    setYamlError("");
+  };
+
+  // 应用YAML模板
+  const applyYamlTemplate = () => {
+    const template = `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-config
+  namespace: ${selectedNamespace || "default"}
+  labels:
+    environment: production
+    config-type: application
+    managed-by: canvas
+data:
+  config.yaml: |
+    apiVersion: v1
+    kind: ConfigMap
+    data:
+      key: value
+  app.properties: |
+    database.url=jdbc:mysql://localhost:3306/mydb
+    database.username=user
+    database.password=password
+  nginx.conf: |
+    server {
+      listen 80;
+      server_name example.com;
+      location / {
+        proxy_pass http://localhost:8080;
+      }
+    }
+`;
+    setYamlContent(template);
+  };
+
+  // 创建ConfigMap (使用YAML)
+  const handleCreateConfigMap = async () => {
+    if (!selectedClusterId || !yamlContent.trim()) return;
+
+    try {
+      // 从YAML中解析基本信息
+      const lines = yamlContent.split('\n');
+      let name = cmForm.name;
+      let namespace = cmForm.namespace;
+
+      // 简单的YAML解析来获取metadata
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (line.startsWith('name:')) {
+          name = line.split(':')[1].trim();
+        } else if (line.startsWith('namespace:')) {
+          namespace = line.split(':')[1].trim();
+        }
+      }
+
+      // 使用YAML API创建ConfigMap
+      const response = await configmapApi.updateConfigMapYaml(selectedClusterId, namespace, name, yamlContent);
+      if (response.data) {
+        toast.success("ConfigMap创建成功");
+        setIsCreateOpen(false);
+        resetForm();
+        fetchConfigMaps();
+      } else {
+        toast.error(`创建ConfigMap失败: ${response.error}`);
+      }
+    } catch {
+      toast.error("创建ConfigMap失败");
+    }
   };
 
   if (!user) {
@@ -166,7 +282,7 @@ export default function ConfigMapsManagement() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-3xl font-bold">ConfigMaps管理</h1>
-          <p className="text-muted-foreground">管理Kubernetes集群中的配置映射</p>
+          <p className="text-muted-foreground">管理Kubernetes集群中的配置映射（支持YAML格式编辑）</p>
         </div>
         <div className="flex items-center gap-4">
           <ClusterSelector
@@ -202,72 +318,45 @@ export default function ConfigMapsManagement() {
                     创建ConfigMap
                   </Button>
                 </DialogTrigger>
-              <DialogContent className="max-w-2xl">
+              <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>创建ConfigMap</DialogTitle>
-                  <DialogDescription>创建新的配置映射</DialogDescription>
+                  <DialogDescription>使用YAML格式创建新的配置映射</DialogDescription>
                 </DialogHeader>
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="cm-name">名称</Label>
-                      <Input
-                        id="cm-name"
-                        value={cmForm.name}
-                        onChange={(e) => setCmForm(prev => ({ ...prev, name: e.target.value }))}
-                        placeholder="my-config"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="cm-namespace">命名空间</Label>
-                      <Input
-                        id="cm-namespace"
-                        value={cmForm.namespace}
-                        onChange={(e) => setCmForm(prev => ({ ...prev, namespace: e.target.value }))}
-                        placeholder="default"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <Label>数据 (JSON格式)</Label>
-                    <Textarea
-                      placeholder='{"config.yaml": "key: value"}'
-                      value={JSON.stringify(cmForm.data, null, 2)}
-                      onChange={(e) => {
-                        try {
-                          const data = JSON.parse(e.target.value);
-                          setCmForm(prev => ({ ...prev, data }));
-                        } catch {
-                          // 忽略JSON解析错误
-                        }
-                      }}
-                      className="font-mono text-sm"
-                      rows={6}
+                <Tabs defaultValue="yaml" className="w-full">
+                  <TabsList className="grid w-full grid-cols-1">
+                    <TabsTrigger value="yaml">YAML配置</TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="yaml" className="space-y-4">
+                    <YamlEditor
+                      value={yamlContent}
+                      onChange={handleYamlChange}
+                      error={yamlError}
+                      label="ConfigMap YAML配置"
+                      template={`apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-config
+  namespace: ${selectedNamespace || "default"}
+  labels:
+    environment: production
+    config-type: application
+data:
+  config.yaml: |
+    apiVersion: v1
+    kind: ConfigMap
+    data:
+      key: value`}
+                      onApplyTemplate={applyYamlTemplate}
                     />
-                  </div>
-
-                  <div>
-                    <Label>标签 (JSON格式)</Label>
-                    <Textarea
-                      placeholder='{"environment": "production"}'
-                      value={JSON.stringify(cmForm.labels, null, 2)}
-                      onChange={(e) => {
-                        try {
-                          const labels = JSON.parse(e.target.value);
-                          setCmForm(prev => ({ ...prev, labels }));
-                        } catch {
-                          // 忽略JSON解析错误
-                        }
-                      }}
-                      className="font-mono text-sm"
-                      rows={3}
-                    />
-                  </div>
-                </div>
+                  </TabsContent>
+                </Tabs>
                 <DialogFooter>
                   <Button variant="outline" onClick={() => setIsCreateOpen(false)}>取消</Button>
-                  <Button onClick={handleCreateConfigMap} disabled={!cmForm.name || !cmForm.namespace}>
+                  <Button
+                    onClick={handleCreateConfigMap}
+                    disabled={!yamlContent.trim() || !!yamlError}
+                  >
                     创建ConfigMap
                   </Button>
                 </DialogFooter>
@@ -303,8 +392,21 @@ export default function ConfigMapsManagement() {
                     <TableCell>{cm.age}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <Button variant="outline" size="sm">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleViewConfigMap(cm)}
+                          disabled={isPreviewLoading}
+                        >
                           <Eye className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleViewYaml(cm)}
+                          disabled={isPreviewLoading}
+                        >
+                          <Code className="w-4 h-4" />
                         </Button>
                         <Button
                           variant="outline"
@@ -323,6 +425,111 @@ export default function ConfigMapsManagement() {
           )}
         </CardContent>
       </Card>
+
+      {/* ConfigMap详情预览对话框 */}
+      <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedCm ? `${selectedCm.namespace}/${selectedCm.name} - ConfigMap详情` : "ConfigMap详情"}
+            </DialogTitle>
+          </DialogHeader>
+          {selectedCm && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="font-medium">名称</Label>
+                  <p className="text-sm text-muted-foreground">{selectedCm.name}</p>
+                </div>
+                <div>
+                  <Label className="font-medium">命名空间</Label>
+                  <p className="text-sm text-muted-foreground">{selectedCm.namespace}</p>
+                </div>
+                <div>
+                  <Label className="font-medium">年龄</Label>
+                  <p className="text-sm text-muted-foreground">{selectedCm.age}</p>
+                </div>
+                <div>
+                  <Label className="font-medium">数据项数量</Label>
+                  <p className="text-sm text-muted-foreground">{Object.keys(selectedCm.data || {}).length} 项</p>
+                </div>
+              </div>
+
+              <div>
+                <Label className="font-medium">数据</Label>
+                <div className="mt-1">
+                  {selectedCm.data && Object.keys(selectedCm.data).length > 0 ? (
+                    <div className="space-y-2">
+                      {Object.entries(selectedCm.data).map(([key, value]) => (
+                        <div key={key} className="bg-gray-50 p-3 rounded">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="font-medium text-sm">{key}</span>
+                          </div>
+                          <div className="bg-white p-2 rounded text-sm font-mono whitespace-pre-wrap border">
+                            {String(value)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">无数据</p>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <Label className="font-medium">标签</Label>
+                <div className="mt-1">
+                  {selectedCm.labels && Object.keys(selectedCm.labels).length > 0 ? (
+                    <div className="bg-gray-50 p-2 rounded text-sm font-mono">
+                      {JSON.stringify(selectedCm.labels, null, 2)}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">无标签</p>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <Label className="font-medium">注解</Label>
+                <div className="mt-1">
+                  {selectedCm.annotations && Object.keys(selectedCm.annotations).length > 0 ? (
+                    <div className="bg-gray-50 p-2 rounded text-sm font-mono">
+                      {JSON.stringify(selectedCm.annotations, null, 2)}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">无注解</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button onClick={() => setIsPreviewOpen(false)}>关闭</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ConfigMap YAML预览对话框 */}
+      <Dialog open={isYamlPreviewOpen} onOpenChange={setIsYamlPreviewOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedCm ? `${selectedCm.namespace}/${selectedCm.name} - YAML配置` : "YAML配置"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="mt-4">
+            <Textarea
+              value={yamlPreview}
+              readOnly
+              className="font-mono text-sm min-h-[400px]"
+            />
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setIsYamlPreviewOpen(false)}>关闭</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

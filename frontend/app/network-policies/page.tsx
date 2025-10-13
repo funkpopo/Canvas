@@ -7,6 +7,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { Plus, Trash2, Eye, Loader2, Shield } from "lucide-react";
 import ClusterSelector from "@/components/ClusterSelector";
 import { useAuth } from "@/lib/auth-context";
@@ -32,6 +34,11 @@ export default function NetworkPoliciesManagement() {
   const [selectedClusterId, setSelectedClusterId] = useState<number | null>(null);
   const [selectedNamespace, setSelectedNamespace] = useState<string>("default");
   const [namespaces, setNamespaces] = useState<string[]>([]);
+
+  // 预览对话框状态
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [selectedPolicy, setSelectedPolicy] = useState<any | null>(null);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
 
   const { user } = useAuth();
   const { clusters } = useCluster();
@@ -108,6 +115,24 @@ export default function NetworkPoliciesManagement() {
       }
     } catch {
       toast.error("删除Network Policy失败");
+    }
+  };
+
+  // 查看Network Policy详情
+  const handleViewNetworkPolicy = async (policy: NetworkPolicy) => {
+    try {
+      setIsPreviewLoading(true);
+      const response = await networkPolicyApi.getNetworkPolicy(policy.cluster_id, policy.namespace, policy.name);
+      if (response.data) {
+        setSelectedPolicy(response.data);
+        setIsPreviewOpen(true);
+      } else {
+        toast.error(`获取Network Policy详情失败: ${response.error}`);
+      }
+    } catch {
+      toast.error("获取Network Policy详情失败");
+    } finally {
+      setIsPreviewLoading(false);
     }
   };
 
@@ -211,7 +236,12 @@ export default function NetworkPoliciesManagement() {
                     <TableCell>{policy.age}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <Button variant="outline" size="sm">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleViewNetworkPolicy(policy)}
+                          disabled={isPreviewLoading}
+                        >
                           <Eye className="w-4 h-4" />
                         </Button>
                         <Button
@@ -231,6 +261,162 @@ export default function NetworkPoliciesManagement() {
           )}
         </CardContent>
       </Card>
+
+      {/* Network Policy详情预览对话框 */}
+      <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedPolicy ? `${selectedPolicy.namespace}/${selectedPolicy.name} - Network Policy详情` : "Network Policy详情"}
+            </DialogTitle>
+          </DialogHeader>
+          {selectedPolicy && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="font-medium">名称</Label>
+                  <p className="text-sm text-muted-foreground">{selectedPolicy.name}</p>
+                </div>
+                <div>
+                  <Label className="font-medium">命名空间</Label>
+                  <p className="text-sm text-muted-foreground">{selectedPolicy.namespace}</p>
+                </div>
+                <div>
+                  <Label className="font-medium">年龄</Label>
+                  <p className="text-sm text-muted-foreground">{selectedPolicy.age}</p>
+                </div>
+              </div>
+
+              <div>
+                <Label className="font-medium">Pod选择器</Label>
+                <div className="mt-1">
+                  {selectedPolicy.pod_selector && Object.keys(selectedPolicy.pod_selector).length > 0 ? (
+                    <div className="bg-gray-50 p-2 rounded text-sm font-mono">
+                      {JSON.stringify(selectedPolicy.pod_selector, null, 2)}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">无Pod选择器（适用于所有Pod）</p>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <Label className="font-medium">策略类型</Label>
+                <div className="mt-1">
+                  {selectedPolicy.policy_types && selectedPolicy.policy_types.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {selectedPolicy.policy_types.map((type: string, index: number) => (
+                        <Badge key={index} variant="secondary">{type}</Badge>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">无策略类型</p>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <Label className="font-medium">标签</Label>
+                <div className="mt-1">
+                  {selectedPolicy.labels && Object.keys(selectedPolicy.labels).length > 0 ? (
+                    <div className="bg-gray-50 p-2 rounded text-sm font-mono">
+                      {JSON.stringify(selectedPolicy.labels, null, 2)}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">无标签</p>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <Label className="font-medium">注解</Label>
+                <div className="mt-1">
+                  {selectedPolicy.annotations && Object.keys(selectedPolicy.annotations).length > 0 ? (
+                    <div className="bg-gray-50 p-2 rounded text-sm font-mono">
+                      {JSON.stringify(selectedPolicy.annotations, null, 2)}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">无注解</p>
+                  )}
+                </div>
+              </div>
+
+              {selectedPolicy.ingress && selectedPolicy.ingress.length > 0 && (
+                <div>
+                  <Label className="font-medium">入站规则</Label>
+                  <div className="mt-1 space-y-2">
+                    {selectedPolicy.ingress.map((rule: any, index: number) => (
+                      <div key={index} className="bg-gray-50 p-3 rounded">
+                        <p className="text-sm font-medium">规则 {index + 1}</p>
+                        {rule.from && rule.from.length > 0 && (
+                          <div className="mt-2">
+                            <p className="text-xs font-medium text-muted-foreground">来源:</p>
+                            {rule.from.map((from: any, fromIndex: number) => (
+                              <div key={fromIndex} className="text-xs text-muted-foreground mt-1">
+                                {from.podSelector && `Pod选择器: ${JSON.stringify(from.podSelector)}`}
+                                {from.namespaceSelector && `命名空间选择器: ${JSON.stringify(from.namespaceSelector)}`}
+                                {from.ipBlock && `IP块: ${from.ipBlock.cidr}`}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {rule.ports && rule.ports.length > 0 && (
+                          <div className="mt-2">
+                            <p className="text-xs font-medium text-muted-foreground">端口:</p>
+                            {rule.ports.map((port: any, portIndex: number) => (
+                              <div key={portIndex} className="text-xs text-muted-foreground mt-1">
+                                {port.port} ({port.protocol})
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {selectedPolicy.egress && selectedPolicy.egress.length > 0 && (
+                <div>
+                  <Label className="font-medium">出站规则</Label>
+                  <div className="mt-1 space-y-2">
+                    {selectedPolicy.egress.map((rule: any, index: number) => (
+                      <div key={index} className="bg-gray-50 p-3 rounded">
+                        <p className="text-sm font-medium">规则 {index + 1}</p>
+                        {rule.to && rule.to.length > 0 && (
+                          <div className="mt-2">
+                            <p className="text-xs font-medium text-muted-foreground">目标:</p>
+                            {rule.to.map((to: any, toIndex: number) => (
+                              <div key={toIndex} className="text-xs text-muted-foreground mt-1">
+                                {to.podSelector && `Pod选择器: ${JSON.stringify(to.podSelector)}`}
+                                {to.namespaceSelector && `命名空间选择器: ${JSON.stringify(to.namespaceSelector)}`}
+                                {to.ipBlock && `IP块: ${to.ipBlock.cidr}`}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {rule.ports && rule.ports.length > 0 && (
+                          <div className="mt-2">
+                            <p className="text-xs font-medium text-muted-foreground">端口:</p>
+                            {rule.ports.map((port: any, portIndex: number) => (
+                              <div key={portIndex} className="text-xs text-muted-foreground mt-1">
+                                {port.port} ({port.protocol})
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button onClick={() => setIsPreviewOpen(false)}>关闭</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

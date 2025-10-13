@@ -7,6 +7,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { Plus, Trash2, Eye, Loader2, Cpu } from "lucide-react";
 import ClusterSelector from "@/components/ClusterSelector";
 import { useAuth } from "@/lib/auth-context";
@@ -32,6 +34,11 @@ export default function ResourceQuotasManagement() {
   const [selectedClusterId, setSelectedClusterId] = useState<number | null>(null);
   const [selectedNamespace, setSelectedNamespace] = useState<string>("default");
   const [namespaces, setNamespaces] = useState<string[]>([]);
+
+  // 预览对话框状态
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [selectedQuota, setSelectedQuota] = useState<any | null>(null);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
 
   const { user } = useAuth();
   const { clusters } = useCluster();
@@ -108,6 +115,24 @@ export default function ResourceQuotasManagement() {
       }
     } catch {
       toast.error("删除Resource Quota失败");
+    }
+  };
+
+  // 查看Resource Quota详情
+  const handleViewResourceQuota = async (quota: ResourceQuota) => {
+    try {
+      setIsPreviewLoading(true);
+      const response = await resourceQuotaApi.getResourceQuota(quota.cluster_id, quota.namespace, quota.name);
+      if (response.data) {
+        setSelectedQuota(response.data);
+        setIsPreviewOpen(true);
+      } else {
+        toast.error(`获取Resource Quota详情失败: ${response.error}`);
+      }
+    } catch {
+      toast.error("获取Resource Quota详情失败");
+    } finally {
+      setIsPreviewLoading(false);
     }
   };
 
@@ -213,7 +238,12 @@ export default function ResourceQuotasManagement() {
                     <TableCell>{quota.age}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <Button variant="outline" size="sm">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleViewResourceQuota(quota)}
+                          disabled={isPreviewLoading}
+                        >
                           <Eye className="w-4 h-4" />
                         </Button>
                         <Button
@@ -233,6 +263,128 @@ export default function ResourceQuotasManagement() {
           )}
         </CardContent>
       </Card>
+
+      {/* Resource Quota详情预览对话框 */}
+      <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedQuota ? `${selectedQuota.namespace}/${selectedQuota.name} - Resource Quota详情` : "Resource Quota详情"}
+            </DialogTitle>
+          </DialogHeader>
+          {selectedQuota && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="font-medium">名称</Label>
+                  <p className="text-sm text-muted-foreground">{selectedQuota.name}</p>
+                </div>
+                <div>
+                  <Label className="font-medium">命名空间</Label>
+                  <p className="text-sm text-muted-foreground">{selectedQuota.namespace}</p>
+                </div>
+                <div>
+                  <Label className="font-medium">年龄</Label>
+                  <p className="text-sm text-muted-foreground">{selectedQuota.age}</p>
+                </div>
+              </div>
+
+              <div>
+                <Label className="font-medium">硬限制</Label>
+                <div className="mt-1">
+                  {selectedQuota.hard && Object.keys(selectedQuota.hard).length > 0 ? (
+                    <div className="bg-gray-50 p-3 rounded">
+                      <div className="grid grid-cols-2 gap-4">
+                        {Object.entries(selectedQuota.hard).map(([key, value]) => (
+                          <div key={key} className="flex justify-between items-center">
+                            <span className="text-sm font-medium">{key}:</span>
+                            <span className="text-sm text-muted-foreground">{String(value)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">无硬限制</p>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <Label className="font-medium">已使用</Label>
+                <div className="mt-1">
+                  {selectedQuota.used && Object.keys(selectedQuota.used).length > 0 ? (
+                    <div className="bg-gray-50 p-3 rounded">
+                      <div className="grid grid-cols-2 gap-4">
+                        {Object.entries(selectedQuota.used).map(([key, value]) => (
+                          <div key={key} className="flex justify-between items-center">
+                            <span className="text-sm font-medium">{key}:</span>
+                            <span className="text-sm text-muted-foreground">{String(value)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">无使用记录</p>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <Label className="font-medium">标签</Label>
+                <div className="mt-1">
+                  {selectedQuota.labels && Object.keys(selectedQuota.labels).length > 0 ? (
+                    <div className="bg-gray-50 p-2 rounded text-sm font-mono">
+                      {JSON.stringify(selectedQuota.labels, null, 2)}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">无标签</p>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <Label className="font-medium">注解</Label>
+                <div className="mt-1">
+                  {selectedQuota.annotations && Object.keys(selectedQuota.annotations).length > 0 ? (
+                    <div className="bg-gray-50 p-2 rounded text-sm font-mono">
+                      {JSON.stringify(selectedQuota.annotations, null, 2)}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">无注解</p>
+                  )}
+                </div>
+              </div>
+
+              {selectedQuota.scopes && selectedQuota.scopes.length > 0 && (
+                <div>
+                  <Label className="font-medium">作用域</Label>
+                  <div className="mt-1">
+                    <div className="flex flex-wrap gap-2">
+                      {selectedQuota.scopes.map((scope: string, index: number) => (
+                        <Badge key={index} variant="outline">{scope}</Badge>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {selectedQuota.scope_selector && selectedQuota.scope_selector.length > 0 && (
+                <div>
+                  <Label className="font-medium">作用域选择器</Label>
+                  <div className="mt-1">
+                    <div className="bg-gray-50 p-2 rounded text-sm font-mono">
+                      {JSON.stringify(selectedQuota.scope_selector, null, 2)}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button onClick={() => setIsPreviewOpen(false)}>关闭</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

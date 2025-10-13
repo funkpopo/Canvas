@@ -13,8 +13,9 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Settings, Plus, Trash2, Eye, Loader2, Code } from "lucide-react";
+import { Settings, Plus, Trash2, Eye, Loader2, Code, FileText } from "lucide-react";
 import ClusterSelector from "@/components/ClusterSelector";
+import YamlEditor from "@/components/YamlEditor";
 import { useAuth } from "@/lib/auth-context";
 import { useCluster } from "@/lib/cluster-context";
 import { serviceApi } from "@/lib/api";
@@ -63,7 +64,10 @@ export default function ServicesManagement() {
     session_affinity_config: { timeout_seconds: 10800 }
   });
 
+  // YAML编辑状态
   const [yamlContent, setYamlContent] = useState("");
+  const [yamlPreview, setYamlPreview] = useState("");
+  const [yamlError, setYamlError] = useState("");
 
   const { user } = useAuth();
   const { clusters } = useCluster();
@@ -131,12 +135,28 @@ export default function ServicesManagement() {
     }
   }, [selectedClusterId, selectedNamespace]);
 
-  // 创建服务
+  // 创建服务 (使用YAML)
   const handleCreateService = async () => {
-    if (!selectedClusterId) return;
+    if (!selectedClusterId || !yamlContent.trim()) return;
 
     try {
-      const response = await serviceApi.createService(selectedClusterId, serviceForm);
+      // 从YAML中解析基本信息
+      const lines = yamlContent.split('\n');
+      let name = serviceForm.name;
+      let namespace = serviceForm.namespace;
+
+      // 简单的YAML解析来获取metadata
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (line.startsWith('name:')) {
+          name = line.split(':')[1].trim();
+        } else if (line.startsWith('namespace:')) {
+          namespace = line.split(':')[1].trim();
+        }
+      }
+
+      // 使用YAML API创建服务
+      const response = await serviceApi.updateServiceYaml(selectedClusterId, namespace, name, yamlContent);
       if (response.data) {
         toast.success("服务创建成功");
         setIsCreateOpen(false);
@@ -170,7 +190,7 @@ export default function ServicesManagement() {
     try {
       const response = await serviceApi.getServiceYaml(service.cluster_id, service.namespace, service.name);
       if (response.data) {
-        setYamlContent(response.data.yaml);
+        setYamlPreview(response.data.yaml);
         setSelectedService(service);
         setIsYamlOpen(true);
       } else {
@@ -183,7 +203,7 @@ export default function ServicesManagement() {
 
   // 重置表单
   const resetServiceForm = () => {
-    setServiceForm({
+    const initialForm = {
       name: "",
       namespace: selectedNamespace || "default",
       type: "ClusterIP",
@@ -196,7 +216,62 @@ export default function ServicesManagement() {
       external_traffic_policy: "",
       session_affinity: "",
       session_affinity_config: { timeout_seconds: 10800 }
-    });
+    };
+
+    setServiceForm(initialForm);
+    setYamlContent(`apiVersion: v1
+kind: Service
+metadata:
+  name: my-service
+  namespace: ${initialForm.namespace}
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 80
+    protocol: TCP
+  selector:
+    app: my-app
+`);
+    setYamlError("");
+  };
+
+  // 处理YAML变化
+  const handleYamlChange = (value: string) => {
+    setYamlContent(value);
+    setYamlError("");
+  };
+
+  // 应用YAML模板
+  const applyYamlTemplate = () => {
+    const template = `apiVersion: v1
+kind: Service
+metadata:
+  name: my-service
+  namespace: ${selectedNamespace || "default"}
+  labels:
+    environment: production
+    team: backend
+    version: "1.2.3"
+  annotations:
+    description: "Web service for user authentication"
+    created-by: "canvas"
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP
+  - name: https
+    port: 443
+    targetPort: 8443
+    protocol: TCP
+  selector:
+    app: my-app
+    version: v1.0
+`;
+    setYamlContent(template);
   };
 
   // 添加端口
@@ -239,7 +314,7 @@ export default function ServicesManagement() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-3xl font-bold">服务管理</h1>
-          <p className="text-muted-foreground">管理Kubernetes集群中的服务资源</p>
+          <p className="text-muted-foreground">管理Kubernetes集群中的服务资源（支持YAML格式编辑）</p>
         </div>
         <div className="flex items-center gap-4">
           <ClusterSelector
@@ -280,159 +355,53 @@ export default function ServicesManagement() {
                   <DialogTitle>创建服务</DialogTitle>
                   <DialogDescription>创建新的Kubernetes服务</DialogDescription>
                 </DialogHeader>
-                <Tabs defaultValue="basic" className="w-full">
-                  <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="basic">基本配置</TabsTrigger>
-                    <TabsTrigger value="advanced">高级配置</TabsTrigger>
+                <Tabs defaultValue="yaml" className="w-full">
+                  <TabsList className="grid w-full grid-cols-1">
+                    <TabsTrigger value="yaml">YAML配置</TabsTrigger>
                   </TabsList>
-                  <TabsContent value="basic" className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label htmlFor="service-name">服务名称</Label>
-                        <Input
-                          id="service-name"
-                          value={serviceForm.name}
-                          onChange={(e) => setServiceForm(prev => ({ ...prev, name: e.target.value }))}
-                          placeholder="my-service"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="service-namespace">命名空间</Label>
-                        <Input
-                          id="service-namespace"
-                          value={serviceForm.namespace}
-                          onChange={(e) => setServiceForm(prev => ({ ...prev, namespace: e.target.value }))}
-                          placeholder="default"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="service-type">服务类型</Label>
-                        <Select value={serviceForm.type} onValueChange={(value) => setServiceForm(prev => ({ ...prev, type: value }))}>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="ClusterIP">ClusterIP</SelectItem>
-                            <SelectItem value="NodePort">NodePort</SelectItem>
-                            <SelectItem value="LoadBalancer">LoadBalancer</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div>
-                        <Label htmlFor="cluster-ip">集群IP (可选)</Label>
-                        <Input
-                          id="cluster-ip"
-                          value={serviceForm.cluster_ip}
-                          onChange={(e) => setServiceForm(prev => ({ ...prev, cluster_ip: e.target.value }))}
-                          placeholder="自动分配"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <Label>端口配置</Label>
-                      {serviceForm.ports.map((port, index) => (
-                        <div key={index} className="flex items-center gap-2 mt-2">
-                          <Input
-                            placeholder="名称"
-                            value={port.name}
-                            onChange={(e) => updatePort(index, 'name', e.target.value)}
-                            className="w-24"
-                          />
-                          <Input
-                            placeholder="端口"
-                            type="number"
-                            value={port.port}
-                            onChange={(e) => updatePort(index, 'port', parseInt(e.target.value))}
-                            className="w-20"
-                          />
-                          <Input
-                            placeholder="目标端口"
-                            value={port.target_port}
-                            onChange={(e) => updatePort(index, 'target_port', e.target.value)}
-                            className="w-24"
-                          />
-                          <Select value={port.protocol} onValueChange={(value) => updatePort(index, 'protocol', value)}>
-                            <SelectTrigger className="w-20">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="TCP">TCP</SelectItem>
-                              <SelectItem value="UDP">UDP</SelectItem>
-                              <SelectItem value="SCTP">SCTP</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          {serviceForm.ports.length > 1 && (
-                            <Button variant="outline" size="sm" onClick={() => removePort(index)}>
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          )}
-                        </div>
-                      ))}
-                      <Button variant="outline" size="sm" onClick={addPort} className="mt-2">
-                        <Plus className="w-4 h-4 mr-2" />
-                        添加端口
-                      </Button>
-                    </div>
-
-                    <div>
-                      <Label>选择器 (JSON格式)</Label>
-                      <Textarea
-                        placeholder='{"app": "my-app"}'
-                        value={JSON.stringify(serviceForm.selector, null, 2)}
-                        onChange={(e) => {
-                          try {
-                            const selector = JSON.parse(e.target.value);
-                            setServiceForm(prev => ({ ...prev, selector }));
-                          } catch {
-                            // 忽略JSON解析错误
-                          }
-                        }}
-                        className="font-mono text-sm"
-                        rows={3}
-                      />
-                    </div>
-                  </TabsContent>
-                  <TabsContent value="advanced" className="space-y-4">
-                    <div>
-                      <Label>标签 (JSON格式)</Label>
-                      <Textarea
-                        placeholder='{"environment": "production"}'
-                        value={JSON.stringify(serviceForm.labels, null, 2)}
-                        onChange={(e) => {
-                          try {
-                            const labels = JSON.parse(e.target.value);
-                            setServiceForm(prev => ({ ...prev, labels }));
-                          } catch {
-                            // 忽略JSON解析错误
-                          }
-                        }}
-                        className="font-mono text-sm"
-                        rows={3}
-                      />
-                    </div>
-                    <div>
-                      <Label>注解 (JSON格式)</Label>
-                      <Textarea
-                        placeholder='{"description": "My service"}'
-                        value={JSON.stringify(serviceForm.annotations, null, 2)}
-                        onChange={(e) => {
-                          try {
-                            const annotations = JSON.parse(e.target.value);
-                            setServiceForm(prev => ({ ...prev, annotations }));
-                          } catch {
-                            // 忽略JSON解析错误
-                          }
-                        }}
-                        className="font-mono text-sm"
-                        rows={3}
-                      />
-                    </div>
+                  <TabsContent value="yaml" className="space-y-4">
+                    <YamlEditor
+                      value={yamlContent}
+                      onChange={handleYamlChange}
+                      error={yamlError}
+                      label="Service YAML配置"
+                      template={`apiVersion: v1
+kind: Service
+metadata:
+  name: my-service
+  namespace: ${selectedNamespace || "default"}
+  labels:
+    environment: production
+    team: backend
+    version: "1.2.3"
+  annotations:
+    description: "Web service for user authentication"
+    created-by: "canvas"
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP
+  - name: https
+    port: 443
+    targetPort: 8443
+    protocol: TCP
+  selector:
+    app: my-app
+    version: v1.0
+`}
+                      onApplyTemplate={applyYamlTemplate}
+                    />
                   </TabsContent>
                 </Tabs>
                 <DialogFooter>
                   <Button variant="outline" onClick={() => setIsCreateOpen(false)}>取消</Button>
-                  <Button onClick={handleCreateService} disabled={!serviceForm.name || !serviceForm.namespace}>
+                  <Button
+                    onClick={handleCreateService}
+                    disabled={!yamlContent.trim() || !!yamlError}
+                  >
                     创建服务
                   </Button>
                 </DialogFooter>
@@ -516,7 +485,7 @@ export default function ServicesManagement() {
           </DialogHeader>
           <div className="mt-4">
             <Textarea
-              value={yamlContent}
+              value={yamlPreview}
               readOnly
               className="font-mono text-sm min-h-[400px]"
             />

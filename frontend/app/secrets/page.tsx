@@ -11,8 +11,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2, Eye, Loader2, Lock } from "lucide-react";
+import { Plus, Trash2, Eye, Loader2, Lock, Code } from "lucide-react";
 import ClusterSelector from "@/components/ClusterSelector";
+import YamlEditor from "@/components/YamlEditor";
 import { useAuth } from "@/lib/auth-context";
 import { useCluster } from "@/lib/cluster-context";
 import { secretApi } from "@/lib/api";
@@ -46,6 +47,12 @@ export default function SecretsManagement() {
     labels: {} as Record<string, any>,
     annotations: {} as Record<string, any>
   });
+
+  // YAML编辑状态
+  const [yamlContent, setYamlContent] = useState("");
+  const [yamlError, setYamlError] = useState("");
+  const [yamlPreview, setYamlPreview] = useState("");
+  const [isYamlPreviewOpen, setIsYamlPreviewOpen] = useState(false);
 
   const { user } = useAuth();
   const { clusters } = useCluster();
@@ -111,11 +118,28 @@ export default function SecretsManagement() {
     }
   }, [selectedClusterId, selectedNamespace]);
 
+  // 创建Secret (使用YAML)
   const handleCreateSecret = async () => {
-    if (!selectedClusterId) return;
+    if (!selectedClusterId || !yamlContent.trim()) return;
 
     try {
-      const response = await secretApi.createSecret(selectedClusterId, secretForm);
+      // 从YAML中解析基本信息
+      const lines = yamlContent.split('\n');
+      let name = secretForm.name;
+      let namespace = secretForm.namespace;
+
+      // 简单的YAML解析来获取metadata
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (line.startsWith('name:')) {
+          name = line.split(':')[1].trim();
+        } else if (line.startsWith('namespace:')) {
+          namespace = line.split(':')[1].trim();
+        }
+      }
+
+      // 使用YAML API创建Secret
+      const response = await secretApi.updateSecretYaml(selectedClusterId, namespace, name, yamlContent);
       if (response.data) {
         toast.success("Secret创建成功");
         setIsCreateOpen(false);
@@ -144,14 +168,76 @@ export default function SecretsManagement() {
   };
 
   const resetForm = () => {
-    setSecretForm({
+    const initialForm = {
       name: "",
       namespace: selectedNamespace || "default",
       type: "Opaque",
       data: {},
       labels: {},
       annotations: {}
-    });
+    };
+
+    setSecretForm(initialForm);
+    setYamlContent(`apiVersion: v1
+kind: Secret
+metadata:
+  name: my-secret
+  namespace: ${initialForm.namespace}
+type: Opaque
+data: {}
+`);
+    setYamlError("");
+  };
+
+  // 处理YAML变化
+  const handleYamlChange = (value: string) => {
+    setYamlContent(value);
+    setYamlError("");
+  };
+
+  // 应用YAML模板
+  const applyYamlTemplate = () => {
+    const template = `apiVersion: v1
+kind: Secret
+metadata:
+  name: my-secret
+  namespace: ${selectedNamespace || "default"}
+  labels:
+    environment: production
+    managed-by: canvas
+type: Opaque
+data:
+  username: YWRtaW4=  # base64 encoded "admin"
+  password: c2VjcmV0  # base64 encoded "secret"
+stringData:
+  config.json: |
+    {
+      "database": {
+        "host": "localhost",
+        "port": 5432,
+        "name": "mydb"
+      },
+      "features": {
+        "debug": true,
+        "cache": false
+      }
+    }`;
+    setYamlContent(template);
+  };
+
+  // 查看Secret YAML
+  const handleViewYaml = async (secret: Secret) => {
+    try {
+      const response = await secretApi.getSecretYaml(secret.cluster_id, secret.namespace, secret.name);
+      if (response.data) {
+        setYamlPreview(response.data.yaml);
+        setIsYamlPreviewOpen(true);
+      } else {
+        toast.error(`获取Secret YAML失败: ${response.error}`);
+      }
+    } catch {
+      toast.error("获取Secret YAML失败");
+    }
   };
 
   if (!user) {
@@ -173,7 +259,7 @@ export default function SecretsManagement() {
             <Lock className="w-8 h-8" />
             Secrets管理
           </h1>
-          <p className="text-muted-foreground">管理Kubernetes集群中的机密数据</p>
+          <p className="text-muted-foreground">管理Kubernetes集群中的机密数据（支持YAML格式编辑）</p>
         </div>
         <div className="flex items-center gap-4">
           <ClusterSelector
@@ -209,86 +295,44 @@ export default function SecretsManagement() {
                   创建Secret
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-2xl">
+              <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>创建Secret</DialogTitle>
-                  <DialogDescription>创建新的机密数据</DialogDescription>
+                  <DialogDescription>使用YAML格式创建新的机密数据</DialogDescription>
                 </DialogHeader>
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="secret-name">名称</Label>
-                      <Input
-                        id="secret-name"
-                        value={secretForm.name}
-                        onChange={(e) => setSecretForm(prev => ({ ...prev, name: e.target.value }))}
-                        placeholder="my-secret"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="secret-type">类型</Label>
-                      <Select value={secretForm.type} onValueChange={(value) => setSecretForm(prev => ({ ...prev, type: value }))}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Opaque">Opaque</SelectItem>
-                          <SelectItem value="kubernetes.io/tls">TLS</SelectItem>
-                          <SelectItem value="kubernetes.io/dockerconfigjson">Docker配置</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  <div>
-                    <Label htmlFor="secret-namespace">命名空间</Label>
-                    <Input
-                      id="secret-namespace"
-                      value={secretForm.namespace}
-                      onChange={(e) => setSecretForm(prev => ({ ...prev, namespace: e.target.value }))}
-                      placeholder="default"
-                    />
-                  </div>
-
-                  <div>
-                    <Label>数据 (JSON格式)</Label>
-                    <Textarea
-                      placeholder='{"username": "admin", "password": "secret"}'
-                      value={JSON.stringify(secretForm.data, null, 2)}
-                      onChange={(e) => {
-                        try {
-                          const data = JSON.parse(e.target.value);
-                          setSecretForm(prev => ({ ...prev, data }));
-                        } catch {
-                          // 忽略JSON解析错误
-                        }
-                      }}
-                      className="font-mono text-sm"
-                      rows={6}
-                    />
-                  </div>
-
-                  <div>
-                    <Label>标签 (JSON格式)</Label>
-                    <Textarea
-                      placeholder='{"environment": "production"}'
-                      value={JSON.stringify(secretForm.labels, null, 2)}
-                      onChange={(e) => {
-                        try {
-                          const labels = JSON.parse(e.target.value);
-                          setSecretForm(prev => ({ ...prev, labels }));
-                        } catch {
-                          // 忽略JSON解析错误
-                        }
-                      }}
-                      className="font-mono text-sm"
-                      rows={3}
-                    />
-                  </div>
-                </div>
+                <YamlEditor
+                  value={yamlContent}
+                  onChange={handleYamlChange}
+                  error={yamlError}
+                  label="Secret YAML配置"
+                  template={`apiVersion: v1
+kind: Secret
+metadata:
+  name: my-secret
+  namespace: ${selectedNamespace || "default"}
+  labels:
+    environment: production
+    managed-by: canvas
+type: Opaque
+data:
+  username: YWRtaW4=  # base64 encoded "admin"
+  password: c2VjcmV0  # base64 encoded "secret"
+stringData:
+  config.json: |
+    {
+      "database": {
+        "host": "localhost",
+        "port": 5432
+      }
+    }`}
+                  onApplyTemplate={applyYamlTemplate}
+                />
                 <DialogFooter>
                   <Button variant="outline" onClick={() => setIsCreateOpen(false)}>取消</Button>
-                  <Button onClick={handleCreateSecret} disabled={!secretForm.name || !secretForm.namespace}>
+                  <Button
+                    onClick={handleCreateSecret}
+                    disabled={!yamlContent.trim() || !!yamlError}
+                  >
                     创建Secret
                   </Button>
                 </DialogFooter>
@@ -328,8 +372,12 @@ export default function SecretsManagement() {
                     <TableCell>{secret.age}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <Button variant="outline" size="sm">
-                          <Eye className="w-4 h-4" />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleViewYaml(secret)}
+                        >
+                          <Code className="w-4 h-4" />
                         </Button>
                         <Button
                           variant="outline"
@@ -348,6 +396,27 @@ export default function SecretsManagement() {
           )}
         </CardContent>
       </Card>
+
+      {/* Secret YAML预览对话框 */}
+      <Dialog open={isYamlPreviewOpen} onOpenChange={setIsYamlPreviewOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle>
+              {yamlPreview ? "Secret YAML配置" : "YAML配置"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="mt-4">
+            <Textarea
+              value={yamlPreview}
+              readOnly
+              className="font-mono text-sm min-h-[400px]"
+            />
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setIsYamlPreviewOpen(false)}>关闭</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

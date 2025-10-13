@@ -2787,6 +2787,124 @@ def delete_configmap(cluster: Cluster, namespace: str, configmap_name: str) -> b
             client_instance.close()
 
 
+def get_configmap_yaml(cluster: Cluster, namespace: str, configmap_name: str) -> Optional[str]:
+    """获取ConfigMap的YAML配置"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return None
+
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+        cm = core_v1.read_namespaced_config_map(configmap_name, namespace)
+        # 转换为YAML
+        import yaml
+        yaml_content = yaml.dump(cm.to_dict(), default_flow_style=False)
+        return yaml_content
+    except Exception as e:
+        print(f"获取ConfigMap YAML失败: {e}")
+        return None
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def update_configmap_yaml(cluster: Cluster, namespace: str, configmap_name: str, yaml_content: str) -> bool:
+    """通过YAML更新ConfigMap"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        import yaml
+        # 解析YAML
+        configmap_dict = yaml.safe_load(yaml_content)
+
+        core_v1 = client.CoreV1Api(client_instance)
+
+        # 创建新的ConfigMap对象
+        configmap = client.V1ConfigMap(
+            api_version=configmap_dict.get('apiVersion', 'v1'),
+            kind=configmap_dict.get('kind', 'ConfigMap'),
+            metadata=client.V1ObjectMeta(
+                name=configmap_dict['metadata']['name'],
+                namespace=configmap_dict['metadata']['namespace'],
+                labels=configmap_dict['metadata'].get('labels', {}),
+                annotations=configmap_dict['metadata'].get('annotations', {})
+            ),
+            data=configmap_dict.get('data', {})
+        )
+
+        # 使用replace更新ConfigMap
+        core_v1.replace_namespaced_config_map(configmap_name, namespace, configmap)
+        return True
+    except Exception as e:
+        print(f"更新ConfigMap YAML失败: {e}")
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def get_secret_yaml(cluster: Cluster, namespace: str, secret_name: str) -> Optional[str]:
+    """获取Secret的YAML配置"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return None
+
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+        secret = core_v1.read_namespaced_secret(secret_name, namespace)
+        # 转换为YAML
+        import yaml
+        yaml_content = yaml.dump(secret.to_dict(), default_flow_style=False)
+        return yaml_content
+    except Exception as e:
+        print(f"获取Secret YAML失败: {e}")
+        return None
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def update_secret_yaml(cluster: Cluster, namespace: str, secret_name: str, yaml_content: str) -> bool:
+    """通过YAML更新Secret"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        import yaml
+        # 解析YAML
+        secret_dict = yaml.safe_load(yaml_content)
+
+        core_v1 = client.CoreV1Api(client_instance)
+
+        # 创建新的Secret对象
+        secret = client.V1Secret(
+            api_version=secret_dict.get('apiVersion', 'v1'),
+            kind=secret_dict.get('kind', 'Secret'),
+            metadata=client.V1ObjectMeta(
+                name=secret_dict['metadata']['name'],
+                namespace=secret_dict['metadata']['namespace'],
+                labels=secret_dict['metadata'].get('labels', {}),
+                annotations=secret_dict['metadata'].get('annotations', {})
+            ),
+            type=secret_dict.get('type', 'Opaque'),
+            data=secret_dict.get('data', {}),
+            string_data=secret_dict.get('stringData', {})
+        )
+
+        # 使用replace更新Secret
+        core_v1.replace_namespaced_secret(secret_name, namespace, secret)
+        return True
+    except Exception as e:
+        print(f"更新Secret YAML失败: {e}")
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
 # ========== Secrets管理 ==========
 
 def get_namespace_secrets(cluster: Cluster, namespace_name: str) -> List[Dict[str, Any]]:

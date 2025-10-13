@@ -7,6 +7,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { Plus, Trash2, Eye, Loader2, Route } from "lucide-react";
 import ClusterSelector from "@/components/ClusterSelector";
 import { useAuth } from "@/lib/auth-context";
@@ -33,6 +35,11 @@ export default function IngressManagement() {
   const [selectedClusterId, setSelectedClusterId] = useState<number | null>(null);
   const [selectedNamespace, setSelectedNamespace] = useState<string>("default");
   const [namespaces, setNamespaces] = useState<string[]>([]);
+
+  // 预览对话框状态
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [selectedIngress, setSelectedIngress] = useState<any | null>(null);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
 
   const { user } = useAuth();
   const { clusters } = useCluster();
@@ -109,6 +116,24 @@ export default function IngressManagement() {
       }
     } catch {
       toast.error("删除Ingress失败");
+    }
+  };
+
+  // 查看Ingress详情
+  const handleViewIngress = async (ingress: Ingress) => {
+    try {
+      setIsPreviewLoading(true);
+      const response = await ingressApi.getIngress(ingress.cluster_id, ingress.namespace, ingress.name);
+      if (response.data) {
+        setSelectedIngress(response.data);
+        setIsPreviewOpen(true);
+      } else {
+        toast.error(`获取Ingress详情失败: ${response.error}`);
+      }
+    } catch {
+      toast.error("获取Ingress详情失败");
+    } finally {
+      setIsPreviewLoading(false);
     }
   };
 
@@ -211,7 +236,12 @@ export default function IngressManagement() {
                     <TableCell>{ingress.age}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <Button variant="outline" size="sm">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleViewIngress(ingress)}
+                          disabled={isPreviewLoading}
+                        >
                           <Eye className="w-4 h-4" />
                         </Button>
                         <Button
@@ -231,6 +261,116 @@ export default function IngressManagement() {
           )}
         </CardContent>
       </Card>
+
+      {/* Ingress详情预览对话框 */}
+      <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedIngress ? `${selectedIngress.namespace}/${selectedIngress.name} - Ingress详情` : "Ingress详情"}
+            </DialogTitle>
+          </DialogHeader>
+          {selectedIngress && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="font-medium">名称</Label>
+                  <p className="text-sm text-muted-foreground">{selectedIngress.name}</p>
+                </div>
+                <div>
+                  <Label className="font-medium">命名空间</Label>
+                  <p className="text-sm text-muted-foreground">{selectedIngress.namespace}</p>
+                </div>
+                <div>
+                  <Label className="font-medium">类名</Label>
+                  <p className="text-sm text-muted-foreground">{selectedIngress.class_name || "默认"}</p>
+                </div>
+                <div>
+                  <Label className="font-medium">年龄</Label>
+                  <p className="text-sm text-muted-foreground">{selectedIngress.age}</p>
+                </div>
+              </div>
+
+              <div>
+                <Label className="font-medium">主机</Label>
+                <div className="mt-1">
+                  {selectedIngress.hosts && selectedIngress.hosts.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {selectedIngress.hosts.map((host: string, index: number) => (
+                        <Badge key={index} variant="secondary">{host}</Badge>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">无主机配置</p>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <Label className="font-medium">TLS主机</Label>
+                <div className="mt-1">
+                  {selectedIngress.tls_hosts && selectedIngress.tls_hosts.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {selectedIngress.tls_hosts.map((host: string, index: number) => (
+                        <Badge key={index} variant="outline">{host}</Badge>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">无TLS主机配置</p>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <Label className="font-medium">标签</Label>
+                <div className="mt-1">
+                  {selectedIngress.labels && Object.keys(selectedIngress.labels).length > 0 ? (
+                    <div className="bg-gray-50 p-2 rounded text-sm font-mono">
+                      {JSON.stringify(selectedIngress.labels, null, 2)}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">无标签</p>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <Label className="font-medium">注解</Label>
+                <div className="mt-1">
+                  {selectedIngress.annotations && Object.keys(selectedIngress.annotations).length > 0 ? (
+                    <div className="bg-gray-50 p-2 rounded text-sm font-mono">
+                      {JSON.stringify(selectedIngress.annotations, null, 2)}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">无注解</p>
+                  )}
+                </div>
+              </div>
+
+              {selectedIngress.rules && selectedIngress.rules.length > 0 && (
+                <div>
+                  <Label className="font-medium">规则</Label>
+                  <div className="mt-1 space-y-2">
+                    {selectedIngress.rules.map((rule: any, index: number) => (
+                      <div key={index} className="bg-gray-50 p-3 rounded">
+                        <p className="text-sm font-medium">{rule.host || "默认主机"}</p>
+                        {rule.http && rule.http.paths && rule.http.paths.map((path: any, pathIndex: number) => (
+                          <div key={pathIndex} className="text-xs text-muted-foreground mt-1">
+                            {path.path} → {path.backend.service?.name}:{path.backend.service?.port?.number || path.backend.service?.port?.name}
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button onClick={() => setIsPreviewOpen(false)}>关闭</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

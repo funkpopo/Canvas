@@ -434,6 +434,14 @@ export const configmapApi = {
   async deleteConfigMap(clusterId: number, namespace: string, configmapName: string): Promise<ApiResponse<any>> {
     return apiClient.delete<any>(`/configmaps/${namespace}/${configmapName}?cluster_id=${clusterId}`);
   },
+
+  async getConfigMapYaml(clusterId: number, namespace: string, configmapName: string): Promise<ApiResponse<{yaml: string}>> {
+    return apiClient.get<{yaml: string}>(`/configmaps/${namespace}/${configmapName}/yaml?cluster_id=${clusterId}`);
+  },
+
+  async updateConfigMapYaml(clusterId: number, namespace: string, configmapName: string, yamlContent: string): Promise<ApiResponse<any>> {
+    return apiClient.put<any>(`/configmaps/${namespace}/${configmapName}/yaml?cluster_id=${clusterId}`, { yaml_content: yamlContent });
+  },
 };
 
 // Secret相关 API
@@ -460,6 +468,14 @@ export const secretApi = {
 
   async deleteSecret(clusterId: number, namespace: string, secretName: string): Promise<ApiResponse<any>> {
     return apiClient.delete<any>(`/secrets/${namespace}/${secretName}?cluster_id=${clusterId}`);
+  },
+
+  async getSecretYaml(clusterId: number, namespace: string, secretName: string): Promise<ApiResponse<{yaml: string}>> {
+    return apiClient.get<{yaml: string}>(`/secrets/${namespace}/${secretName}/yaml?cluster_id=${clusterId}`);
+  },
+
+  async updateSecretYaml(clusterId: number, namespace: string, secretName: string, yamlContent: string): Promise<ApiResponse<any>> {
+    return apiClient.put<any>(`/secrets/${namespace}/${secretName}/yaml?cluster_id=${clusterId}`, { yaml_content: yamlContent });
   },
 };
 

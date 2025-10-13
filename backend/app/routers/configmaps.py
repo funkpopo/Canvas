@@ -5,7 +5,8 @@ from ..database import get_db
 from ..models import Cluster, AuditLog
 from ..auth import get_current_user
 from ..kubernetes import (
-    get_namespace_configmaps, get_configmap_details, create_configmap, update_configmap, delete_configmap
+    get_namespace_configmaps, get_configmap_details, create_configmap, update_configmap, delete_configmap,
+    get_configmap_yaml, update_configmap_yaml
 )
 from pydantic import BaseModel
 
@@ -232,3 +233,77 @@ async def delete_existing_configmap(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"删除ConfigMap失败: {str(e)}")
+
+
+class YamlUpdateRequest(BaseModel):
+    yaml_content: str
+
+
+@router.get("/{namespace}/{configmap_name}/yaml", response_model=dict)
+async def get_configmap_yaml_config(
+    namespace: str,
+    configmap_name: str,
+    cluster_id: int = Query(..., description="集群ID"),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """获取ConfigMap的YAML配置"""
+    try:
+        cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
+        if not cluster:
+            raise HTTPException(status_code=404, detail="集群不存在或未激活")
+
+        yaml_content = get_configmap_yaml(cluster, namespace, configmap_name)
+        if not yaml_content:
+            raise HTTPException(status_code=404, detail="获取YAML配置失败")
+
+        return {"yaml": yaml_content}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取YAML配置失败: {str(e)}")
+
+
+@router.put("/{namespace}/{configmap_name}/yaml", response_model=dict)
+async def update_configmap_yaml_config(
+    namespace: str,
+    configmap_name: str,
+    yaml_data: YamlUpdateRequest,
+    cluster_id: int = Query(..., description="集群ID"),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """通过YAML更新ConfigMap"""
+    try:
+        cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
+        if not cluster:
+            raise HTTPException(status_code=404, detail="集群不存在或未激活")
+
+        yaml_content = yaml_data.yaml_content
+        if not yaml_content:
+            raise HTTPException(status_code=400, detail="YAML内容不能为空")
+
+        success = update_configmap_yaml(cluster, namespace, configmap_name, yaml_content)
+        if not success:
+            raise HTTPException(status_code=500, detail="更新ConfigMap YAML失败")
+
+        # 记录审计日志
+        audit_log = AuditLog(
+            user_id=current_user["id"],
+            action="UPDATE",
+            resource_type="ConfigMap",
+            resource_name=f"{namespace}/{configmap_name}",
+            cluster_id=cluster_id,
+            details=f"通过YAML更新ConfigMap {configmap_name} 在命名空间 {namespace}"
+        )
+        db.add(audit_log)
+        db.commit()
+
+        return {"message": f"ConfigMap {namespace}/{configmap_name} YAML更新成功"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"更新ConfigMap YAML失败: {str(e)}")
