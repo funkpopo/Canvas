@@ -253,7 +253,7 @@ data:
       }
 
       // 使用YAML API创建ConfigMap
-      const response = await configmapApi.updateConfigMapYaml(selectedClusterId, namespace, name, yamlContent);
+      const response = await configmapApi.createConfigMapYaml(selectedClusterId, yamlContent);
       if (response.data) {
         toast.success("ConfigMap创建成功");
         setIsCreateOpen(false);

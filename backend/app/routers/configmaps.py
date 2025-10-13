@@ -235,6 +235,52 @@ async def delete_existing_configmap(
         raise HTTPException(status_code=500, detail=f"删除ConfigMap失败: {str(e)}")
 
 
+class YamlCreateRequest(BaseModel):
+    yaml_content: str
+
+
+@router.post("/yaml", response_model=dict)
+async def create_configmap_from_yaml(
+    yaml_data: YamlCreateRequest,
+    cluster_id: int = Query(..., description="集群ID"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """通过YAML创建ConfigMap"""
+    try:
+        cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
+        if not cluster:
+            raise HTTPException(status_code=404, detail="集群不存在或未激活")
+
+        yaml_content = yaml_data.yaml_content
+        if not yaml_content:
+            raise HTTPException(status_code=400, detail="YAML内容不能为空")
+
+        success = create_configmap_from_yaml(cluster, yaml_content)
+        if not success:
+            raise HTTPException(status_code=500, detail="创建ConfigMap失败")
+
+        # 记录审计日志
+        audit_log = AuditLog(
+            user_id=current_user.id,
+            action="CREATE",
+            resource_type="ConfigMap",
+            resource_name="通过YAML创建",
+            cluster_id=cluster_id,
+            details="通过YAML创建ConfigMap"
+        )
+        db.add(audit_log)
+        db.commit()
+
+        return {"message": "ConfigMap创建成功"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"创建ConfigMap失败: {str(e)}")
+
+
 class YamlUpdateRequest(BaseModel):
     yaml_content: str
 

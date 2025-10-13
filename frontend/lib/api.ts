@@ -421,6 +421,10 @@ export const configmapApi = {
     return apiClient.get<{yaml: string}>(`/configmaps/${namespace}/${configmapName}/yaml?cluster_id=${clusterId}`);
   },
 
+  async createConfigMapYaml(clusterId: number, yamlContent: string): Promise<ApiResponse<any>> {
+    return apiClient.post<any>(`/configmaps/yaml?cluster_id=${clusterId}`, { yaml_content: yamlContent });
+  },
+
   async updateConfigMapYaml(clusterId: number, namespace: string, configmapName: string, yamlContent: string): Promise<ApiResponse<any>> {
     return apiClient.put<any>(`/configmaps/${namespace}/${configmapName}/yaml?cluster_id=${clusterId}`, { yaml_content: yamlContent });
   },

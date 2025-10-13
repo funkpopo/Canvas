@@ -3,6 +3,7 @@ import os
 import time
 import json
 import uuid
+import yaml
 from typing import Dict, Any, Optional, List
 from kubernetes import client, config
 from kubernetes.client.rest import ApiException
@@ -377,7 +378,9 @@ def get_node_details(cluster: Cluster, node_name: str) -> Optional[Dict[str, Any
             "labels": dict(node.metadata.labels) if node.metadata.labels else {},
             "annotations": dict(node.metadata.annotations) if node.metadata.annotations else {},
             "conditions": conditions,
-            "taints": taints
+            "taints": taints,
+            "cluster_name": cluster.name,
+            "cluster_id": cluster.id
         }
 
     except Exception as e:
@@ -802,7 +805,9 @@ def get_pod_details(cluster: Cluster, namespace: str, pod_name: str) -> Optional
             "annotations": dict(pod.metadata.annotations) if pod.metadata.annotations else {},
             "containers": containers,
             "volumes": volumes,
-            "events": events
+            "events": events,
+            "cluster_name": cluster.name,
+            "cluster_id": cluster.id
         }
 
     except Exception as e:
@@ -1167,7 +1172,9 @@ def get_deployment_details(cluster: Cluster, namespace: str, deployment_name: st
             "annotations": dict(deployment.metadata.annotations) if deployment.metadata.annotations else {},
             "conditions": conditions,
             "spec": {},  # 简化处理
-            "status": {}   # 简化处理
+            "status": {},   # 简化处理
+            "cluster_name": cluster.name,
+            "cluster_id": cluster.id
         }
 
     except Exception as e:
@@ -1489,7 +1496,9 @@ def get_service_details(cluster: Cluster, namespace: str, service_name: str) -> 
             "annotations": dict(service.metadata.annotations) if service.metadata.annotations else {},
             "age": age,
             "session_affinity": session_affinity,
-            "external_traffic_policy": external_traffic_policy
+            "external_traffic_policy": external_traffic_policy,
+            "cluster_name": cluster.name,
+            "cluster_id": cluster.id
         }
 
     except Exception as e:
@@ -1712,7 +1721,9 @@ def get_configmap_details(cluster: Cluster, namespace: str, configmap_name: str)
             "data": data,
             "labels": dict(configmap.metadata.labels) if configmap.metadata.labels else {},
             "annotations": dict(configmap.metadata.annotations) if configmap.metadata.annotations else {},
-            "age": age
+            "age": age,
+            "cluster_name": cluster.name,
+            "cluster_id": cluster.id
         }
 
     except Exception as e:
@@ -1778,9 +1789,71 @@ def delete_configmap(cluster: Cluster, namespace: str, configmap_name: str) -> b
 
 
 def get_configmap_yaml(cluster: Cluster, namespace: str, configmap_name: str) -> Optional[str]:
-    """获取ConfigMap YAML（暂未实现）"""
-    print(f"get_configmap_yaml 暂未实现: {namespace}/{configmap_name}")
-    return None
+    """获取ConfigMap YAML"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return None
+
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+        configmap = core_v1.read_namespaced_config_map(configmap_name, namespace)
+
+        # 转换为YAML格式
+        yaml_content = yaml.dump(configmap.to_dict(), default_flow_style=False)
+        return yaml_content
+
+    except Exception as e:
+        print(f"获取ConfigMap YAML失败: {e}")
+        return None
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def create_configmap_from_yaml(cluster: Cluster, yaml_content: str) -> bool:
+    """通过YAML创建ConfigMap"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        # 解析YAML内容
+        configmap_dict = yaml.safe_load(yaml_content)
+        if not configmap_dict:
+            print("YAML内容无效")
+            return False
+
+        # 提取metadata
+        metadata = configmap_dict.get('metadata', {})
+        name = metadata.get('name')
+        namespace = metadata.get('namespace', 'default')
+
+        if not name:
+            print("ConfigMap名称不能为空")
+            return False
+
+        core_v1 = client.CoreV1Api(client_instance)
+
+        # 创建ConfigMap对象
+        configmap = client.V1ConfigMap(
+            metadata=client.V1ObjectMeta(
+                name=name,
+                namespace=namespace,
+                labels=metadata.get('labels'),
+                annotations=metadata.get('annotations')
+            ),
+            data=configmap_dict.get('data', {})
+        )
+
+        core_v1.create_namespaced_config_map(namespace, configmap)
+        return True
+
+    except Exception as e:
+        print(f"通过YAML创建ConfigMap失败: {e}")
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
 
 
 def update_configmap_yaml(cluster: Cluster, namespace: str, configmap_name: str, yaml_content: str) -> bool:
