@@ -141,7 +141,7 @@ export default function IngressEditor({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col">
+      <DialogContent className="max-w-7xl w-full max-h-[90vh] flex flex-col">
         <DialogHeader className="flex-shrink-0">
           <DialogTitle>
             {mode === 'create' ? '创建Ingress' : `编辑 ${ingress?.namespace}/${ingress?.name}`}
@@ -165,7 +165,6 @@ export default function IngressEditor({
               <IngressForm
                 initialData={getInitialFormData()}
                 namespace={namespace}
-                clusterId={clusterId}
                 onSubmit={handleFormSubmit}
                 onCancel={handleCancel}
                 isLoading={isSubmitting}

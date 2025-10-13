@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -136,7 +136,6 @@ interface IngressFormData {
 interface IngressFormProps {
   initialData?: Partial<IngressFormData>;
   namespace: string;
-  clusterId: number | null;
   onSubmit: (data: IngressFormData) => Promise<void>;
   onCancel: () => void;
   isLoading?: boolean;
@@ -146,7 +145,6 @@ interface IngressFormProps {
 export default function IngressForm({
   initialData,
   namespace,
-  clusterId,
   onSubmit,
   onCancel,
   isLoading = false,
@@ -419,17 +417,17 @@ export default function IngressForm({
             <CardDescription>选择预定义模板快速开始配置</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               {Object.values(INGRESS_TEMPLATES).map((template) => (
                 <Button
                   key={template.name}
                   type="button"
                   variant="outline"
-                  className="h-auto p-4 flex flex-col items-start gap-2"
+                  className="h-auto p-4 flex flex-col items-start gap-2 text-left"
                   onClick={() => applyTemplate(template.name)}
                 >
-                  <div className="font-medium">{template.label}</div>
-                  <div className="text-xs text-muted-foreground text-left">
+                  <div className="font-medium w-full">{template.label}</div>
+                  <div className="text-xs text-muted-foreground w-full leading-relaxed">
                     {template.description}
                   </div>
                 </Button>
@@ -446,7 +444,7 @@ export default function IngressForm({
           <CardDescription>配置Ingress的基本信息</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <Label htmlFor="name">名称</Label>
               <Input
@@ -518,54 +516,58 @@ export default function IngressForm({
                   <Label>路径配置</Label>
                   <div className="mt-2 space-y-3">
                     {rule.paths.map((path, pathIndex) => (
-                      <div key={pathIndex} className="flex items-center gap-2 p-3 bg-gray-50 rounded">
-                        <Select
-                          value={path.path_type}
-                          onValueChange={(value) => updatePath(ruleIndex, pathIndex, 'path_type', value)}
-                        >
-                          <SelectTrigger className="w-32">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Prefix">Prefix</SelectItem>
-                            <SelectItem value="Exact">Exact</SelectItem>
-                            <SelectItem value="ImplementationSpecific">ImplementationSpecific</SelectItem>
-                          </SelectContent>
-                        </Select>
-
-                        <Input
-                          value={path.path}
-                          onChange={(e) => updatePath(ruleIndex, pathIndex, 'path', e.target.value)}
-                          placeholder="/"
-                          className="flex-1"
-                        />
-
-                        <Input
-                          value={path.service_name}
-                          onChange={(e) => updatePath(ruleIndex, pathIndex, 'service_name', e.target.value)}
-                          placeholder="服务名"
-                          required
-                        />
-
-                        <Input
-                          type="number"
-                          value={path.service_port}
-                          onChange={(e) => updatePath(ruleIndex, pathIndex, 'service_port', e.target.value)}
-                          placeholder="端口"
-                          className="w-20"
-                          required
-                        />
-
-                        {rule.paths.length > 1 && (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => removePath(ruleIndex, pathIndex)}
+                      <div key={pathIndex} className="space-y-3 p-3 bg-gray-50 rounded">
+                        <div className="flex items-center gap-2">
+                          <Select
+                            value={path.path_type}
+                            onValueChange={(value) => updatePath(ruleIndex, pathIndex, 'path_type', value)}
                           >
-                            <X className="w-4 h-4" />
-                          </Button>
-                        )}
+                            <SelectTrigger className="w-32 flex-shrink-0">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Prefix">Prefix</SelectItem>
+                              <SelectItem value="Exact">Exact</SelectItem>
+                              <SelectItem value="ImplementationSpecific">ImplementationSpecific</SelectItem>
+                            </SelectContent>
+                          </Select>
+
+                          <Input
+                            value={path.path}
+                            onChange={(e) => updatePath(ruleIndex, pathIndex, 'path', e.target.value)}
+                            placeholder="/"
+                            className="flex-1 min-w-0"
+                          />
+
+                          {rule.paths.length > 1 && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => removePath(ruleIndex, pathIndex)}
+                              className="flex-shrink-0"
+                            >
+                              <X className="w-4 h-4" />
+                            </Button>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <Input
+                            value={path.service_name}
+                            onChange={(e) => updatePath(ruleIndex, pathIndex, 'service_name', e.target.value)}
+                            placeholder="服务名"
+                            required
+                          />
+
+                          <Input
+                            type="number"
+                            value={path.service_port}
+                            onChange={(e) => updatePath(ruleIndex, pathIndex, 'service_port', e.target.value)}
+                            placeholder="端口"
+                            required
+                          />
+                        </div>
                       </div>
                     ))}
 
@@ -688,7 +690,7 @@ export default function IngressForm({
               <Button
                 type="button"
                 onClick={addTls}
-                className="flex items-center gap-2"
+                className="flex items-center gap-2 w-full sm:w-auto"
                 disabled={!newTlsHosts.trim() || !newTlsSecret.trim()}
               >
                 <Plus className="w-4 h-4" />
@@ -722,18 +724,16 @@ export default function IngressForm({
                   </Button>
                 </div>
               ))}
-              <div className="flex items-center gap-2">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                 <Input
                   value={newLabelKey}
                   onChange={(e) => setNewLabelKey(e.target.value)}
                   placeholder="键"
-                  className="flex-1"
                 />
                 <Input
                   value={newLabelValue}
                   onChange={(e) => setNewLabelValue(e.target.value)}
                   placeholder="值"
-                  className="flex-1"
                 />
                 <Button type="button" onClick={addLabel}>
                   <Plus className="w-4 h-4 mr-1" />
@@ -762,22 +762,27 @@ export default function IngressForm({
                   </Button>
                 </div>
               ))}
-              <div className="space-y-2">
-                <Input
-                  value={newAnnotationKey}
-                  onChange={(e) => setNewAnnotationKey(e.target.value)}
-                  placeholder="注解键"
-                />
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <Input
+                    value={newAnnotationKey}
+                    onChange={(e) => setNewAnnotationKey(e.target.value)}
+                    placeholder="注解键"
+                  />
+                  <div className="flex justify-end">
+                    <Button type="button" onClick={addAnnotation}>
+                      <Plus className="w-4 h-4 mr-1" />
+                      添加注解
+                    </Button>
+                  </div>
+                </div>
                 <Textarea
                   value={newAnnotationValue}
                   onChange={(e) => setNewAnnotationValue(e.target.value)}
                   placeholder="注解值"
-                  rows={2}
+                  rows={3}
+                  className="resize-none"
                 />
-                <Button type="button" onClick={addAnnotation}>
-                  <Plus className="w-4 h-4 mr-1" />
-                  添加注解
-                </Button>
               </div>
             </div>
           </div>
@@ -785,16 +790,16 @@ export default function IngressForm({
       </Card>
 
       {/* 操作按钮 */}
-      <div className="flex justify-between gap-3">
-        <Button type="button" variant="outline" onClick={convertFormToYaml}>
+      <div className="flex flex-col-reverse sm:flex-row justify-between gap-3">
+        <Button type="button" variant="outline" onClick={convertFormToYaml} className="w-full sm:w-auto">
           <Code className="w-4 h-4 mr-2" />
           转换为YAML
         </Button>
-        <div className="flex gap-3">
-          <Button type="button" variant="outline" onClick={onCancel}>
+        <div className="flex gap-3 w-full sm:w-auto">
+          <Button type="button" variant="outline" onClick={onCancel} className="flex-1 sm:flex-none">
             取消
           </Button>
-          <Button type="submit" disabled={isLoading}>
+          <Button type="submit" disabled={isLoading} className="flex-1 sm:flex-none">
             {isLoading ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
