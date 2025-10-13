@@ -30,7 +30,7 @@ export default function NetworkPoliciesManagement() {
   const [policies, setPolicies] = useState<NetworkPolicy[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedClusterId, setSelectedClusterId] = useState<number | null>(null);
-  const [selectedNamespace, setSelectedNamespace] = useState<string>("");
+  const [selectedNamespace, setSelectedNamespace] = useState<string>("default");
   const [namespaces, setNamespaces] = useState<string[]>([]);
 
   const { user } = useAuth();
@@ -48,7 +48,7 @@ export default function NetworkPoliciesManagement() {
       } else if (response.error) {
         toast.error(`获取Network Policy列表失败: ${response.error}`);
       }
-    } catch (error) {
+    } catch {
       toast.error("获取Network Policy列表失败");
     } finally {
       setIsLoading(false);
@@ -57,7 +57,26 @@ export default function NetworkPoliciesManagement() {
 
   const fetchNamespaces = async () => {
     if (!selectedClusterId) return;
-    setNamespaces(["default", "kube-system", "kube-public", "kube-node-lease"]);
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(`http://localhost:8000/api/namespaces?cluster_id=${selectedClusterId}`, {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const namespaceNames = data.map((ns: any) => ns.name);
+        setNamespaces(namespaceNames);
+      } else {
+        console.error("获取命名空间列表失败");
+        setNamespaces(["default"]);
+      }
+    } catch {
+      console.error("获取命名空间列表出错");
+      setNamespaces(["default"]);
+    }
   };
 
   useEffect(() => {
@@ -69,9 +88,12 @@ export default function NetworkPoliciesManagement() {
   useEffect(() => {
     if (selectedClusterId) {
       fetchNamespaces();
-      if (selectedNamespace) {
-        fetchNetworkPolicies();
-      }
+    }
+  }, [selectedClusterId]);
+
+  useEffect(() => {
+    if (selectedClusterId && selectedNamespace) {
+      fetchNetworkPolicies();
     }
   }, [selectedClusterId, selectedNamespace]);
 
@@ -84,7 +106,7 @@ export default function NetworkPoliciesManagement() {
       } else {
         toast.error(`删除Network Policy失败: ${response.error}`);
       }
-    } catch (error) {
+    } catch {
       toast.error("删除Network Policy失败");
     }
   };

@@ -39,7 +39,7 @@ export default function ServicesManagement() {
   const [services, setServices] = useState<Service[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedClusterId, setSelectedClusterId] = useState<number | null>(null);
-  const [selectedNamespace, setSelectedNamespace] = useState<string>("");
+  const [selectedNamespace, setSelectedNamespace] = useState<string>("default");
   const [namespaces, setNamespaces] = useState<string[]>([]);
 
   // 创建对话框状态
@@ -81,7 +81,7 @@ export default function ServicesManagement() {
       } else if (response.error) {
         toast.error(`获取服务列表失败: ${response.error}`);
       }
-    } catch (error) {
+    } catch {
       toast.error("获取服务列表失败");
     } finally {
       setIsLoading(false);
@@ -91,12 +91,25 @@ export default function ServicesManagement() {
   // 获取命名空间列表
   const fetchNamespaces = async () => {
     if (!selectedClusterId) return;
-
     try {
-      // 这里应该调用命名空间API，但为了简化，我们使用一个固定的列表
-      setNamespaces(["default", "kube-system", "kube-public", "kube-node-lease"]);
-    } catch (error) {
-      toast.error("获取命名空间失败");
+      const token = localStorage.getItem("token");
+      const response = await fetch(`http://localhost:8000/api/namespaces?cluster_id=${selectedClusterId}`, {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const namespaceNames = data.map((ns: any) => ns.name);
+        setNamespaces(namespaceNames);
+      } else {
+        console.error("获取命名空间列表失败");
+        setNamespaces(["default"]);
+      }
+    } catch {
+      console.error("获取命名空间列表出错");
+      setNamespaces(["default"]);
     }
   };
 
@@ -109,9 +122,12 @@ export default function ServicesManagement() {
   useEffect(() => {
     if (selectedClusterId) {
       fetchNamespaces();
-      if (selectedNamespace) {
-        fetchServices();
-      }
+    }
+  }, [selectedClusterId]);
+
+  useEffect(() => {
+    if (selectedClusterId && selectedNamespace) {
+      fetchServices();
     }
   }, [selectedClusterId, selectedNamespace]);
 
@@ -129,7 +145,7 @@ export default function ServicesManagement() {
       } else {
         toast.error(`创建服务失败: ${response.error}`);
       }
-    } catch (error) {
+    } catch {
       toast.error("创建服务失败");
     }
   };
@@ -144,7 +160,7 @@ export default function ServicesManagement() {
       } else {
         toast.error(`删除服务失败: ${response.error}`);
       }
-    } catch (error) {
+    } catch {
       toast.error("删除服务失败");
     }
   };
@@ -160,7 +176,7 @@ export default function ServicesManagement() {
       } else {
         toast.error(`获取YAML失败: ${response.error}`);
       }
-    } catch (error) {
+    } catch {
       toast.error("获取YAML失败");
     }
   };
@@ -169,7 +185,7 @@ export default function ServicesManagement() {
   const resetServiceForm = () => {
     setServiceForm({
       name: "",
-      namespace: selectedNamespace,
+      namespace: selectedNamespace || "default",
       type: "ClusterIP",
       selector: {},
       ports: [{ port: 80, target_port: 80, protocol: "TCP", name: "" }],
@@ -254,7 +270,7 @@ export default function ServicesManagement() {
             </div>
             <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
               <DialogTrigger asChild>
-                <Button onClick={() => { resetServiceForm(); setIsCreateOpen(true); }}>
+                <Button onClick={() => { resetServiceForm(); setIsCreateOpen(true); }} disabled={!selectedNamespace}>
                   <Plus className="w-4 h-4 mr-2" />
                   创建服务
                 </Button>

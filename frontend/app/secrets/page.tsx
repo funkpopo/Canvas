@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -34,7 +33,7 @@ export default function SecretsManagement() {
   const [secrets, setSecrets] = useState<Secret[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedClusterId, setSelectedClusterId] = useState<number | null>(null);
-  const [selectedNamespace, setSelectedNamespace] = useState<string>("");
+  const [selectedNamespace, setSelectedNamespace] = useState<string>("default");
   const [namespaces, setNamespaces] = useState<string[]>([]);
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -62,7 +61,7 @@ export default function SecretsManagement() {
       } else if (response.error) {
         toast.error(`获取Secret列表失败: ${response.error}`);
       }
-    } catch (error) {
+    } catch {
       toast.error("获取Secret列表失败");
     } finally {
       setIsLoading(false);
@@ -71,7 +70,26 @@ export default function SecretsManagement() {
 
   const fetchNamespaces = async () => {
     if (!selectedClusterId) return;
-    setNamespaces(["default", "kube-system", "kube-public", "kube-node-lease"]);
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(`http://localhost:8000/api/namespaces?cluster_id=${selectedClusterId}`, {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const namespaceNames = data.map((ns: any) => ns.name);
+        setNamespaces(namespaceNames);
+      } else {
+        console.error("获取命名空间列表失败");
+        setNamespaces(["default"]);
+      }
+    } catch {
+      console.error("获取命名空间列表出错");
+      setNamespaces(["default"]);
+    }
   };
 
   useEffect(() => {
@@ -83,9 +101,12 @@ export default function SecretsManagement() {
   useEffect(() => {
     if (selectedClusterId) {
       fetchNamespaces();
-      if (selectedNamespace) {
-        fetchSecrets();
-      }
+    }
+  }, [selectedClusterId]);
+
+  useEffect(() => {
+    if (selectedClusterId && selectedNamespace) {
+      fetchSecrets();
     }
   }, [selectedClusterId, selectedNamespace]);
 
@@ -102,7 +123,7 @@ export default function SecretsManagement() {
       } else {
         toast.error(`创建Secret失败: ${response.error}`);
       }
-    } catch (error) {
+    } catch {
       toast.error("创建Secret失败");
     }
   };
@@ -116,7 +137,7 @@ export default function SecretsManagement() {
       } else {
         toast.error(`删除Secret失败: ${response.error}`);
       }
-    } catch (error) {
+    } catch {
       toast.error("删除Secret失败");
     }
   };
@@ -124,7 +145,7 @@ export default function SecretsManagement() {
   const resetForm = () => {
     setSecretForm({
       name: "",
-      namespace: selectedNamespace,
+      namespace: selectedNamespace || "default",
       type: "Opaque",
       data: {},
       labels: {},
@@ -182,7 +203,7 @@ export default function SecretsManagement() {
             </div>
             <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
               <DialogTrigger asChild>
-                <Button onClick={() => { resetForm(); setIsCreateOpen(true); }}>
+                <Button onClick={() => { resetForm(); setIsCreateOpen(true); }} disabled={!selectedNamespace}>
                   <Plus className="w-4 h-4 mr-2" />
                   创建Secret
                 </Button>
