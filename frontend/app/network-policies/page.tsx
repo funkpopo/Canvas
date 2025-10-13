@@ -107,7 +107,7 @@ export default function NetworkPoliciesManagement() {
   const handleDeleteNetworkPolicy = async (policy: NetworkPolicy) => {
     try {
       const response = await networkPolicyApi.deleteNetworkPolicy(policy.cluster_id, policy.namespace, policy.name);
-      if (response.data) {
+      if (!response.error) {
         toast.success("Network Policy删除成功");
         fetchNetworkPolicies();
       } else {

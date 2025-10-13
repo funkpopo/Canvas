@@ -156,7 +156,7 @@ export default function SecretsManagement() {
   const handleDeleteSecret = async (secret: Secret) => {
     try {
       const response = await secretApi.deleteSecret(secret.cluster_id, secret.namespace, secret.name);
-      if (response.data) {
+      if (!response.error) {
         toast.success("Secret删除成功");
         fetchSecrets();
       } else {

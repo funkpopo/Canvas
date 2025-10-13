@@ -174,7 +174,7 @@ export default function ServicesManagement() {
   const handleDeleteService = async (service: Service) => {
     try {
       const response = await serviceApi.deleteService(service.cluster_id, service.namespace, service.name);
-      if (response.data) {
+      if (!response.error) {
         toast.success("服务删除成功");
         fetchServices();
       } else {

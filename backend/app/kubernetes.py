@@ -4670,19 +4670,35 @@ def update_ingress_class(cluster: Cluster, class_name: str, updates: Dict[str, A
 
 def delete_ingress_class(cluster: Cluster, class_name: str) -> bool:
     """删除IngressClass"""
+    print(f"[DEBUG] 开始删除IngressClass: {class_name}, 集群: {cluster.name} (ID: {cluster.id})")
+
     client_instance = create_k8s_client(cluster)
     if not client_instance:
-        print(f"无法创建Kubernetes客户端连接到集群 {cluster.name}")
+        print(f"[DEBUG] 无法创建Kubernetes客户端连接到集群 {cluster.name}")
         return False
 
     try:
         networking_v1 = client.NetworkingV1Api(client_instance)
-        networking_v1.delete_ingress_class(class_name)
-        print(f"成功删除IngressClass: {class_name}")
+        print(f"[DEBUG] 尝试删除IngressClass: {class_name}")
+
+        # 先检查IngressClass是否存在
+        try:
+            existing = networking_v1.read_ingress_class(class_name)
+            print(f"[DEBUG] IngressClass '{class_name}' 存在，即将删除")
+        except Exception as read_e:
+            print(f"[DEBUG] IngressClass '{class_name}' 不存在或读取失败: {str(read_e)}")
+            return False
+
+        # 执行删除
+        result = networking_v1.delete_ingress_class(class_name)
+        print(f"[DEBUG] 删除API调用成功，返回: {result}")
+        print(f"[DEBUG] 成功删除IngressClass: {class_name}")
         return True
 
     except Exception as e:
-        print(f"删除IngressClass失败: {class_name}, 错误: {str(e)}")
+        print(f"[DEBUG] 删除IngressClass失败: {class_name}, 错误类型: {type(e).__name__}, 错误: {str(e)}")
+        import traceback
+        print(f"[DEBUG] 完整错误堆栈:\n{traceback.format_exc()}")
         return False
     finally:
         if client_instance:

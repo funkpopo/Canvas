@@ -79,7 +79,7 @@ export default function IngressClassManager({ clusterId }: IngressClassManagerPr
       onConfirm: async () => {
         try {
           const response = await ingressApi.deleteIngressClass(clusterId, className);
-          if (response.data) {
+          if (!response.error) {
             toast.success(`IngressClass "${className}" 删除成功`);
             fetchClasses();
           } else {

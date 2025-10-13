@@ -239,31 +239,22 @@ async def delete_existing_ingress_class(
             raise HTTPException(status_code=404, detail=f"IngressClass '{class_name}' 不存在或删除失败")
 
         # 记录审计日志
-        if current_user:
-            try:
-                audit_log = AuditLog(
-                    user_id=current_user.id,
-                    action="DELETE",
-                    resource_type="IngressClass",
-                    resource_name=class_name,
-                    cluster_id=cluster_id,
-                    details=f"删除IngressClass {class_name}"
-                )
-                db.add(audit_log)
-                db.commit()
-            except Exception as audit_e:
-                print(f"[WARNING] 审计日志记录失败，但不影响主要功能: {str(audit_e)}")
-                db.rollback()
+        audit_log = AuditLog(
+            user_id=current_user.id,
+            action="DELETE",
+            resource_type="IngressClass",
+            resource_name=class_name,
+            cluster_id=cluster_id,
+            details=f"删除IngressClass {class_name}"
+        )
+        db.add(audit_log)
+        db.commit()
 
         return {"message": "IngressClass删除成功"}
 
     except HTTPException:
         raise
     except Exception as e:
-        print(f"[ERROR] 删除IngressClass时发生异常: {str(e)}")
-        print(f"[ERROR] 异常类型: {type(e).__name__}")
-        import traceback
-        print(f"[ERROR] 完整堆栈:\n{traceback.format_exc()}")
         db.rollback()
         raise HTTPException(status_code=500, detail=f"删除IngressClass失败: {str(e)}")
 

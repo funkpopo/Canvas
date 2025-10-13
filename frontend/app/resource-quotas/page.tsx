@@ -107,7 +107,7 @@ export default function ResourceQuotasManagement() {
   const handleDeleteResourceQuota = async (quota: ResourceQuota) => {
     try {
       const response = await resourceQuotaApi.deleteResourceQuota(quota.cluster_id, quota.namespace, quota.name);
-      if (response.data) {
+      if (!response.error) {
         toast.success("Resource Quota删除成功");
         fetchResourceQuotas();
       } else {

@@ -124,7 +124,7 @@ export default function ConfigMapsManagement() {
   const handleDeleteConfigMap = async (cm: ConfigMap) => {
     try {
       const response = await configmapApi.deleteConfigMap(cm.cluster_id, cm.namespace, cm.name);
-      if (response.data) {
+      if (!response.error) {
         toast.success("ConfigMap删除成功");
         fetchConfigMaps();
       } else {

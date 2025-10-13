@@ -128,7 +128,7 @@ export default function IngressManagement() {
       onConfirm: async () => {
         try {
           const response = await ingressApi.deleteIngress(ingress.cluster_id, ingress.namespace, ingress.name);
-          if (response.data) {
+          if (!response.error) {
             toast.success("Ingress删除成功");
             fetchIngresses();
           } else {
