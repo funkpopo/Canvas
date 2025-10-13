@@ -248,7 +248,7 @@ export const storageApi = {
     if (clusterId) params += `cluster_id=${clusterId}`;
     if (namespace) params += `${params ? '&' : ''}namespace=${namespace}`;
     const query = params ? `?${params}` : '';
-    return apiClient.get<PersistentVolumeClaim[]>(`/storage/claims${query}`);
+    return apiClient.get<PersistentVolumeClaim[]>(`/storage/claims/${query}`);
   },
 
   async getPersistentVolumeClaim(clusterId: number, namespace: string, pvcName: string): Promise<ApiResponse<PersistentVolumeClaim>> {
@@ -363,7 +363,7 @@ export const serviceApi = {
     if (clusterId) params += `cluster_id=${clusterId}`;
     if (namespace) params += `${params ? '&' : ''}namespace=${namespace}`;
     const query = params ? `?${params}` : '';
-    return apiClient.get<Service[]>(`/services${query}`);
+    return apiClient.get<Service[]>(`/services/${query}`);
   },
 
   async getService(clusterId: number, namespace: string, serviceName: string): Promise<ApiResponse<Service>> {
@@ -398,7 +398,7 @@ export const configmapApi = {
     if (clusterId) params += `cluster_id=${clusterId}`;
     if (namespace) params += `${params ? '&' : ''}namespace=${namespace}`;
     const query = params ? `?${params}` : '';
-    return apiClient.get<ConfigMap[]>(`/configmaps${query}`);
+    return apiClient.get<ConfigMap[]>(`/configmaps/${query}`);
   },
 
   async getConfigMap(clusterId: number, namespace: string, configmapName: string): Promise<ApiResponse<ConfigMap>> {
@@ -433,7 +433,7 @@ export const secretApi = {
     if (clusterId) params += `cluster_id=${clusterId}`;
     if (namespace) params += `${params ? '&' : ''}namespace=${namespace}`;
     const query = params ? `?${params}` : '';
-    return apiClient.get<Secret[]>(`/secrets${query}`);
+    return apiClient.get<Secret[]>(`/secrets/${query}`);
   },
 
   async getSecret(clusterId: number, namespace: string, secretName: string): Promise<ApiResponse<SecretDetails>> {
@@ -469,7 +469,7 @@ export const networkPolicyApi = {
     if (clusterId) params += `cluster_id=${clusterId}`;
     if (namespace) params += `${params ? '&' : ''}namespace=${namespace}`;
     const query = params ? `?${params}` : '';
-    return apiClient.get<NetworkPolicy[]>(`/network-policies${query}`);
+    return apiClient.get<NetworkPolicy[]>(`/network-policies/${query}`);
   },
 
   async getNetworkPolicy(clusterId: number, namespace: string, policyName: string): Promise<ApiResponse<NetworkPolicyDetails>> {
@@ -496,7 +496,7 @@ export const resourceQuotaApi = {
     if (clusterId) params += `cluster_id=${clusterId}`;
     if (namespace) params += `${params ? '&' : ''}namespace=${namespace}`;
     const query = params ? `?${params}` : '';
-    return apiClient.get<ResourceQuota[]>(`/resource-quotas${query}`);
+    return apiClient.get<ResourceQuota[]>(`/resource-quotas/${query}`);
   },
 
   async getResourceQuota(clusterId: number, namespace: string, quotaName: string): Promise<ApiResponse<ResourceQuotaDetails>> {

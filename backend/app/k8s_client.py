@@ -1626,6 +1626,7 @@ def get_namespace_configmaps(cluster: Cluster, namespace: str) -> List[Dict[str,
     """获取命名空间中的ConfigMaps"""
     client_instance = create_k8s_client(cluster)
     if not client_instance:
+        print(f"警告: 无法连接到集群 {cluster.name}，返回空列表")
         return []
 
     try:
@@ -1659,14 +1660,17 @@ def get_namespace_configmaps(cluster: Cluster, namespace: str) -> List[Dict[str,
                 "data": data,
                 "labels": dict(cm.metadata.labels) if cm.metadata.labels else {},
                 "annotations": dict(cm.metadata.annotations) if cm.metadata.annotations else {},
-                "age": age
+                "age": age,
+                "cluster_name": cluster.name,
+                "cluster_id": cluster.id
             }
             configmap_list.append(configmap_info)
 
         return configmap_list
 
     except Exception as e:
-        print(f"获取ConfigMaps失败: {e}")
+        print(f"获取ConfigMaps失败 (集群: {cluster.name}, 命名空间: {namespace}): {e}")
+        # 返回空列表而不是抛出异常，让前端能正常工作
         return []
     finally:
         if client_instance:
