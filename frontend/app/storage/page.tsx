@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { LogOut, Database, Plus, Trash2, Eye, Loader2 } from "lucide-react";
+import { LogOut, Database, Plus, Trash2, Eye, Loader2, ArrowLeft } from "lucide-react";
 import ClusterSelector from "@/components/ClusterSelector";
 import { useAuth } from "@/lib/auth-context";
 import { useCluster } from "@/lib/cluster-context";
@@ -300,17 +300,13 @@ export default function StorageManagement() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
-              <Database className="h-8 w-8 text-blue-600" />
-              <h1 className="ml-2 text-xl font-semibold text-gray-900 dark:text-white">
-                Canvas
-              </h1>
+              <Link href="/" className="flex items-center">
+                <ArrowLeft className="h-5 w-5 mr-2" />
+                <span className="text-gray-600 dark:text-gray-400">返回仪表板</span>
+              </Link>
             </div>
             <div className="flex items-center space-x-4">
               <ClusterSelector />
-              <Button variant="outline" onClick={logout}>
-                <LogOut className="h-4 w-4 mr-2" />
-                登出
-              </Button>
             </div>
           </div>
         </div>
@@ -343,21 +339,12 @@ export default function StorageManagement() {
         /* Main Content */
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-3xl font-bold text-gray-900 dark:text-white">
-                存储管理
-              </h2>
-              <p className="mt-2 text-gray-600 dark:text-gray-400">
-                管理存储类、持久卷和持久卷声明
-              </p>
-            </div>
-            <Button asChild>
-              <Link href="/">
-                返回首页
-              </Link>
-            </Button>
-          </div>
+          <h2 className="text-3xl font-bold text-gray-900 dark:text-white">
+            存储管理
+          </h2>
+          <p className="mt-2 text-gray-600 dark:text-gray-400">
+            管理存储类、持久卷和持久卷声明
+          </p>
         </div>
 
         <Card>

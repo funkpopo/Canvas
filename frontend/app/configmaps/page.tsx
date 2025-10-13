@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -11,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Trash2, Eye, Loader2, FileText, Code } from "lucide-react";
+import { Plus, Trash2, Eye, Loader2, FileText, Code, ArrowLeft } from "lucide-react";
 import ClusterSelector from "@/components/ClusterSelector";
 import YamlEditor from "@/components/YamlEditor";
 import { useAuth } from "@/lib/auth-context";
@@ -278,29 +279,47 @@ data:
   }
 
   return (
-    <div className="container mx-auto p-6">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-3xl font-bold">ConfigMaps管理</h1>
-          <p className="text-muted-foreground">管理Kubernetes集群中的配置映射（支持YAML格式编辑）</p>
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      {/* Header */}
+      <header className="bg-white dark:bg-gray-800 shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <div className="flex items-center">
+              <Link href="/" className="flex items-center">
+                <ArrowLeft className="h-5 w-5 mr-2" />
+                <span className="text-gray-600 dark:text-gray-400">返回仪表板</span>
+              </Link>
+            </div>
+            <div className="flex items-center space-x-4">
+              <ClusterSelector
+                value={selectedClusterId?.toString() || ""}
+                onValueChange={(value) => setSelectedClusterId(value ? parseInt(value) : null)}
+              />
+              <Select value={selectedNamespace} onValueChange={setSelectedNamespace}>
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue placeholder="选择命名空间" />
+                </SelectTrigger>
+                <SelectContent>
+                  {namespaces.map(ns => (
+                    <SelectItem key={ns} value={ns}>{ns}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
         </div>
-        <div className="flex items-center gap-4">
-          <ClusterSelector
-            value={selectedClusterId?.toString() || ""}
-            onValueChange={(value) => setSelectedClusterId(value ? parseInt(value) : null)}
-          />
-          <Select value={selectedNamespace} onValueChange={setSelectedNamespace}>
-            <SelectTrigger className="w-[200px]">
-              <SelectValue placeholder="选择命名空间" />
-            </SelectTrigger>
-            <SelectContent>
-              {namespaces.map(ns => (
-                <SelectItem key={ns} value={ns}>{ns}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      </header>
+
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="mb-8">
+          <h2 className="text-3xl font-bold text-gray-900 dark:text-white">
+            ConfigMaps管理
+          </h2>
+          <p className="mt-2 text-gray-600 dark:text-gray-400">
+            管理Kubernetes集群中的配置映射（支持YAML格式编辑）
+          </p>
         </div>
-      </div>
 
       <Card>
         <CardHeader>
@@ -425,6 +444,7 @@ data:
           )}
         </CardContent>
       </Card>
+      </main>
 
       {/* ConfigMap详情预览对话框 */}
       <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>

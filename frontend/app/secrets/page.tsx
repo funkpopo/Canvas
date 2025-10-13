@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -11,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2, Eye, Loader2, Lock, Code } from "lucide-react";
+import { Plus, Trash2, Eye, Loader2, Lock, Code, ArrowLeft } from "lucide-react";
 import ClusterSelector from "@/components/ClusterSelector";
 import YamlEditor from "@/components/YamlEditor";
 import { useAuth } from "@/lib/auth-context";
@@ -252,32 +253,48 @@ stringData:
   }
 
   return (
-    <div className="container mx-auto p-6">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-3xl font-bold flex items-center gap-2">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      {/* Header */}
+      <header className="bg-white dark:bg-gray-800 shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <div className="flex items-center">
+              <Link href="/" className="flex items-center">
+                <ArrowLeft className="h-5 w-5 mr-2" />
+                <span className="text-gray-600 dark:text-gray-400">返回仪表板</span>
+              </Link>
+            </div>
+            <div className="flex items-center space-x-4">
+              <ClusterSelector
+                value={selectedClusterId?.toString() || ""}
+                onValueChange={(value) => setSelectedClusterId(value ? parseInt(value) : null)}
+              />
+              <Select value={selectedNamespace} onValueChange={setSelectedNamespace}>
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue placeholder="选择命名空间" />
+                </SelectTrigger>
+                <SelectContent>
+                  {namespaces.map(ns => (
+                    <SelectItem key={ns} value={ns}>{ns}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="mb-8">
+          <h2 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
             <Lock className="w-8 h-8" />
             Secrets管理
-          </h1>
-          <p className="text-muted-foreground">管理Kubernetes集群中的机密数据（支持YAML格式编辑）</p>
+          </h2>
+          <p className="mt-2 text-gray-600 dark:text-gray-400">
+            管理Kubernetes集群中的机密数据（支持YAML格式编辑）
+          </p>
         </div>
-        <div className="flex items-center gap-4">
-          <ClusterSelector
-            value={selectedClusterId?.toString() || ""}
-            onValueChange={(value) => setSelectedClusterId(value ? parseInt(value) : null)}
-          />
-          <Select value={selectedNamespace} onValueChange={setSelectedNamespace}>
-            <SelectTrigger className="w-[200px]">
-              <SelectValue placeholder="选择命名空间" />
-            </SelectTrigger>
-            <SelectContent>
-              {namespaces.map(ns => (
-                <SelectItem key={ns} value={ns}>{ns}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
 
       <Card>
         <CardHeader>
@@ -396,6 +413,7 @@ stringData:
           )}
         </CardContent>
       </Card>
+      </main>
 
       {/* Secret YAML预览对话框 */}
       <Dialog open={isYamlPreviewOpen} onOpenChange={setIsYamlPreviewOpen}>
