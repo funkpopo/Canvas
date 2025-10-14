@@ -133,13 +133,13 @@ export default function VolumeDetail() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="bg-white dark:bg-gray-800 shadow-sm border-b">
+      <header className="bg-card shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
-              <Database className="h-8 w-8 text-blue-600" />
+              <Database className="h-8 w-8 text-zinc-600" />
               <h1 className="ml-2 text-xl font-semibold text-gray-900 dark:text-white">
                 Canvas
               </h1>
@@ -283,12 +283,12 @@ export default function VolumeDetail() {
                       <TableCell className="font-medium">
                         <div className="flex items-center">
                           {file.type === "directory" ? (
-                            <Folder className="h-4 w-4 mr-2 text-blue-500" />
+                            <Folder className="h-4 w-4 mr-2 text-zinc-500" />
                           ) : (
                             <FileText className="h-4 w-4 mr-2 text-gray-500" />
                           )}
                           <span
-                            className={file.type === "directory" ? "text-blue-600 cursor-pointer hover:underline" : "cursor-pointer hover:underline"}
+                            className={file.type === "directory" ? "text-zinc-600 cursor-pointer hover:underline" : "cursor-pointer hover:underline"}
                             onClick={() => handleFileClick(file.name, file.type)}
                           >
                             {file.name}
@@ -338,7 +338,7 @@ export default function VolumeDetail() {
               </DialogDescription>
             </DialogHeader>
             <div className="max-h-[60vh] overflow-auto">
-              <pre className="text-sm font-mono bg-gray-50 dark:bg-gray-800 p-4 rounded whitespace-pre-wrap">
+              <pre className="text-sm font-mono bg-muted p-4 rounded whitespace-pre-wrap">
                 {fileContent}
               </pre>
             </div>

@@ -42,8 +42,8 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
 
 function DefaultErrorFallback({ error, resetError }: { error: Error; resetError: () => void }) {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-      <div className="max-w-md mx-auto bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="max-w-md mx-auto bg-card rounded-lg shadow-lg p-6">
         <h2 className="text-xl font-bold text-red-600 dark:text-red-400 mb-4">
           发生错误
         </h2>
@@ -52,7 +52,7 @@ function DefaultErrorFallback({ error, resetError }: { error: Error; resetError:
         </p>
         <button
           onClick={resetError}
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+          className="px-4 py-2 bg-zinc-600 text-white rounded hover:bg-zinc-700 transition-colors"
         >
           重试
         </button>

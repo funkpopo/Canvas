@@ -236,7 +236,7 @@ export default function NetworkPolicyForm({
                       </Button>
                     </div>
                     {Object.entries(formData.pod_selector).map(([key, value]) => (
-                      <div key={key} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                      <div key={key} className="flex items-center justify-between p-2 bg-muted rounded">
                         <span className="text-sm">{key}: {value}</span>
                         <Button
                           type="button"
@@ -282,7 +282,7 @@ export default function NetworkPolicyForm({
                       </Button>
                     </div>
                     {Object.entries(formData.labels).map(([key, value]) => (
-                      <div key={key} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                      <div key={key} className="flex items-center justify-between p-2 bg-muted rounded">
                         <span className="text-sm">{key}: {value}</span>
                         <Button
                           type="button"
@@ -317,7 +317,7 @@ export default function NetworkPolicyForm({
                       </Button>
                     </div>
                     {Object.entries(formData.annotations).map(([key, value]) => (
-                      <div key={key} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                      <div key={key} className="flex items-center justify-between p-2 bg-muted rounded">
                         <span className="text-sm">{key}: {value}</span>
                         <Button
                           type="button"

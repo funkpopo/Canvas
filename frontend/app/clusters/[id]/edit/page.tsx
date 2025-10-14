@@ -55,7 +55,7 @@ function EditClusterPageContent() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin mr-2" />
         <span className="text-lg">加载中...</span>
       </div>
@@ -64,7 +64,7 @@ function EditClusterPageContent() {
 
   if (!cluster) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
             集群不存在
@@ -72,7 +72,7 @@ function EditClusterPageContent() {
           <p className="text-gray-600 dark:text-gray-400 mb-4">
             您请求的集群不存在或已被删除
           </p>
-          <Link href="/clusters" className="text-blue-600 hover:text-blue-500">
+          <Link href="/clusters" className="text-zinc-600 hover:text-zinc-500">
             返回集群列表
           </Link>
         </div>
@@ -81,9 +81,9 @@ function EditClusterPageContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="bg-white dark:bg-gray-800 shadow-sm border-b">
+      <header className="bg-card shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">

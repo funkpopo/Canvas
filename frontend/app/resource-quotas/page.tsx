@@ -184,9 +184,9 @@ export default function ResourceQuotasManagement() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="bg-white dark:bg-gray-800 shadow-sm border-b">
+      <header className="bg-card shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
@@ -346,7 +346,7 @@ export default function ResourceQuotasManagement() {
                 <Label className="font-medium">硬限制</Label>
                 <div className="mt-1">
                   {selectedQuota.hard && Object.keys(selectedQuota.hard).length > 0 ? (
-                    <div className="bg-gray-50 p-3 rounded">
+                    <div className="bg-muted p-3 rounded">
                       <div className="grid grid-cols-2 gap-4">
                         {Object.entries(selectedQuota.hard).map(([key, value]) => (
                           <div key={key} className="flex justify-between items-center">
@@ -366,7 +366,7 @@ export default function ResourceQuotasManagement() {
                 <Label className="font-medium">已使用</Label>
                 <div className="mt-1">
                   {selectedQuota.used && Object.keys(selectedQuota.used).length > 0 ? (
-                    <div className="bg-gray-50 p-3 rounded">
+                    <div className="bg-muted p-3 rounded">
                       <div className="grid grid-cols-2 gap-4">
                         {Object.entries(selectedQuota.used).map(([key, value]) => (
                           <div key={key} className="flex justify-between items-center">
@@ -386,7 +386,7 @@ export default function ResourceQuotasManagement() {
                 <Label className="font-medium">标签</Label>
                 <div className="mt-1">
                   {selectedQuota.labels && Object.keys(selectedQuota.labels).length > 0 ? (
-                    <div className="bg-gray-50 p-2 rounded text-sm font-mono">
+                    <div className="bg-muted p-2 rounded text-sm font-mono">
                       {JSON.stringify(selectedQuota.labels, null, 2)}
                     </div>
                   ) : (
@@ -399,7 +399,7 @@ export default function ResourceQuotasManagement() {
                 <Label className="font-medium">注解</Label>
                 <div className="mt-1">
                   {selectedQuota.annotations && Object.keys(selectedQuota.annotations).length > 0 ? (
-                    <div className="bg-gray-50 p-2 rounded text-sm font-mono">
+                    <div className="bg-muted p-2 rounded text-sm font-mono">
                       {JSON.stringify(selectedQuota.annotations, null, 2)}
                     </div>
                   ) : (
@@ -425,7 +425,7 @@ export default function ResourceQuotasManagement() {
                 <div>
                   <Label className="font-medium">作用域选择器</Label>
                   <div className="mt-1">
-                    <div className="bg-gray-50 p-2 rounded text-sm font-mono">
+                    <div className="bg-muted p-2 rounded text-sm font-mono">
                       {JSON.stringify(selectedQuota.scope_selector, null, 2)}
                     </div>
                   </div>

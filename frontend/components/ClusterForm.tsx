@@ -185,7 +185,7 @@ export default function ClusterForm({ initialData, isEdit = false, clusterId }: 
                   />
                   <Label
                     htmlFor="kubeconfig-file"
-                    className="flex items-center space-x-2 cursor-pointer bg-gray-50 dark:bg-gray-800 px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700"
+                    className="flex items-center space-x-2 cursor-pointer bg-muted px-3 py-2 rounded-md border hover:bg-muted/80"
                   >
                     <Upload className="h-4 w-4" />
                     <span>选择Kubeconfig文件</span>

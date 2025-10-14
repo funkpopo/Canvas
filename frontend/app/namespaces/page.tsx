@@ -194,9 +194,9 @@ function NamespacesPageContent() {
 
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="bg-white dark:bg-gray-800 shadow-sm border-b">
+      <header className="bg-card shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
@@ -242,7 +242,7 @@ function NamespacesPageContent() {
                     {activeCluster && (
                       <div>
                         <Label>目标集群</Label>
-                        <div className="px-3 py-2 bg-gray-50 rounded-md text-sm">
+                        <div className="px-3 py-2 bg-muted rounded-md text-sm">
                           {activeCluster.name} ({activeCluster.endpoint})
                         </div>
                       </div>

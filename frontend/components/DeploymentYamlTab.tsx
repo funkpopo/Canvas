@@ -150,7 +150,7 @@ export default function DeploymentYamlTab({ namespace, deployment, clusterId }: 
             value={yamlContent}
             onChange={(e) => setYamlContent(e.target.value)}
             readOnly={!isEditing}
-            className={`min-h-[600px] font-mono text-sm ${isEditing ? 'border-blue-500' : 'border-gray-200'}`}
+            className={`min-h-[600px] font-mono text-sm ${isEditing ? 'border-zinc-500' : 'border-gray-200'}`}
             placeholder="YAML配置将在这里显示..."
           />
         )}

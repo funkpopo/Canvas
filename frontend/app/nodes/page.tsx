@@ -74,9 +74,9 @@ function NodesPageContent() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="bg-white dark:bg-gray-800 shadow-sm border-b">
+      <header className="bg-card shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
@@ -160,7 +160,7 @@ function NodesPageContent() {
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center">
-                          <Cpu className="h-4 w-4 mr-1 text-blue-500" />
+                          <Cpu className="h-4 w-4 mr-1 text-zinc-500" />
                           <span className="text-sm">CPU</span>
                         </div>
                         <div className="text-right">

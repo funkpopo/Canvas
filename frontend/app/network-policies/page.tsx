@@ -207,9 +207,9 @@ export default function NetworkPoliciesManagement() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="bg-white dark:bg-gray-800 shadow-sm border-b">
+      <header className="bg-card shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
@@ -378,7 +378,7 @@ export default function NetworkPoliciesManagement() {
                 <Label className="font-medium">Pod选择器</Label>
                 <div className="mt-1">
                   {selectedPolicy.pod_selector && Object.keys(selectedPolicy.pod_selector).length > 0 ? (
-                    <div className="bg-gray-50 p-2 rounded text-sm font-mono">
+                    <div className="bg-muted p-2 rounded text-sm font-mono">
                       {JSON.stringify(selectedPolicy.pod_selector, null, 2)}
                     </div>
                   ) : (
@@ -406,7 +406,7 @@ export default function NetworkPoliciesManagement() {
                 <Label className="font-medium">标签</Label>
                 <div className="mt-1">
                   {selectedPolicy.labels && Object.keys(selectedPolicy.labels).length > 0 ? (
-                    <div className="bg-gray-50 p-2 rounded text-sm font-mono">
+                    <div className="bg-muted p-2 rounded text-sm font-mono">
                       {JSON.stringify(selectedPolicy.labels, null, 2)}
                     </div>
                   ) : (
@@ -419,7 +419,7 @@ export default function NetworkPoliciesManagement() {
                 <Label className="font-medium">注解</Label>
                 <div className="mt-1">
                   {selectedPolicy.annotations && Object.keys(selectedPolicy.annotations).length > 0 ? (
-                    <div className="bg-gray-50 p-2 rounded text-sm font-mono">
+                    <div className="bg-muted p-2 rounded text-sm font-mono">
                       {JSON.stringify(selectedPolicy.annotations, null, 2)}
                     </div>
                   ) : (
@@ -433,7 +433,7 @@ export default function NetworkPoliciesManagement() {
                   <Label className="font-medium">入站规则</Label>
                   <div className="mt-1 space-y-2">
                     {selectedPolicy.ingress.map((rule: any, index: number) => (
-                      <div key={index} className="bg-gray-50 p-3 rounded">
+                      <div key={index} className="bg-muted p-3 rounded">
                         <p className="text-sm font-medium">规则 {index + 1}</p>
                         {rule.from && rule.from.length > 0 && (
                           <div className="mt-2">
@@ -468,7 +468,7 @@ export default function NetworkPoliciesManagement() {
                   <Label className="font-medium">出站规则</Label>
                   <div className="mt-1 space-y-2">
                     {selectedPolicy.egress.map((rule: any, index: number) => (
-                      <div key={index} className="bg-gray-50 p-3 rounded">
+                      <div key={index} className="bg-muted p-3 rounded">
                         <p className="text-sm font-medium">规则 {index + 1}</p>
                         {rule.to && rule.to.length > 0 && (
                           <div className="mt-2">

@@ -87,7 +87,7 @@ export default function DeploymentScalingTab({ deploymentDetails, clusterId, onS
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center">
-              <Users className="h-8 w-8 text-blue-500" />
+              <Users className="h-8 w-8 text-zinc-500" />
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600 dark:text-gray-400">期望副本</p>
                 <p className="text-2xl font-bold">{deploymentDetails?.replicas || 0}</p>
