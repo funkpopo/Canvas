@@ -441,7 +441,7 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
                       </div>
                       <div>
                         <Label className="text-sm font-medium">策略</Label>
-                        <div className="mt-1">{deploymentDetails.strategy.type}</div>
+                        <div className="mt-1">{deploymentDetails.strategy?.type || 'RollingUpdate'}</div>
                       </div>
                     </div>
                   </CardContent>
@@ -453,24 +453,28 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
                     <CardTitle>容器信息</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    {deploymentDetails.spec.template.spec.containers.map((container: any, index: number) => (
-                      <div key={index} className="mb-4 last:mb-0">
-                        <div className="flex items-center justify-between mb-2">
-                          <h4 className="font-medium">{container.name}</h4>
-                          <Badge variant="outline">{container.image}</Badge>
-                        </div>
-                        {container.resources && (
-                          <div className="text-sm text-gray-600 dark:text-gray-400">
-                            {container.resources.requests && (
-                              <div>请求: CPU {container.resources.requests.cpu || '未设置'}, 内存 {container.resources.requests.memory || '未设置'}</div>
-                            )}
-                            {container.resources.limits && (
-                              <div>限制: CPU {container.resources.limits.cpu || '未设置'}, 内存 {container.resources.limits.memory || '未设置'}</div>
-                            )}
+                    {deploymentDetails.spec?.template?.spec?.containers ? (
+                      deploymentDetails.spec.template.spec.containers.map((container: any, index: number) => (
+                        <div key={index} className="mb-4 last:mb-0">
+                          <div className="flex items-center justify-between mb-2">
+                            <h4 className="font-medium">{container.name}</h4>
+                            <Badge variant="outline">{container.image}</Badge>
                           </div>
-                        )}
-                      </div>
-                    ))}
+                          {container.resources && (
+                            <div className="text-sm text-gray-600 dark:text-gray-400">
+                              {container.resources.requests && (
+                                <div>请求: CPU {container.resources.requests.cpu || '未设置'}, 内存 {container.resources.requests.memory || '未设置'}</div>
+                              )}
+                              {container.resources.limits && (
+                                <div>限制: CPU {container.resources.limits.cpu || '未设置'}, 内存 {container.resources.limits.memory || '未设置'}</div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-gray-500">无法获取容器信息</p>
+                    )}
                   </CardContent>
                 </Card>
 

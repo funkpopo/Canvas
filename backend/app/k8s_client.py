@@ -1173,6 +1173,24 @@ def get_deployment_details(cluster: Cluster, namespace: str, deployment_name: st
                     "message": condition.message
                 })
 
+        # 转换spec和status为字典格式
+        spec_dict = {}
+        status_dict = {}
+
+        try:
+            # 将Kubernetes对象转换为字典
+            spec_dict = client.ApiClient().sanitize_for_serialization(deployment.spec)
+        except Exception as e:
+            print(f"转换spec失败: {e}")
+            spec_dict = {}
+
+        try:
+            # 将Kubernetes对象转换为字典
+            status_dict = client.ApiClient().sanitize_for_serialization(deployment.status)
+        except Exception as e:
+            print(f"转换status失败: {e}")
+            status_dict = {}
+
         return {
             "name": deployment.metadata.name,
             "namespace": namespace,
@@ -1188,8 +1206,8 @@ def get_deployment_details(cluster: Cluster, namespace: str, deployment_name: st
             "labels": dict(deployment.metadata.labels) if deployment.metadata.labels else {},
             "annotations": dict(deployment.metadata.annotations) if deployment.metadata.annotations else {},
             "conditions": conditions,
-            "spec": {},  # 简化处理
-            "status": {},   # 简化处理
+            "spec": spec_dict,
+            "status": status_dict,
             "cluster_name": cluster.name,
             "cluster_id": cluster.id
         }
@@ -1534,15 +1552,81 @@ def update_deployment(cluster: Cluster, namespace: str, deployment_name: str, up
 
 
 def get_deployment_yaml(cluster: Cluster, namespace: str, deployment_name: str) -> Optional[str]:
-    """获取部署YAML（暂未实现）"""
-    print(f"get_deployment_yaml 暂未实现: {namespace}/{deployment_name}")
-    return None
+    """获取部署YAML"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        print(f"无法创建Kubernetes客户端连接: {cluster.name}")
+        return None
+
+    try:
+        apps_v1 = client.AppsV1Api(client_instance)
+        print(f"正在获取部署: {namespace}/{deployment_name} 在集群 {cluster.name}")
+        deployment = apps_v1.read_namespaced_deployment(deployment_name, namespace)
+
+        # 将Kubernetes对象转换为YAML
+        import yaml
+        from io import StringIO
+
+        # 使用Kubernetes Python客户端的序列化方法
+        api_client = client.ApiClient()
+        deployment_dict = api_client.sanitize_for_serialization(deployment)
+
+        # 转换为YAML字符串
+        yaml_output = StringIO()
+        yaml.dump(deployment_dict, yaml_output, default_flow_style=False, allow_unicode=True, sort_keys=False)
+        yaml_content = yaml_output.getvalue()
+
+        print(f"成功获取部署YAML，长度: {len(yaml_content)} 字符")
+        return yaml_content
+
+    except Exception as e:
+        print(f"获取部署YAML失败: {namespace}/{deployment_name}, 错误: {e}")
+        import traceback
+        print(f"详细错误信息: {traceback.format_exc()}")
+        return None
+    finally:
+        if client_instance:
+            client_instance.close()
 
 
 def update_deployment_yaml(cluster: Cluster, namespace: str, deployment_name: str, yaml_content: str) -> bool:
-    """更新部署YAML（暂未实现）"""
-    print(f"update_deployment_yaml 暂未实现: {namespace}/{deployment_name}")
-    return False
+    """更新部署YAML"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        import yaml
+        from kubernetes.client.models import V1Deployment
+
+        apps_v1 = client.AppsV1Api(client_instance)
+
+        # 解析YAML内容
+        deployment_dict = yaml.safe_load(yaml_content)
+
+        # 创建Deployment对象
+        deployment = V1Deployment(
+            api_version=deployment_dict.get('apiVersion'),
+            kind=deployment_dict.get('kind'),
+            metadata=client.V1ObjectMeta(**deployment_dict.get('metadata', {})),
+            spec=client.V1DeploymentSpec(**deployment_dict.get('spec', {}))
+        )
+
+        # 更新部署
+        apps_v1.replace_namespaced_deployment(
+            name=deployment_name,
+            namespace=namespace,
+            body=deployment
+        )
+
+        return True
+
+    except Exception as e:
+        print(f"更新部署YAML失败: {e}")
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
 
 
 def update_service(cluster: Cluster, namespace: str, service_name: str, update_data: dict) -> bool:

@@ -19,9 +19,14 @@ export default function DeploymentYamlTab({ namespace, deployment, clusterId }: 
   const [isSaving, setIsSaving] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
 
-  const fetchYaml = async () => {
-    if (!clusterId) return;
+  const fetchYaml = async (showSuccessToast = false) => {
+    if (!clusterId) {
+      console.error("clusterId 为空");
+      toast.error("缺少集群信息");
+      return;
+    }
 
+    console.log(`正在获取 YAML: ${namespace}/${deployment}, clusterId: ${clusterId}`);
     setIsLoading(true);
     try {
       const token = localStorage.getItem("token");
@@ -37,8 +42,14 @@ export default function DeploymentYamlTab({ namespace, deployment, clusterId }: 
       if (response.ok) {
         const data = await response.json();
         setYamlContent(data.yaml);
+        if (showSuccessToast) {
+          toast.success("YAML获取成功");
+        }
       } else {
-        toast.error("获取YAML失败");
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.detail || `获取YAML失败 (${response.status})`;
+        toast.error(errorMessage);
+        console.error("获取YAML失败:", response.status, errorData);
       }
     } catch (error) {
       console.error("获取YAML出错:", error);
@@ -69,7 +80,7 @@ export default function DeploymentYamlTab({ namespace, deployment, clusterId }: 
       if (response.ok) {
         toast.success("YAML更新成功");
         setIsEditing(false);
-        fetchYaml(); // 重新获取以确保显示最新内容
+        fetchYaml(false); // 重新获取以确保显示最新内容，不显示成功提示
       } else {
         toast.error("更新YAML失败");
       }
@@ -82,7 +93,7 @@ export default function DeploymentYamlTab({ namespace, deployment, clusterId }: 
   };
 
   useEffect(() => {
-    fetchYaml();
+    fetchYaml(false); // 初始加载不显示成功提示
   }, [namespace, deployment, clusterId]);
 
   return (
@@ -96,7 +107,7 @@ export default function DeploymentYamlTab({ namespace, deployment, clusterId }: 
             </CardDescription>
           </div>
           <div className="flex items-center space-x-2">
-            <Button variant="outline" onClick={fetchYaml} disabled={isLoading}>
+            <Button variant="outline" onClick={() => fetchYaml(true)} disabled={isLoading}>
               {isLoading ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               ) : (

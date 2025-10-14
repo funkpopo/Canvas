@@ -319,16 +319,21 @@ async def update_deployment_endpoint(
 async def get_deployment_yaml_endpoint(
     namespace: str,
     deployment_name: str,
-    cluster_id: int = Query(..., description="集群ID"),
+    cluster_id: str = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     """获取部署的YAML配置"""
     try:
-        if not isinstance(cluster_id, int) or cluster_id <= 0:
+        try:
+            cluster_id_int = int(cluster_id)
+        except ValueError:
+            raise HTTPException(status_code=422, detail="集群ID必须是有效的整数")
+
+        if cluster_id_int <= 0:
             raise HTTPException(status_code=422, detail="无效的集群ID")
 
-        cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
+        cluster = db.query(Cluster).filter(Cluster.id == cluster_id_int, Cluster.is_active == True).first()
         if not cluster:
             raise HTTPException(status_code=404, detail="集群不存在或未激活")
 
@@ -347,16 +352,21 @@ async def update_deployment_yaml_endpoint(
     namespace: str,
     deployment_name: str,
     yaml_request: YamlUpdateRequest,
-    cluster_id: int = Query(..., description="集群ID"),
+    cluster_id: str = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     """通过YAML更新部署"""
     try:
-        if not isinstance(cluster_id, int) or cluster_id <= 0:
+        try:
+            cluster_id_int = int(cluster_id)
+        except ValueError:
+            raise HTTPException(status_code=422, detail="集群ID必须是有效的整数")
+
+        if cluster_id_int <= 0:
             raise HTTPException(status_code=422, detail="无效的集群ID")
 
-        cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
+        cluster = db.query(Cluster).filter(Cluster.id == cluster_id_int, Cluster.is_active == True).first()
         if not cluster:
             raise HTTPException(status_code=404, detail="集群不存在或未激活")
 
