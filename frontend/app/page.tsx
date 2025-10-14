@@ -6,7 +6,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
-import { LogOut, Server, FolderPen, Activity, Settings, Database, Loader2, Settings2, Cpu, Shield, Lock } from "lucide-react";
+import { LogOut, Server, FolderPen, Activity, Settings, Database, Loader2, Settings2, Cpu, Shield, Lock, AlertCircle } from "lucide-react";
 import ClusterSelector from "@/components/ClusterSelector";
 import { useAuth } from "@/lib/auth-context";
 
@@ -249,6 +249,12 @@ export default function Home() {
                 <Link href="/resource-quotas">
                   <Cpu className="h-6 w-6 mb-2" />
                   资源配额
+                </Link>
+              </Button>
+              <Button variant="outline" className="h-20 flex-col" asChild>
+                <Link href="/events">
+                  <AlertCircle className="h-6 w-6 mb-2" />
+                  事件查看
                 </Link>
               </Button>
               <Button variant="outline" className="h-20 flex-col" asChild>

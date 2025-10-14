@@ -3349,3 +3349,89 @@ def read_volume_file(cluster: Cluster, pv_name: str, file_path: str, max_lines: 
     except Exception as e:
         print(f"读取卷文件失败: {e}")
         return None
+
+
+def get_cluster_events(cluster: Cluster, namespace: Optional[str] = None, limit: int = 100) -> List[Dict[str, Any]]:
+    """获取集群或命名空间的事件"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return []
+
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+        events = []
+
+        if namespace:
+            # 获取指定命名空间的事件
+            event_list = core_v1.list_namespaced_event(namespace)
+        else:
+            # 获取集群级别的事件（所有命名空间）
+            event_list = core_v1.list_event_for_all_namespaces()
+
+        # 按时间排序，最新的在前
+        def get_event_time(event):
+            # 优先使用last_timestamp，如果没有则使用event_time，如果都没有则使用first_timestamp
+            timestamp = event.last_timestamp or event.event_time or event.first_timestamp
+            if timestamp:
+                # 如果是datetime对象，返回它，否则返回一个很早的时间
+                if hasattr(timestamp, 'timestamp'):
+                    return timestamp.timestamp()
+                else:
+                    # 如果是字符串或其他格式，尝试转换
+                    try:
+                        from datetime import datetime
+                        return datetime.fromisoformat(str(timestamp).replace('Z', '+00:00')).timestamp()
+                    except:
+                        pass
+            # 如果都没有有效时间戳，返回0（最早的时间）
+            return 0
+
+        sorted_events = sorted(event_list.items, key=get_event_time, reverse=True)
+
+        for event in sorted_events[:limit]:
+            # 计算事件年龄
+            age = "Unknown"
+            if event.last_timestamp:
+                from datetime import datetime, timezone
+                now = datetime.now(timezone.utc)
+                last_time = event.last_timestamp
+                if hasattr(last_time, 'replace'):  # datetime对象
+                    delta = now - last_time.replace(tzinfo=timezone.utc)
+                else:  # 其他格式
+                    continue
+
+                if delta.days > 0:
+                    age = f"{delta.days}d"
+                elif delta.seconds // 3600 > 0:
+                    age = f"{delta.seconds // 3600}h"
+                elif delta.seconds // 60 > 0:
+                    age = f"{delta.seconds // 60}m"
+                else:
+                    age = f"{delta.seconds}s"
+
+            events.append({
+                "name": event.metadata.name,
+                "namespace": event.metadata.namespace,
+                "type": event.type,
+                "reason": event.reason,
+                "message": event.message,
+                "source": event.source.component if event.source else None,
+                "count": event.count,
+                "first_timestamp": str(event.first_timestamp) if event.first_timestamp else None,
+                "last_timestamp": str(event.last_timestamp) if event.last_timestamp else None,
+                "age": age,
+                "involved_object": {
+                    "kind": event.involved_object.kind,
+                    "name": event.involved_object.name,
+                    "namespace": event.involved_object.namespace
+                } if event.involved_object else None
+            })
+
+        return events
+
+    except Exception as e:
+        print(f"获取集群事件失败: {e}")
+        return []
+    finally:
+        if client_instance:
+            client_instance.close()
