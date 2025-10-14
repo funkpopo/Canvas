@@ -52,6 +52,7 @@ function PodsPageContent() {
 
   const fetchPods = async () => {
     try {
+      setIsLoading(true);
       const token = localStorage.getItem("token");
       const url = new URL("http://localhost:8000/api/pods");
 
@@ -86,42 +87,6 @@ function PodsPageContent() {
       setAvailableNamespaces([]);
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const handleRestartPod = (pod: PodInfo) => {
-    setConfirmDialog({
-      open: true,
-      title: "重启Pod",
-      description: `确定要重启Pod "${pod.name}" 吗？`,
-      onConfirm: () => performRestartPod(pod),
-      showForceOption: false,
-      forceOption: false,
-    });
-  };
-
-  const performRestartPod = async (pod: PodInfo) => {
-    try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(
-        `http://localhost:8000/api/pods/${pod.namespace}/${pod.name}/restart?cluster_id=${pod.cluster_id}`,
-        {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (response.ok) {
-        toast.success("Pod重启成功");
-        fetchPods();
-      } else {
-        toast.error("重启Pod失败");
-      }
-    } catch (error) {
-      console.error("重启Pod出错:", error);
-      toast.error("重启Pod时发生错误");
     }
   };
 
@@ -319,17 +284,6 @@ function PodsPageContent() {
                         title="查看日志"
                       >
                         <FileText className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleRestartPod(pod);
-                        }}
-                        title="重启Pod"
-                      >
-                        <RefreshCw className="h-4 w-4" />
                       </Button>
                       <Button
                         size="sm"
