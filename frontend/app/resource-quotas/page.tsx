@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Label } from "@/components/ui/label";
 import { Plus, Trash2, Eye, Loader2, Cpu, ArrowLeft } from "lucide-react";
 import ClusterSelector from "@/components/ClusterSelector";
+import ResourceQuotaForm from "@/components/ResourceQuotaForm";
 import { useAuth } from "@/lib/auth-context";
 import { useCluster } from "@/lib/cluster-context";
 import { resourceQuotaApi } from "@/lib/api";
@@ -31,7 +32,7 @@ interface ResourceQuota {
 
 export default function ResourceQuotasManagement() {
   const [quotas, setQuotas] = useState<ResourceQuota[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isQuotasLoading, setIsQuotasLoading] = useState(true);
   const [selectedClusterId, setSelectedClusterId] = useState<number | null>(null);
   const [selectedNamespace, setSelectedNamespace] = useState<string>("default");
   const [namespaces, setNamespaces] = useState<string[]>([]);
@@ -41,14 +42,17 @@ export default function ResourceQuotasManagement() {
   const [selectedQuota, setSelectedQuota] = useState<any | null>(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
 
-  const { user } = useAuth();
+  // 创建对话框状态
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+
+  const { user, isAuthenticated, isLoading } = useAuth();
   const { clusters } = useCluster();
   const router = useRouter();
 
   const fetchResourceQuotas = async () => {
     if (!selectedClusterId || !selectedNamespace) return;
 
-    setIsLoading(true);
+    setIsQuotasLoading(true);
     try {
       const response = await resourceQuotaApi.getResourceQuotas(selectedClusterId, selectedNamespace);
       if (response.data) {
@@ -56,10 +60,11 @@ export default function ResourceQuotasManagement() {
       } else if (response.error) {
         toast.error(`获取Resource Quota列表失败: ${response.error}`);
       }
-    } catch {
-      toast.error("获取Resource Quota列表失败");
+    } catch (error) {
+      console.error("获取Resource Quota列表失败:", error);
+      toast.error(`获取Resource Quota列表失败: ${error instanceof Error ? error.message : '网络错误'}`);
     } finally {
-      setIsLoading(false);
+      setIsQuotasLoading(false);
     }
   };
 
@@ -137,7 +142,37 @@ export default function ResourceQuotasManagement() {
     }
   };
 
-  if (!user) {
+  // 创建Resource Quota
+  const handleCreateResourceQuota = async (quotaData: any) => {
+    if (!selectedClusterId) {
+      toast.error("请选择集群");
+      return;
+    }
+
+    try {
+      const response = await resourceQuotaApi.createResourceQuota(selectedClusterId, quotaData);
+      if (!response.error) {
+        toast.success("Resource Quota创建成功");
+        setIsCreateOpen(false);
+        fetchResourceQuotas();
+      } else {
+        toast.error(`创建Resource Quota失败: ${response.error}`);
+      }
+    } catch {
+      toast.error("创建Resource Quota失败");
+    }
+  };
+
+  // 检查认证状态
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated || !user) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
@@ -201,14 +236,14 @@ export default function ResourceQuotasManagement() {
                 {selectedNamespace ? `命名空间: ${selectedNamespace}` : "请选择命名空间"}
               </CardDescription>
             </div>
-            <Button disabled>
+            <Button onClick={() => setIsCreateOpen(true)}>
               <Plus className="w-4 h-4 mr-2" />
-              创建Resource Quota (开发中)
+              创建Resource Quota
             </Button>
           </div>
         </CardHeader>
         <CardContent>
-          {isLoading ? (
+          {isQuotasLoading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="w-8 h-8 animate-spin" />
               <span className="ml-2">加载中...</span>
@@ -401,6 +436,20 @@ export default function ResourceQuotasManagement() {
           <DialogFooter>
             <Button onClick={() => setIsPreviewOpen(false)}>关闭</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 创建Resource Quota对话框 */}
+      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>创建Resource Quota</DialogTitle>
+          </DialogHeader>
+          <ResourceQuotaForm
+            onSubmit={handleCreateResourceQuota}
+            onCancel={() => setIsCreateOpen(false)}
+            namespaces={namespaces}
+          />
         </DialogContent>
       </Dialog>
     </div>

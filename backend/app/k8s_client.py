@@ -2006,7 +2006,9 @@ def get_namespace_resource_quotas(cluster: Cluster, namespace: str) -> List[Dict
                 "used": used,
                 "labels": dict(quota.metadata.labels) if quota.metadata.labels else {},
                 "annotations": dict(quota.metadata.annotations) if quota.metadata.annotations else {},
-                "age": age
+                "age": age,
+                "cluster_name": cluster.name,
+                "cluster_id": cluster.id
             }
             quota_list.append(quota_info)
 
@@ -2074,7 +2076,9 @@ def get_resource_quota_details(cluster: Cluster, namespace: str, quota_name: str
             "scope_selector": scope_selector,
             "labels": dict(quota.metadata.labels) if quota.metadata.labels else {},
             "annotations": dict(quota.metadata.annotations) if quota.metadata.annotations else {},
-            "age": age
+            "age": age,
+            "cluster_name": cluster.name,
+            "cluster_id": cluster.id
         }
 
     except Exception as e:
@@ -2135,9 +2139,50 @@ def create_resource_quota(cluster: Cluster, quota_data: dict) -> bool:
 
 
 def update_resource_quota(cluster: Cluster, namespace: str, quota_name: str, update_data: dict) -> bool:
-    """更新Resource Quota（暂未实现）"""
-    print(f"update_resource_quota 暂未实现: {namespace}/{quota_name}")
-    return False
+    """更新Resource Quota"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+
+        # 获取现有的Resource Quota
+        existing_quota = core_v1.read_namespaced_resource_quota(quota_name, namespace)
+
+        # 更新spec
+        if 'hard' in update_data:
+            existing_quota.spec.hard = update_data['hard']
+        if 'scopes' in update_data:
+            existing_quota.spec.scopes = update_data['scopes']
+        if 'scope_selector' in update_data and update_data['scope_selector']:
+            scope_selector = client.V1ScopeSelector()
+            match_expressions = []
+            for selector in update_data['scope_selector']:
+                match_expressions.append(client.V1ScopedResourceSelectorRequirement(
+                    scope_name=selector.get('scope_name'),
+                    operator=selector.get('operator'),
+                    values=selector.get('values', [])
+                ))
+            scope_selector.match_expressions = match_expressions
+            existing_quota.spec.scope_selector = scope_selector
+
+        # 更新metadata
+        if 'labels' in update_data:
+            existing_quota.metadata.labels = update_data['labels']
+        if 'annotations' in update_data:
+            existing_quota.metadata.annotations = update_data['annotations']
+
+        # 执行更新
+        core_v1.replace_namespaced_resource_quota(quota_name, namespace, existing_quota)
+        return True
+
+    except Exception as e:
+        print(f"更新Resource Quota失败: {e}")
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
 
 
 def delete_resource_quota(cluster: Cluster, namespace: str, quota_name: str) -> bool:

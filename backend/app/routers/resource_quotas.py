@@ -75,7 +75,6 @@ async def get_resource_quotas(
             else:
                 # 获取所有命名空间的Resource Quotas
                 quotas = []
-                # 这里可以扩展为获取所有命名空间的Resource Quotas
                 raise HTTPException(status_code=400, detail="必须指定命名空间")
         else:
             # 获取所有活跃集群的Resource Quotas
@@ -88,6 +87,8 @@ async def get_resource_quotas(
 
         return quotas
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取Resource Quota列表失败: {str(e)}")
 
@@ -134,6 +135,7 @@ async def create_new_resource_quota(
         # 构建Resource Quota数据
         quota_dict = {
             "name": quota_data.name,
+            "namespace": quota_data.namespace,
             "hard": quota_data.hard,
             "scopes": quota_data.scopes,
             "scope_selector": quota_data.scope_selector,
@@ -141,7 +143,7 @@ async def create_new_resource_quota(
             "annotations": quota_data.annotations
         }
 
-        success = create_resource_quota(cluster, quota_data.namespace, quota_dict)
+        success = create_resource_quota(cluster, quota_dict)
         if not success:
             raise HTTPException(status_code=500, detail="创建Resource Quota失败")
 
