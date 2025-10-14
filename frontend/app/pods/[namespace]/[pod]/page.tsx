@@ -7,8 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Activity, Cpu, MemoryStick, Loader2, RefreshCw, AlertCircle } from "lucide-react";
+import { ArrowLeft, Activity, Cpu, MemoryStick, Loader2, RefreshCw, AlertCircle, Square } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { toast } from "sonner";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 interface PodDetails {
   name: string;
@@ -67,6 +69,14 @@ export default function PodDetailsPage({ params }: { params: Promise<{ namespace
   const [metricsData, setMetricsData] = useState<MetricsData[]>([]);
   const [timeRange, setTimeRange] = useState("10m");
   const [isMetricsLoading, setIsMetricsLoading] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState({
+    open: false,
+    title: "",
+    description: "",
+    onConfirm: () => {},
+    showForceOption: false,
+    forceOption: false,
+  });
   const router = useRouter();
   const searchParams = useSearchParams();
   const clusterId = searchParams.get('cluster_id');
@@ -178,6 +188,55 @@ export default function PodDetailsPage({ params }: { params: Promise<{ namespace
     setTimeRange(value);
   };
 
+  const handleDeletePod = () => {
+    if (!podDetails) return;
+
+    setConfirmDialog({
+      open: true,
+      title: "删除Pod",
+      description: `确定要删除Pod "${podDetails.name}" 吗？此操作不可撤销。`,
+      onConfirm: () => performDeletePod(),
+      showForceOption: true,
+      forceOption: false,
+    });
+  };
+
+  const handleForceOptionChange = (checked: boolean) => {
+    setConfirmDialog(prev => ({ ...prev, forceOption: checked }));
+  };
+
+  const performDeletePod = async () => {
+    if (!podDetails || !clusterId) return;
+
+    try {
+      const token = localStorage.getItem("token");
+      const url = new URL(`http://localhost:8000/api/pods/${podDetails.namespace}/${podDetails.name}`);
+      url.searchParams.set('cluster_id', clusterId);
+      if (confirmDialog.forceOption) {
+        url.searchParams.set('force', 'true');
+      }
+
+      const response = await fetch(url.toString(), {
+        method: "DELETE",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const deleteType = confirmDialog.forceOption ? "强制" : "正常";
+        toast.success(`Pod${deleteType}删除成功`);
+        // 删除成功后返回Pod列表页面
+        router.push('/pods');
+      } else {
+        toast.error("删除Pod失败");
+      }
+    } catch (error) {
+      console.error("删除Pod出错:", error);
+      toast.error("删除Pod时发生错误");
+    }
+  };
+
   const getStatusBadgeVariant = (status: string) => {
     switch (status) {
       case "Running":
@@ -232,6 +291,10 @@ export default function PodDetailsPage({ params }: { params: Promise<{ namespace
                   <RefreshCw className="h-4 w-4 mr-2" />
                 )}
                 刷新
+              </Button>
+              <Button variant="destructive" onClick={handleDeletePod}>
+                <Square className="h-4 w-4 mr-2" />
+                删除Pod
               </Button>
             </div>
           </div>
@@ -446,6 +509,18 @@ export default function PodDetailsPage({ params }: { params: Promise<{ namespace
           </Card>
         )}
       </main>
+
+      <ConfirmDialog
+        open={confirmDialog.open}
+        onOpenChange={(open) => setConfirmDialog(prev => ({ ...prev, open }))}
+        title={confirmDialog.title}
+        description={confirmDialog.description}
+        onConfirm={confirmDialog.onConfirm}
+        variant="destructive"
+        showForceOption={confirmDialog.showForceOption}
+        forceOption={confirmDialog.forceOption}
+        onForceOptionChange={handleForceOptionChange}
+      />
     </div>
   );
 }

@@ -37,6 +37,8 @@ function PodsPageContent() {
     title: "",
     description: "",
     onConfirm: () => {},
+    showForceOption: false,
+    forceOption: false,
   });
   const router = useRouter();
   const { activeCluster, isLoading: isClusterLoading } = useCluster();
@@ -93,6 +95,8 @@ function PodsPageContent() {
       title: "重启Pod",
       description: `确定要重启Pod "${pod.name}" 吗？`,
       onConfirm: () => performRestartPod(pod),
+      showForceOption: false,
+      forceOption: false,
     });
   };
 
@@ -127,24 +131,34 @@ function PodsPageContent() {
       title: "删除Pod",
       description: `确定要删除Pod "${pod.name}" 吗？此操作不可撤销。`,
       onConfirm: () => performDeletePod(pod),
+      showForceOption: true,
+      forceOption: false,
     });
+  };
+
+  const handleForceOptionChange = (checked: boolean) => {
+    setConfirmDialog(prev => ({ ...prev, forceOption: checked }));
   };
 
   const performDeletePod = async (pod: PodInfo) => {
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch(
-        `http://localhost:8000/api/pods/${pod.namespace}/${pod.name}?cluster_id=${pod.cluster_id}`,
-        {
-          method: "DELETE",
-          headers: {
-            "Authorization": `Bearer ${token}`,
-          },
-        }
-      );
+      const url = new URL(`http://localhost:8000/api/pods/${pod.namespace}/${pod.name}`);
+      url.searchParams.set('cluster_id', pod.cluster_id.toString());
+      if (confirmDialog.forceOption) {
+        url.searchParams.set('force', 'true');
+      }
+
+      const response = await fetch(url.toString(), {
+        method: "DELETE",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+        },
+      });
 
       if (response.ok) {
-        toast.success("Pod删除成功");
+        const deleteType = confirmDialog.forceOption ? "强制" : "正常";
+        toast.success(`Pod${deleteType}删除成功`);
         fetchPods();
       } else {
         toast.error("删除Pod失败");
@@ -298,7 +312,10 @@ function PodsPageContent() {
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => handleViewLogs(pod)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleViewLogs(pod);
+                        }}
                         title="查看日志"
                       >
                         <FileText className="h-4 w-4" />
@@ -306,7 +323,10 @@ function PodsPageContent() {
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => handleRestartPod(pod)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRestartPod(pod);
+                        }}
                         title="重启Pod"
                       >
                         <RefreshCw className="h-4 w-4" />
@@ -314,7 +334,10 @@ function PodsPageContent() {
                       <Button
                         size="sm"
                         variant="destructive"
-                        onClick={() => handleDeletePod(pod)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeletePod(pod);
+                        }}
                         title="删除Pod"
                       >
                         <Square className="h-4 w-4" />
@@ -335,6 +358,9 @@ function PodsPageContent() {
         description={confirmDialog.description}
         onConfirm={confirmDialog.onConfirm}
         variant="destructive"
+        showForceOption={confirmDialog.showForceOption}
+        forceOption={confirmDialog.forceOption}
+        onForceOptionChange={handleForceOptionChange}
       />
     </div>
   );

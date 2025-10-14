@@ -845,15 +845,32 @@ def restart_pod(cluster: Cluster, namespace: str, pod_name: str) -> bool:
     return delete_pod(cluster, namespace, pod_name)
 
 
-def delete_pod(cluster: Cluster, namespace: str, pod_name: str) -> bool:
-    """删除Pod"""
+def delete_pod(cluster: Cluster, namespace: str, pod_name: str, force: bool = False) -> bool:
+    """删除Pod
+
+    Args:
+        cluster: 集群配置
+        namespace: 命名空间
+        pod_name: Pod名称
+        force: 是否强制删除（设置grace_period_seconds=0）
+    """
     client_instance = create_k8s_client(cluster)
     if not client_instance:
         return False
 
     try:
         core_v1 = client.CoreV1Api(client_instance)
-        core_v1.delete_namespaced_pod(pod_name, namespace)
+
+        # 构建删除选项
+        delete_options = client.V1DeleteOptions()
+        if force:
+            delete_options.grace_period_seconds = 0
+
+        core_v1.delete_namespaced_pod(
+            name=pod_name,
+            namespace=namespace,
+            body=delete_options
+        )
         return True
     except Exception as e:
         print(f"删除Pod失败: {e}")

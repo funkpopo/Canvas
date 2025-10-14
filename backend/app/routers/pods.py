@@ -194,6 +194,7 @@ async def delete_pod_endpoint(
   namespace: str,
   pod_name: str,
   cluster_id: int = Query(..., description="集群ID"),
+  force: bool = Query(False, description="是否强制删除Pod（设置grace_period_seconds=0）"),
   db: Session = Depends(get_db),
   current_user: dict = Depends(get_current_user),
 ):
@@ -206,9 +207,10 @@ async def delete_pod_endpoint(
     if not cluster:
       raise HTTPException(status_code=404, detail="集群不存在或未激活")
 
-    result = delete_pod(cluster, namespace, pod_name)
+    result = delete_pod(cluster, namespace, pod_name, force)
     if result:
-      return {"message": f"Pod {namespace}/{pod_name} 删除成功"}
+      delete_type = "强制" if force else "正常"
+      return {"message": f"Pod {namespace}/{pod_name} {delete_type}删除成功"}
     else:
       raise HTTPException(status_code=500, detail=f"删除 Pod {namespace}/{pod_name} 失败")
   except HTTPException:
