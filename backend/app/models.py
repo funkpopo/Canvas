@@ -59,3 +59,46 @@ class AuditLog(Base):
     # Relationships
     user = relationship("User")
     cluster = relationship("Cluster")
+
+
+class JobTemplate(Base):
+    __tablename__ = "job_templates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False, index=True)
+    description = Column(Text, nullable=True)
+    category = Column(String, nullable=True, index=True)  # 分类，如：数据处理、备份、测试等
+    yaml_content = Column(Text, nullable=False)  # Job的YAML配置
+    is_public = Column(Boolean, default=True)  # 是否公开模板
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    creator = relationship("User")
+
+
+class JobHistory(Base):
+    __tablename__ = "job_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    cluster_id = Column(Integer, ForeignKey("clusters.id"), nullable=False)
+    namespace = Column(String, nullable=False)
+    job_name = Column(String, nullable=False)
+    template_id = Column(Integer, ForeignKey("job_templates.id"), nullable=True)  # 如果是从模板创建的
+    status = Column(String, nullable=False)  # Pending, Running, Succeeded, Failed
+    start_time = Column(DateTime(timezone=True), nullable=True)
+    end_time = Column(DateTime(timezone=True), nullable=True)
+    duration = Column(Integer, nullable=True)  # 执行时长（秒）
+    succeeded_pods = Column(Integer, default=0)
+    failed_pods = Column(Integer, default=0)
+    total_pods = Column(Integer, default=0)
+    error_message = Column(Text, nullable=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    cluster = relationship("Cluster")
+    template = relationship("JobTemplate")
+    creator = relationship("User")
