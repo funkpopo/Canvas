@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from ..database import get_db
 from ..models import Cluster, JobTemplate, JobHistory
 from ..auth import get_current_user

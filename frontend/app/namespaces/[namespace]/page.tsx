@@ -7,8 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Activity, Loader2, RefreshCw, Users, Settings, FileText, Database, Cpu, MemoryStick, AlertCircle, HardDrive, ExternalLink } from "lucide-react";
+import { ArrowLeft, Activity, Loader2, RefreshCw, Users, Settings, FileText, Database, Cpu, MemoryStick, AlertCircle, HardDrive, ExternalLink, Briefcase } from "lucide-react";
 import { toast } from "sonner";
+import { jobApi, Job } from "@/lib/api";
 
 interface NamespaceResources {
   cpu_requests: string;
@@ -80,6 +81,7 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
   const [services, setServices] = useState<Service[]>([]);
   const [pvcs, setPvcs] = useState<PVC[]>([]);
   const [crds, setCrds] = useState<CRD[]>([]);
+  const [jobs, setJobs] = useState<Job[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("overview");
   const router = useRouter();
@@ -218,6 +220,14 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
           const crdsData = await crdsResponse.json();
           setCrds(crdsData);
         }
+      } else if (activeTab === "jobs") {
+        // 获取Jobs
+        const jobsResponse = await jobApi.getJobs(parseInt(clusterId!), resolvedParams.namespace);
+        if (jobsResponse.data) {
+          setJobs(jobsResponse.data);
+        } else if (jobsResponse.error) {
+          toast.error(`获取Jobs失败: ${jobsResponse.error}`);
+        }
       }
     } catch (error) {
       console.error("获取命名空间数据出错:", error);
@@ -283,10 +293,11 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="overview">概览</TabsTrigger>
             <TabsTrigger value="deployments">部署</TabsTrigger>
             <TabsTrigger value="services">服务</TabsTrigger>
+            <TabsTrigger value="jobs">Jobs</TabsTrigger>
             <TabsTrigger value="pvcs">PVC</TabsTrigger>
             <TabsTrigger value="crds">自定义资源</TabsTrigger>
           </TabsList>
@@ -693,6 +704,78 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
                       )}
                     </CardContent>
                   </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          {/* Jobs标签页 */}
+          <TabsContent value="jobs" className="space-y-6">
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin mr-2" />
+                <span className="text-lg">加载中...</span>
+              </div>
+            ) : jobs.length === 0 ? (
+              <Card>
+                <CardContent className="flex flex-col items-center justify-center py-12">
+                  <Briefcase className="h-12 w-12 text-gray-400 mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                    暂无Jobs
+                  </h3>
+                  <p className="text-gray-600 dark:text-gray-400">
+                    该命名空间中没有Jobs
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid grid-cols-1 gap-4">
+                {jobs.map((job) => (
+                  <Link key={job.name} href={`/jobs/${resolvedParams.namespace}/${job.name}?cluster_id=${clusterId}`}>
+                    <Card className="cursor-pointer hover:shadow-md transition-shadow">
+                      <CardHeader>
+                        <div className="flex items-center justify-between">
+                          <CardTitle className="text-lg">{job.name}</CardTitle>
+                          <Badge variant={
+                            job.status.toLowerCase() === 'succeeded' ? 'default' :
+                            job.status.toLowerCase() === 'failed' ? 'destructive' :
+                            job.status.toLowerCase() === 'running' || job.status.toLowerCase() === 'active' ? 'secondary' :
+                            'outline'
+                          }>
+                            {job.status}
+                          </Badge>
+                        </div>
+                        <CardDescription>
+                          完成度: {job.succeeded}/{job.completions} •
+                          活跃Pods: {job.active} •
+                          创建时间: {formatAge(job.age)}
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-2">
+                          {job.failed > 0 && (
+                            <div className="flex items-center space-x-2">
+                              <Badge variant="destructive" className="text-xs">
+                                {job.failed}失败
+                              </Badge>
+                            </div>
+                          )}
+                          {Object.keys(job.labels).length > 0 && (
+                            <div>
+                              <h4 className="text-sm font-medium mb-1">标签:</h4>
+                              <div className="flex flex-wrap gap-1">
+                                {Object.entries(job.labels).map(([key, value]) => (
+                                  <Badge key={key} variant="secondary" className="text-xs">
+                                    {key}: {value}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </Link>
                 ))}
               </div>
             )}

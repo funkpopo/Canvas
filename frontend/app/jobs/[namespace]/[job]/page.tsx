@@ -477,3 +477,4 @@ export default function JobDetailsPage({ params }: { params: Promise<{ namespace
     </div>
   );
 }
+
