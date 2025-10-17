@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import Cluster
 from ..auth import get_current_user
-from ..k8s_client import get_cluster_stats
+from ..k8s_client import get_cluster_stats, _client_pool
 from pydantic import BaseModel
 from typing import Dict, Any
 
@@ -17,6 +17,13 @@ class DashboardStats(BaseModel):
     total_pods: int
     running_pods: int
     total_services: int
+
+class ConnectionPoolStats(BaseModel):
+    total_clusters: int
+    total_connections: int
+    connections_per_cluster: Dict[str, int]
+    max_connections_per_cluster: int
+    connection_timeout: int
 
 @router.get("/dashboard", response_model=DashboardStats)
 async def get_dashboard_stats(
@@ -63,3 +70,23 @@ async def get_dashboard_stats(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取统计信息失败: {str(e)}")
+
+
+@router.get("/connection-pool", response_model=ConnectionPoolStats)
+async def get_connection_pool_stats(
+    current_user: dict = Depends(get_current_user)
+):
+    """获取Kubernetes连接池统计信息"""
+    try:
+        pool_stats = _client_pool.get_pool_stats()
+
+        return ConnectionPoolStats(
+            total_clusters=pool_stats['total_clusters'],
+            total_connections=pool_stats['total_connections'],
+            connections_per_cluster=pool_stats['connections_per_cluster'],
+            max_connections_per_cluster=_client_pool.max_connections_per_cluster,
+            connection_timeout=_client_pool.connection_timeout
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取连接池统计信息失败: {str(e)}")

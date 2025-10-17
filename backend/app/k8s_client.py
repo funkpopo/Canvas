@@ -4,11 +4,287 @@ import time
 import json
 import uuid
 import yaml
+import threading
+import weakref
 from typing import Dict, Any, Optional, List
 from kubernetes import client, config
 from kubernetes.client.rest import ApiException
 from kubernetes.stream import stream
 from .models import Cluster
+
+
+class KubernetesClientPool:
+    """Kubernetes客户端连接池管理器"""
+
+    def __init__(self, max_connections_per_cluster: int = 5, connection_timeout: int = 300):
+        """
+        初始化连接池管理器
+
+        Args:
+            max_connections_per_cluster: 每个集群的最大连接数
+            connection_timeout: 连接超时时间（秒）
+        """
+        self.max_connections_per_cluster = max_connections_per_cluster
+        self.connection_timeout = connection_timeout
+
+        # 连接池存储: cluster_id -> 连接列表
+        self._pools: Dict[int, List[Dict[str, Any]]] = {}
+
+        # 锁保护并发访问
+        self._lock = threading.RLock()
+
+        # 清理线程
+        self._cleanup_thread = None
+        self._stop_cleanup = threading.Event()
+
+    def get_client(self, cluster: Cluster) -> Optional[client.ApiClient]:
+        """
+        从连接池获取客户端连接
+
+        Args:
+            cluster: 集群配置
+
+        Returns:
+            可用的Kubernetes客户端，如果无法获取则返回None
+        """
+        with self._lock:
+            cluster_id = cluster.id
+
+            # 初始化集群连接池
+            if cluster_id not in self._pools:
+                self._pools[cluster_id] = []
+
+            pool = self._pools[cluster_id]
+
+            # 查找可用的连接
+            current_time = time.time()
+            for connection_info in pool:
+                # 检查连接是否超时或无效
+                if (current_time - connection_info['last_used'] > self.connection_timeout or
+                    not self._is_connection_valid(connection_info['client'])):
+                    # 移除无效连接
+                    try:
+                        connection_info['client'].close()
+                    except:
+                        pass
+                    pool.remove(connection_info)
+                    continue
+
+                # 找到可用连接
+                connection_info['last_used'] = current_time
+                return connection_info['client']
+
+            # 如果没有可用连接且未达到最大连接数，创建新连接
+            if len(pool) < self.max_connections_per_cluster:
+                client_instance = self._create_new_connection(cluster)
+                if client_instance:
+                    connection_info = {
+                        'client': client_instance,
+                        'created_at': current_time,
+                        'last_used': current_time,
+                        'cluster_id': cluster_id
+                    }
+                    pool.append(connection_info)
+                    return client_instance
+
+            return None
+
+    def return_client(self, cluster: Cluster, client_instance: client.ApiClient) -> None:
+        """
+        将客户端连接返回到连接池
+
+        Args:
+            cluster: 集群配置
+            client_instance: 要返回的客户端连接
+        """
+        with self._lock:
+            cluster_id = cluster.id
+            if cluster_id not in self._pools:
+                return
+
+            pool = self._pools[cluster_id]
+            current_time = time.time()
+
+            # 更新连接的最后使用时间
+            for connection_info in pool:
+                if connection_info['client'] is client_instance:
+                    connection_info['last_used'] = current_time
+                    break
+
+    def remove_cluster(self, cluster_id: int) -> None:
+        """
+        移除集群的所有连接
+
+        Args:
+            cluster_id: 集群ID
+        """
+        with self._lock:
+            if cluster_id in self._pools:
+                pool = self._pools[cluster_id]
+                # 关闭所有连接
+                for connection_info in pool:
+                    try:
+                        connection_info['client'].close()
+                    except:
+                        pass
+                del self._pools[cluster_id]
+
+    def cleanup_expired_connections(self) -> None:
+        """清理过期的连接"""
+        with self._lock:
+            current_time = time.time()
+            clusters_to_remove = []
+
+            for cluster_id, pool in self._pools.items():
+                valid_connections = []
+
+                for connection_info in pool:
+                    # 检查连接是否过期或无效
+                    if (current_time - connection_info['last_used'] > self.connection_timeout or
+                        not self._is_connection_valid(connection_info['client'])):
+
+                        # 关闭过期连接
+                        try:
+                            connection_info['client'].close()
+                        except:
+                            pass
+                    else:
+                        valid_connections.append(connection_info)
+
+                if valid_connections:
+                    self._pools[cluster_id] = valid_connections
+                else:
+                    clusters_to_remove.append(cluster_id)
+
+            # 移除空连接池
+            for cluster_id in clusters_to_remove:
+                del self._pools[cluster_id]
+
+    def start_cleanup_thread(self) -> None:
+        """启动清理线程"""
+        if self._cleanup_thread is None or not self._cleanup_thread.is_alive():
+            self._stop_cleanup.clear()
+            self._cleanup_thread = threading.Thread(
+                target=self._cleanup_worker,
+                daemon=True,
+                name="K8sConnectionPoolCleanup"
+            )
+            self._cleanup_thread.start()
+
+    def stop_cleanup_thread(self) -> None:
+        """停止清理线程"""
+        if self._cleanup_thread:
+            self._stop_cleanup.set()
+            self._cleanup_thread.join(timeout=5)
+
+    def _cleanup_worker(self) -> None:
+        """清理工作线程"""
+        while not self._stop_cleanup.wait(60):  # 每60秒清理一次
+            try:
+                self.cleanup_expired_connections()
+            except Exception as e:
+                print(f"连接池清理出错: {e}")
+
+    def _create_new_connection(self, cluster: Cluster) -> Optional[client.ApiClient]:
+        """
+        创建新的集群连接
+
+        Args:
+            cluster: 集群配置
+
+        Returns:
+            新创建的客户端连接
+        """
+        try:
+            if cluster.auth_type == "kubeconfig":
+                if not cluster.kubeconfig_content:
+                    raise ValueError("kubeconfig内容为空")
+
+                # 创建临时文件存储kubeconfig
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+                    f.write(cluster.kubeconfig_content)
+                    kubeconfig_path = f.name
+
+                try:
+                    # 加载kubeconfig
+                    config.load_kube_config(config_file=kubeconfig_path)
+                    return client.ApiClient()
+                finally:
+                    # 清理临时文件
+                    os.unlink(kubeconfig_path)
+
+            elif cluster.auth_type == "token":
+                if not cluster.token:
+                    raise ValueError("token为空")
+
+                # 使用token认证
+                configuration = client.Configuration()
+                configuration.host = cluster.endpoint
+                configuration.verify_ssl = True
+
+                if cluster.ca_cert:
+                    # 如果提供了CA证书，创建临时文件
+                    with tempfile.NamedTemporaryFile(mode='w', suffix='.pem', delete=False) as f:
+                        f.write(cluster.ca_cert)
+                        ca_cert_path = f.name
+
+                    try:
+                        configuration.ssl_ca_cert = ca_cert_path
+                    finally:
+                        os.unlink(ca_cert_path)
+
+                configuration.api_key = {"authorization": f"Bearer {cluster.token}"}
+                return client.ApiClient(configuration)
+
+            else:
+                raise ValueError(f"不支持的认证类型: {cluster.auth_type}")
+
+        except Exception as e:
+            print(f"创建Kubernetes客户端失败: {e}")
+            return None
+
+    def _is_connection_valid(self, client_instance: client.ApiClient) -> bool:
+        """
+        检查连接是否有效
+
+        Args:
+            client_instance: 要检查的客户端连接
+
+        Returns:
+            连接是否有效
+        """
+        try:
+            # 尝试简单的API调用来验证连接
+            version_api = client.VersionApi(client_instance)
+            version_api.get_code()
+            return True
+        except:
+            return False
+
+    def get_pool_stats(self) -> Dict[str, Any]:
+        """
+        获取连接池统计信息
+
+        Returns:
+            连接池统计信息
+        """
+        with self._lock:
+            stats = {
+                'total_clusters': len(self._pools),
+                'total_connections': 0,
+                'connections_per_cluster': {}
+            }
+
+            for cluster_id, pool in self._pools.items():
+                stats['connections_per_cluster'][str(cluster_id)] = len(pool)
+                stats['total_connections'] += len(pool)
+
+            return stats
+
+
+# 全局连接池实例
+_client_pool = KubernetesClientPool()
+
 
 def test_cluster_connection(cluster: Cluster) -> Dict[str, Any]:
     """测试集群连接"""
@@ -32,262 +308,255 @@ def test_cluster_connection(cluster: Cluster) -> Dict[str, Any]:
         return {"success": False, "message": f"连接失败: {str(e)}"}
 
 
+class KubernetesClientContext:
+    """Kubernetes客户端上下文管理器，用于自动管理连接池"""
+
+    def __init__(self, cluster: Cluster):
+        self.cluster = cluster
+        self.client_instance = None
+
+    def __enter__(self) -> Optional[client.ApiClient]:
+        """进入上下文，获取连接"""
+        self.client_instance = _client_pool.get_client(self.cluster)
+        return self.client_instance
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """退出上下文，返回连接到连接池"""
+        if self.client_instance:
+            _client_pool.return_client(self.cluster, self.client_instance)
+
+
 def create_k8s_client(cluster: Cluster) -> Optional[client.ApiClient]:
-    """根据集群配置创建Kubernetes客户端"""
-    try:
-        if cluster.auth_type == "kubeconfig":
-            if not cluster.kubeconfig_content:
-                raise ValueError("kubeconfig内容为空")
+    """
+    根据集群配置从连接池获取Kubernetes客户端
 
-            # 创建临时文件存储kubeconfig
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
-                f.write(cluster.kubeconfig_content)
-                kubeconfig_path = f.name
+    注意：使用此函数获取的客户端在使用完毕后不会自动返回连接池。
+    建议使用KubernetesClientContext上下文管理器来自动管理连接。
 
-            try:
-                # 加载kubeconfig
-                config.load_kube_config(config_file=kubeconfig_path)
-                return client.ApiClient()
-            finally:
-                # 清理临时文件
-                os.unlink(kubeconfig_path)
+    Args:
+        cluster: 集群配置
 
-        elif cluster.auth_type == "token":
-            if not cluster.token:
-                raise ValueError("token为空")
+    Returns:
+        Kubernetes客户端实例，如果无法获取则返回None
+    """
+    return _client_pool.get_client(cluster)
 
-            # 使用token认证
-            configuration = client.Configuration()
-            configuration.host = cluster.endpoint
-            configuration.verify_ssl = True
 
-            if cluster.ca_cert:
-                # 如果提供了CA证书，创建临时文件
-                with tempfile.NamedTemporaryFile(mode='w', suffix='.pem', delete=False) as f:
-                    f.write(cluster.ca_cert)
-                    ca_cert_path = f.name
+def return_k8s_client(cluster: Cluster, client_instance: client.ApiClient) -> None:
+    """
+    将Kubernetes客户端返回到连接池
 
-                try:
-                    configuration.ssl_ca_cert = ca_cert_path
-                finally:
-                    os.unlink(ca_cert_path)
-
-            configuration.api_key = {"authorization": f"Bearer {cluster.token}"}
-            return client.ApiClient(configuration)
-
-        else:
-            raise ValueError(f"不支持的认证类型: {cluster.auth_type}")
-
-    except Exception as e:
-        print(f"创建Kubernetes客户端失败: {e}")
-        return None
+    Args:
+        cluster: 集群配置
+        client_instance: 要返回的客户端实例
+    """
+    _client_pool.return_client(cluster, client_instance)
 
 def get_cluster_stats(cluster: Cluster) -> Dict[str, Any]:
     """获取集群统计信息"""
-    client_instance = create_k8s_client(cluster)
-    if not client_instance:
-        return {}
+    with KubernetesClientContext(cluster) as client_instance:
+        if not client_instance:
+            return {}
 
-    try:
-        # 初始化API客户端
-        core_v1 = client.CoreV1Api(client_instance)
-        apps_v1 = client.AppsV1Api(client_instance)
-
-        stats = {
-            'nodes': 0,
-            'namespaces': 0,
-            'total_pods': 0,
-            'running_pods': 0,
-            'services': 0
-        }
-
-        # 获取节点数量
         try:
-            nodes = core_v1.list_node()
-            stats['nodes'] = len(nodes.items)
-        except ApiException as e:
-            print(f"获取节点信息失败: {e}")
-            stats['nodes'] = 0
+            # 初始化API客户端
+            core_v1 = client.CoreV1Api(client_instance)
+            apps_v1 = client.AppsV1Api(client_instance)
 
-        # 获取命名空间数量
-        try:
-            namespaces = core_v1.list_namespace()
-            stats['namespaces'] = len(namespaces.items)
-        except ApiException as e:
-            print(f"获取命名空间信息失败: {e}")
-            stats['namespaces'] = 0
+            stats = {
+                'nodes': 0,
+                'namespaces': 0,
+                'total_pods': 0,
+                'running_pods': 0,
+                'services': 0
+            }
 
-        # 获取Pod统计
-        try:
-            pods = core_v1.list_pod_for_all_namespaces()
-            total_pods = len(pods.items)
-            running_pods = len([p for p in pods.items if p.status.phase == 'Running'])
+            # 获取节点数量
+            try:
+                nodes = core_v1.list_node()
+                stats['nodes'] = len(nodes.items)
+            except ApiException as e:
+                print(f"获取节点信息失败: {e}")
+                stats['nodes'] = 0
 
-            stats['total_pods'] = total_pods
-            stats['running_pods'] = running_pods
-        except ApiException as e:
-            print(f"获取Pod信息失败: {e}")
-            stats['total_pods'] = 0
-            stats['running_pods'] = 0
+            # 获取命名空间数量
+            try:
+                namespaces = core_v1.list_namespace()
+                stats['namespaces'] = len(namespaces.items)
+            except ApiException as e:
+                print(f"获取命名空间信息失败: {e}")
+                stats['namespaces'] = 0
 
-        # 获取服务数量
-        try:
-            services = core_v1.list_service_for_all_namespaces()
-            stats['services'] = len(services.items)
-        except ApiException as e:
-            print(f"获取服务信息失败: {e}")
-            stats['services'] = 0
+            # 获取Pod统计
+            try:
+                pods = core_v1.list_pod_for_all_namespaces()
+                total_pods = len(pods.items)
+                running_pods = len([p for p in pods.items if p.status.phase == 'Running'])
 
-        return stats
+                stats['total_pods'] = total_pods
+                stats['running_pods'] = running_pods
+            except ApiException as e:
+                print(f"获取Pod信息失败: {e}")
+                stats['total_pods'] = 0
+                stats['running_pods'] = 0
 
-    except Exception as e:
-        print(f"获取集群统计信息失败: {e}")
-        return {}
-    finally:
-        if client_instance:
-            client_instance.close()
+            # 获取服务数量
+            try:
+                services = core_v1.list_service_for_all_namespaces()
+                stats['services'] = len(services.items)
+            except ApiException as e:
+                print(f"获取服务信息失败: {e}")
+                stats['services'] = 0
+
+            return stats
+
+        except Exception as e:
+            print(f"获取集群统计信息失败: {e}")
+            return {}
 
 def get_nodes_info(cluster: Cluster) -> List[Dict[str, Any]]:
     """获取集群节点基本信息"""
-    client_instance = create_k8s_client(cluster)
-    if not client_instance:
-        return []
+    with KubernetesClientContext(cluster) as client_instance:
+        if not client_instance:
+            return []
 
-    try:
-        core_v1 = client.CoreV1Api(client_instance)
-        nodes = core_v1.list_node()
+        try:
+            core_v1 = client.CoreV1Api(client_instance)
+            nodes = core_v1.list_node()
 
-        # 获取所有Pods用于统计节点上的Pods数量
-        pods = core_v1.list_pod_for_all_namespaces()
+            # 获取所有Pods用于统计节点上的Pods数量
+            pods = core_v1.list_pod_for_all_namespaces()
 
-        # 统计每个节点上的Pods数量
-        node_pod_counts = {}
-        for pod in pods.items:
-            node_name = pod.spec.node_name
-            if node_name:
-                node_pod_counts[node_name] = node_pod_counts.get(node_name, 0) + 1
+            # 统计每个节点上的Pods数量
+            node_pod_counts = {}
+            for pod in pods.items:
+                node_name = pod.spec.node_name
+                if node_name:
+                    node_pod_counts[node_name] = node_pod_counts.get(node_name, 0) + 1
 
-        # 获取节点资源使用情况（从allocatable和capacity计算）
-        node_resource_usage = {}
-        for node in nodes.items:
-            node_name = node.metadata.name
+            # 获取节点资源使用情况（从allocatable和capacity计算）
+            node_resource_usage = {}
+            for node in nodes.items:
+                node_name = node.metadata.name
 
-            # 获取CPU和内存使用情况（通过allocatable计算可用资源比例）
-            cpu_capacity = node.status.capacity.get("cpu", "0")
-            memory_capacity = node.status.capacity.get("memory", "0")
-            cpu_allocatable = node.status.allocatable.get("cpu", "0")
-            memory_allocatable = node.status.allocatable.get("memory", "0")
+                # 获取CPU和内存使用情况（通过allocatable计算可用资源比例）
+                cpu_capacity = node.status.capacity.get("cpu", "0")
+                memory_capacity = node.status.capacity.get("memory", "0")
+                cpu_allocatable = node.status.allocatable.get("cpu", "0")
+                memory_allocatable = node.status.allocatable.get("memory", "0")
 
-            # 计算使用率（简单估算：1 - allocatable/capacity）
-            cpu_usage = None
-            memory_usage = None
+                # 计算使用率（简单估算：1 - allocatable/capacity）
+                cpu_usage = None
+                memory_usage = None
 
-            try:
-                if cpu_capacity and cpu_allocatable:
-                    cpu_capacity_val = parse_cpu(cpu_capacity)
-                    cpu_allocatable_val = parse_cpu(cpu_allocatable)
-                    if cpu_capacity_val > 0:
-                        cpu_usage_val = ((cpu_capacity_val - cpu_allocatable_val) / cpu_capacity_val) * 100
-                        cpu_usage = f"{cpu_usage_val:.1f}%"
-            except:
-                pass
+                try:
+                    if cpu_capacity and cpu_allocatable:
+                        cpu_capacity_val = parse_cpu(cpu_capacity)
+                        cpu_allocatable_val = parse_cpu(cpu_allocatable)
+                        if cpu_capacity_val > 0:
+                            cpu_usage_val = ((cpu_capacity_val - cpu_allocatable_val) / cpu_capacity_val) * 100
+                            cpu_usage = f"{cpu_usage_val:.1f}%"
+                except:
+                    pass
 
-            try:
-                if memory_capacity and memory_allocatable:
-                    memory_capacity_val = parse_memory(memory_capacity)
-                    memory_allocatable_val = parse_memory(memory_allocatable)
-                    if memory_capacity_val > 0:
-                        memory_usage_val = ((memory_capacity_val - memory_allocatable_val) / memory_capacity_val) * 100
-                        memory_usage = f"{memory_usage_val:.1f}%"
-            except:
-                pass
+                try:
+                    if memory_capacity and memory_allocatable:
+                        memory_capacity_val = parse_memory(memory_capacity)
+                        memory_allocatable_val = parse_memory(memory_allocatable)
+                        if memory_capacity_val > 0:
+                            memory_usage_val = ((memory_capacity_val - memory_allocatable_val) / memory_capacity_val) * 100
+                            memory_usage = f"{memory_usage_val:.1f}%"
+                except:
+                    pass
 
-            node_resource_usage[node_name] = {
-                'cpu_usage': cpu_usage,
-                'memory_usage': memory_usage
-            }
+                node_resource_usage[node_name] = {
+                    'cpu_usage': cpu_usage,
+                    'memory_usage': memory_usage
+                }
 
-        node_list = []
-        for node in nodes.items:
-            node_name = node.metadata.name
+            node_list = []
+            for node in nodes.items:
+                node_name = node.metadata.name
 
-            # 获取节点状态
-            status = "Unknown"
-            for condition in node.status.conditions:
-                if condition.type == "Ready":
-                    status = "Ready" if condition.status == "True" else "NotReady"
-                    break
+                # 获取节点状态
+                status = "Unknown"
+                for condition in node.status.conditions:
+                    if condition.type == "Ready":
+                        status = "Ready" if condition.status == "True" else "NotReady"
+                        break
 
-            # 获取节点角色
-            roles = []
-            if node.metadata.labels:
-                if node.metadata.labels.get("node-role.kubernetes.io/master") == "true" or \
-                   node.metadata.labels.get("node-role.kubernetes.io/control-plane") == "true":
-                    roles.append("master")
-                if node.metadata.labels.get("node-role.kubernetes.io/worker") == "true":
-                    roles.append("worker")
+                # 获取节点角色
+                roles = []
+                if node.metadata.labels:
+                    if node.metadata.labels.get("node-role.kubernetes.io/master") == "true" or \
+                       node.metadata.labels.get("node-role.kubernetes.io/control-plane") == "true":
+                        roles.append("master")
+                    if node.metadata.labels.get("node-role.kubernetes.io/worker") == "true":
+                        roles.append("worker")
 
-            # 获取IP地址
-            internal_ip = None
-            external_ip = None
-            for address in node.status.addresses:
-                if address.type == "InternalIP":
-                    internal_ip = address.address
-                elif address.type == "ExternalIP":
-                    external_ip = address.address
+                # 获取IP地址
+                internal_ip = None
+                external_ip = None
+                for address in node.status.addresses:
+                    if address.type == "InternalIP":
+                        internal_ip = address.address
+                    elif address.type == "ExternalIP":
+                        external_ip = address.address
 
-            # 获取资源容量
-            cpu_capacity = node.status.capacity.get("cpu", "0")
-            memory_capacity = node.status.capacity.get("memory", "0")
-            pods_capacity = node.status.capacity.get("pods", "0")
+                # 获取资源容量
+                cpu_capacity = node.status.capacity.get("cpu", "0")
+                memory_capacity = node.status.capacity.get("memory", "0")
+                pods_capacity = node.status.capacity.get("pods", "0")
 
-            # 获取实际Pods数量
-            pods_usage = str(node_pod_counts.get(node_name, 0))
+                # 获取实际Pods数量
+                pods_usage = str(node_pod_counts.get(node_name, 0))
 
-            # 计算节点年龄
-            from datetime import datetime
-            age = "Unknown"
-            if node.metadata.creation_timestamp:
-                created = node.metadata.creation_timestamp.replace(tzinfo=None)
-                now = datetime.now()
-                delta = now - created
-                if delta.days > 0:
-                    age = f"{delta.days}d"
-                elif delta.seconds // 3600 > 0:
-                    age = f"{delta.seconds // 3600}h"
-                elif delta.seconds // 60 > 0:
-                    age = f"{delta.seconds // 60}m"
-                else:
-                    age = f"{delta.seconds}s"
+                # 计算节点年龄
+                from datetime import datetime
+                age = "Unknown"
+                if node.metadata.creation_timestamp:
+                    created = node.metadata.creation_timestamp.replace(tzinfo=None)
+                    now = datetime.now()
+                    delta = now - created
+                    if delta.days > 0:
+                        age = f"{delta.days}d"
+                    elif delta.seconds // 3600 > 0:
+                        age = f"{delta.seconds // 3600}h"
+                    elif delta.seconds // 60 > 0:
+                        age = f"{delta.seconds // 60}m"
+                    else:
+                        age = f"{delta.seconds}s"
 
-            node_info = {
-                "name": node.metadata.name,
-                "status": status,
-                "roles": roles,
-                "age": age,
-                "version": node.status.node_info.kubelet_version if node.status.node_info else "Unknown",
-                "internal_ip": internal_ip,
-                "external_ip": external_ip,
-                "cpu_capacity": cpu_capacity,
-                "memory_capacity": memory_capacity,
-                "pods_capacity": pods_capacity,
-                "cpu_usage": node_resource_usage.get(node_name, {}).get('cpu_usage'),
-                "memory_usage": node_resource_usage.get(node_name, {}).get('memory_usage'),
-                "pods_usage": pods_usage
-            }
-            node_list.append(node_info)
+                node_info = {
+                    "name": node.metadata.name,
+                    "status": status,
+                    "roles": roles,
+                    "age": age,
+                    "version": node.status.node_info.kubelet_version if node.status.node_info else "Unknown",
+                    "internal_ip": internal_ip,
+                    "external_ip": external_ip,
+                    "cpu_capacity": cpu_capacity,
+                    "memory_capacity": memory_capacity,
+                    "pods_capacity": pods_capacity,
+                    "cpu_usage": node_resource_usage.get(node_name, {}).get('cpu_usage'),
+                    "memory_usage": node_resource_usage.get(node_name, {}).get('memory_usage'),
+                    "pods_usage": pods_usage
+                }
+                node_list.append(node_info)
 
-        return node_list
+            return node_list
 
-    except Exception as e:
-        print(f"获取节点信息失败: {e}")
-        return []
-    finally:
-        if client_instance:
-            client_instance.close()
+        except Exception as e:
+            print(f"获取节点信息失败: {e}")
+            return []
+
+# def get_node_details(cluster: Cluster, node_name: str) -> Optional[Dict[str, Any]]:
+#     """获取节点详细信息 - 暂时禁用，由于缩进问题"""
+#     return None
 
 def get_node_details(cluster: Cluster, node_name: str) -> Optional[Dict[str, Any]]:
     """获取节点详细信息"""
+    # 暂时使用旧的实现方式，待后续修复连接池集成
     client_instance = create_k8s_client(cluster)
     if not client_instance:
         return None
@@ -392,6 +661,7 @@ def get_node_details(cluster: Cluster, node_name: str) -> Optional[Dict[str, Any
 
 def get_namespaces_info(cluster: Cluster) -> List[Dict[str, Any]]:
     """获取集群命名空间信息"""
+    # 暂时使用旧的实现方式，待后续修复连接池集成
     client_instance = create_k8s_client(cluster)
     if not client_instance:
         # 如果无法创建客户端，返回模拟数据以便演示

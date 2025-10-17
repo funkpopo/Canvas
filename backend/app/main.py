@@ -13,6 +13,11 @@ async def lifespan(app: FastAPI):
     init_default_user()
     print("数据库初始化完成")
 
+    # 启动Kubernetes连接池清理线程
+    from .k8s_client import _client_pool
+    _client_pool.start_cleanup_thread()
+    print("Kubernetes连接池清理线程已启动")
+
     # 启动WebSocket心跳检测
     from .websocket_manager import manager
     await manager.start_heartbeat_monitor()
@@ -22,6 +27,10 @@ async def lifespan(app: FastAPI):
 
     # 关闭时执行
     print("正在关闭应用...")
+
+    # 停止Kubernetes连接池清理线程
+    _client_pool.stop_cleanup_thread()
+    print("Kubernetes连接池清理线程已停止")
 
     # 停止WebSocket心跳检测
     await manager.stop_heartbeat_monitor()
