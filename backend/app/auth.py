@@ -61,3 +61,20 @@ def get_current_user(
     if user is None:
         raise credentials_exception
     return user
+
+
+async def get_current_user_ws(token: str, db: Session):
+    """
+    WebSocket认证函数
+    直接接收token字符串而不是HTTPAuthorizationCredentials
+    """
+    credentials_exception = Exception("Could not validate WebSocket credentials")
+
+    try:
+        token_data = verify_token(token, credentials_exception)
+        user = db.query(models.User).filter(models.User.username == token_data.username).first()
+        if user is None:
+            raise credentials_exception
+        return user
+    except Exception:
+        raise credentials_exception

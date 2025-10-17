@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from .database import create_tables, init_default_user
-from .routers import auth, clusters, stats, nodes, namespaces, pods, deployments, storage, services, configmaps, secrets, network_policies, resource_quotas, events, jobs
+from .routers import auth, clusters, stats, nodes, namespaces, pods, deployments, storage, services, configmaps, secrets, network_policies, resource_quotas, events, jobs, websocket
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -12,8 +12,25 @@ async def lifespan(app: FastAPI):
     create_tables()
     init_default_user()
     print("数据库初始化完成")
+
+    # 启动WebSocket心跳检测
+    from .websocket_manager import manager
+    await manager.start_heartbeat_monitor()
+    print("WebSocket心跳检测已启动")
+
     yield
-    # 关闭时执行（如果需要）
+
+    # 关闭时执行
+    print("正在关闭应用...")
+
+    # 停止WebSocket心跳检测
+    await manager.stop_heartbeat_monitor()
+    print("WebSocket心跳检测已停止")
+
+    # 停止所有Kubernetes监听器
+    from .k8s_client import watcher_manager
+    watcher_manager.stop_all_watchers()
+    print("所有Kubernetes监听器已停止")
 
 # 创建FastAPI应用
 app = FastAPI(
@@ -29,6 +46,15 @@ app.add_middleware(
     allow_origins=["http://localhost:3000"],  # Next.js开发服务器地址
     allow_credentials=True,
     allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# 添加WebSocket支持的CORS配置
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -48,6 +74,7 @@ app.include_router(network_policies.router, prefix="/api/network-policies", tags
 app.include_router(resource_quotas.router, prefix="/api/resource-quotas", tags=["resource-quotas"])
 app.include_router(events.router, prefix="/api/events", tags=["events"])
 app.include_router(jobs.router, prefix="/api/jobs", tags=["jobs"])
+app.include_router(websocket.router, prefix="/api", tags=["websocket"])
 
 
 @app.get("/")

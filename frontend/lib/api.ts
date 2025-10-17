@@ -608,6 +608,14 @@ export interface JobHistory {
   updated_at: string;
 }
 
+// ===== WebSocket 相关 API =====
+export const websocketApi = {
+  // 获取WebSocket连接统计信息
+  async getWebSocketStats(): Promise<ApiResponse<any>> {
+    return apiClient.get<any>('ws/stats');
+  },
+};
+
 // ===== Jobs 相关 API =====
 export const jobApi = {
   // Job 管理

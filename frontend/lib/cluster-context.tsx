@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useAuth } from './auth-context';
 import { clusterApi } from './api';
+import { useWebSocket, useResourceUpdates } from '../hooks/useWebSocket';
 
 interface Cluster {
   id: number;
@@ -19,6 +20,13 @@ interface ClusterContextType {
   refreshClusters: () => Promise<void>;
   toggleClusterActive: (clusterId: number) => Promise<boolean>;
   isLoading: boolean;
+  // WebSocket相关
+  wsConnected: boolean;
+  wsConnecting: boolean;
+  wsError: string | null;
+  resourceUpdates: any[];
+  reconnectWebSocket: () => void;
+  currentCluster: Cluster | null; // 重命名activeCluster为currentCluster以保持一致性
 }
 
 const ClusterContext = createContext<ClusterContextType | undefined>(undefined);
@@ -28,6 +36,13 @@ export function ClusterProvider({ children }: { children: ReactNode }) {
   const [activeCluster, _setActiveClusterLocal] = useState<Cluster | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const { isAuthenticated, isLoading: authLoading } = useAuth();
+
+  // WebSocket相关状态
+  const { isConnected: wsConnected, isConnecting: wsConnecting, error: wsError, reconnect, subscribe } = useWebSocket();
+  const { updates: resourceUpdates } = useResourceUpdates();
+
+  // 获取当前集群（兼容旧的activeCluster命名）
+  const currentCluster = activeCluster;
 
   const fetchClusters = async () => {
     try {
@@ -151,6 +166,15 @@ export function ClusterProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('storage', handleStorageChange);
   }, [isAuthenticated, authLoading]);
 
+  // WebSocket集群订阅管理
+  useEffect(() => {
+    if (wsConnected && currentCluster && subscribe) {
+      console.log(`ClusterContext: Subscribing to cluster ${currentCluster.id}`);
+      // 订阅当前集群的所有资源更新
+      subscribe({ cluster_id: currentCluster.id });
+    }
+  }, [wsConnected, currentCluster, subscribe]);
+
   return (
     <ClusterContext.Provider
       value={{
@@ -160,6 +184,13 @@ export function ClusterProvider({ children }: { children: ReactNode }) {
         refreshClusters,
         toggleClusterActive,
         isLoading,
+        // WebSocket相关
+        wsConnected,
+        wsConnecting,
+        wsError,
+        resourceUpdates,
+        reconnectWebSocket: reconnect,
+        currentCluster,
       }}
     >
       {children}

@@ -3964,3 +3964,366 @@ def monitor_job_status_changes(cluster: Cluster, namespace: str, job_name: str, 
     finally:
         if client_instance:
             client_instance.close()
+
+
+# ===== WebSocket资源监听器 =====
+
+import asyncio
+import logging
+from typing import Callable, Dict, Any, Optional
+from concurrent.futures import ThreadPoolExecutor
+try:
+    from .websocket_manager import manager
+except ImportError:
+    # 如果相对导入失败，使用全局导入（用于测试）
+    from websocket_manager import manager
+
+logger = logging.getLogger(__name__)
+
+class KubernetesResourceWatcher:
+    """Kubernetes资源监听器"""
+
+    def __init__(self, cluster: Cluster):
+        self.cluster = cluster
+        self.client_instance = None
+        self.watchers: Dict[str, Any] = {}  # 存储不同资源类型的监听器
+        self.executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix=f"k8s-watcher-{cluster.id}")
+        self.running = False
+
+    def start(self):
+        """启动资源监听"""
+        if self.running:
+            return
+
+        self.running = True
+        self.client_instance = create_k8s_client(self.cluster)
+
+        if not self.client_instance:
+            logger.error(f"Failed to create Kubernetes client for cluster {self.cluster.id}")
+            return
+
+        # 启动各个资源类型的监听
+        asyncio.create_task(self._start_pod_watcher())
+        asyncio.create_task(self._start_deployment_watcher())
+        asyncio.create_task(self._start_job_watcher())
+        asyncio.create_task(self._start_service_watcher())
+
+        logger.info(f"Started Kubernetes resource watchers for cluster {self.cluster.id}")
+
+    def stop(self):
+        """停止资源监听"""
+        if not self.running:
+            return
+
+        self.running = False
+
+        # 停止所有监听器
+        for watcher_name, watcher in self.watchers.items():
+            try:
+                watcher.stop()
+            except Exception as e:
+                logger.error(f"Error stopping watcher {watcher_name}: {e}")
+
+        self.watchers.clear()
+
+        # 关闭客户端连接
+        if self.client_instance:
+            try:
+                self.client_instance.close()
+            except Exception as e:
+                logger.error(f"Error closing Kubernetes client: {e}")
+            self.client_instance = None
+
+        # 关闭线程池
+        self.executor.shutdown(wait=False)
+
+        logger.info(f"Stopped Kubernetes resource watchers for cluster {self.cluster.id}")
+
+    async def _start_pod_watcher(self):
+        """启动Pod监听器"""
+        if not self.running or not self.client_instance:
+            return
+
+        try:
+            from kubernetes import watch
+            core_v1 = client.CoreV1Api(self.client_instance)
+            w = watch.Watch()
+
+            self.watchers['pods'] = w
+
+            logger.info(f"Starting pod watcher for cluster {self.cluster.id}")
+
+            for event in w.stream(core_v1.list_pod_for_all_namespaces):
+                if not self.running:
+                    break
+
+                try:
+                    await self._handle_pod_event(event)
+                except Exception as e:
+                    logger.error(f"Error handling pod event: {e}")
+
+        except Exception as e:
+            logger.error(f"Pod watcher error for cluster {self.cluster.id}: {e}")
+
+    async def _start_deployment_watcher(self):
+        """启动Deployment监听器"""
+        if not self.running or not self.client_instance:
+            return
+
+        try:
+            from kubernetes import watch
+            apps_v1 = client.AppsV1Api(self.client_instance)
+            w = watch.Watch()
+
+            self.watchers['deployments'] = w
+
+            logger.info(f"Starting deployment watcher for cluster {self.cluster.id}")
+
+            for event in w.stream(apps_v1.list_deployment_for_all_namespaces):
+                if not self.running:
+                    break
+
+                try:
+                    await self._handle_deployment_event(event)
+                except Exception as e:
+                    logger.error(f"Error handling deployment event: {e}")
+
+        except Exception as e:
+            logger.error(f"Deployment watcher error for cluster {self.cluster.id}: {e}")
+
+    async def _start_job_watcher(self):
+        """启动Job监听器"""
+        if not self.running or not self.client_instance:
+            return
+
+        try:
+            from kubernetes import watch
+            batch_v1 = client.BatchV1Api(self.client_instance)
+            w = watch.Watch()
+
+            self.watchers['jobs'] = w
+
+            logger.info(f"Starting job watcher for cluster {self.cluster.id}")
+
+            for event in w.stream(batch_v1.list_job_for_all_namespaces):
+                if not self.running:
+                    break
+
+                try:
+                    await self._handle_job_event(event)
+                except Exception as e:
+                    logger.error(f"Error handling job event: {e}")
+
+        except Exception as e:
+            logger.error(f"Job watcher error for cluster {self.cluster.id}: {e}")
+
+    async def _start_service_watcher(self):
+        """启动Service监听器"""
+        if not self.running or not self.client_instance:
+            return
+
+        try:
+            from kubernetes import watch
+            core_v1 = client.CoreV1Api(self.client_instance)
+            w = watch.Watch()
+
+            self.watchers['services'] = w
+
+            logger.info(f"Starting service watcher for cluster {self.cluster.id}")
+
+            for event in w.stream(core_v1.list_service_for_all_namespaces):
+                if not self.running:
+                    break
+
+                try:
+                    await self._handle_service_event(event)
+                except Exception as e:
+                    logger.error(f"Error handling service event: {e}")
+
+        except Exception as e:
+            logger.error(f"Service watcher error for cluster {self.cluster.id}: {e}")
+
+    async def _handle_pod_event(self, event):
+        """处理Pod事件"""
+        event_type = event['type']  # ADDED, MODIFIED, DELETED
+        pod = event['object']
+
+        # 构建Pod数据
+        pod_data = {
+            'name': pod.metadata.name,
+            'namespace': pod.metadata.namespace,
+            'status': pod.status.phase,
+            'node_name': pod.spec.node_name,
+            'restart_count': sum(container.restart_count for container in (pod.status.container_statuses or [])),
+            'ready_containers': f"{sum(1 for cs in (pod.status.container_statuses or []) if cs.ready)}/{len(pod.spec.containers)}",
+            'age': self._calculate_age(pod.metadata.creation_timestamp),
+            'labels': pod.metadata.labels or {},
+            'event_type': event_type
+        }
+
+        # 广播更新
+        await manager.broadcast_resource_update(
+            cluster_id=self.cluster.id,
+            resource_type='pods',
+            resource_data=pod_data,
+            namespace=pod.metadata.namespace
+        )
+
+    async def _handle_deployment_event(self, event):
+        """处理Deployment事件"""
+        event_type = event['type']
+        deployment = event['object']
+
+        # 构建Deployment数据
+        deployment_data = {
+            'name': deployment.metadata.name,
+            'namespace': deployment.metadata.namespace,
+            'replicas': deployment.spec.replicas,
+            'ready_replicas': deployment.status.ready_replicas or 0,
+            'available_replicas': deployment.status.available_replicas or 0,
+            'unavailable_replicas': deployment.status.unavailable_replicas or 0,
+            'age': self._calculate_age(deployment.metadata.creation_timestamp),
+            'labels': deployment.metadata.labels or {},
+            'event_type': event_type
+        }
+
+        # 广播更新
+        await manager.broadcast_resource_update(
+            cluster_id=self.cluster.id,
+            resource_type='deployments',
+            resource_data=deployment_data,
+            namespace=deployment.metadata.namespace
+        )
+
+    async def _handle_job_event(self, event):
+        """处理Job事件"""
+        event_type = event['type']
+        job = event['object']
+
+        # 构建Job数据
+        job_data = {
+            'name': job.metadata.name,
+            'namespace': job.metadata.namespace,
+            'completions': job.spec.completions,
+            'succeeded': job.status.succeeded or 0,
+            'failed': job.status.failed or 0,
+            'active': job.status.active or 0,
+            'age': self._calculate_age(job.metadata.creation_timestamp),
+            'status': self._get_job_status(job),
+            'labels': job.metadata.labels or {},
+            'event_type': event_type
+        }
+
+        # 广播更新
+        await manager.broadcast_resource_update(
+            cluster_id=self.cluster.id,
+            resource_type='jobs',
+            resource_data=job_data,
+            namespace=job.metadata.namespace
+        )
+
+    async def _handle_service_event(self, event):
+        """处理Service事件"""
+        event_type = event['type']
+        service = event['object']
+
+        # 构建Service数据
+        service_data = {
+            'name': service.metadata.name,
+            'namespace': service.metadata.namespace,
+            'type': service.spec.type,
+            'cluster_ip': service.spec.cluster_ip,
+            'external_ip': (service.status.load_balancer.ingress[0].ip
+                          if service.status.load_balancer.ingress else None),
+            'ports': [{'port': p.port, 'target_port': p.target_port, 'protocol': p.protocol}
+                     for p in (service.spec.ports or [])],
+            'selector': service.spec.selector or {},
+            'age': self._calculate_age(service.metadata.creation_timestamp),
+            'labels': service.metadata.labels or {},
+            'event_type': event_type
+        }
+
+        # 广播更新
+        await manager.broadcast_resource_update(
+            cluster_id=self.cluster.id,
+            resource_type='services',
+            resource_data=service_data,
+            namespace=service.metadata.namespace
+        )
+
+    def _calculate_age(self, creation_timestamp) -> str:
+        """计算资源年龄"""
+        if not creation_timestamp:
+            return "Unknown"
+
+        from datetime import datetime
+        now = datetime.utcnow().replace(tzinfo=creation_timestamp.tzinfo)
+        age_seconds = (now - creation_timestamp).total_seconds()
+
+        if age_seconds < 60:
+            return f"{int(age_seconds)}s"
+        elif age_seconds < 3600:
+            return f"{int(age_seconds / 60)}m"
+        elif age_seconds < 86400:
+            return f"{int(age_seconds / 3600)}h"
+        else:
+            return f"{int(age_seconds / 86400)}d"
+
+    def _get_job_status(self, job) -> str:
+        """获取Job状态"""
+        if not job.status.conditions:
+            return "Pending"
+
+        # 按时间排序，取最新的条件
+        latest_condition = max(job.status.conditions, key=lambda c: c.last_transition_time or "")
+        return latest_condition.type
+
+
+class KubernetesWatcherManager:
+    """Kubernetes监听器管理器"""
+
+    def __init__(self):
+        self.watchers: Dict[int, KubernetesResourceWatcher] = {}
+        self.running = False
+
+    def start_watcher(self, cluster: Cluster):
+        """启动集群监听器"""
+        if cluster.id in self.watchers:
+            return
+
+        watcher = KubernetesResourceWatcher(cluster)
+        self.watchers[cluster.id] = watcher
+        watcher.start()
+
+        logger.info(f"Started watcher for cluster {cluster.id}")
+
+    def stop_watcher(self, cluster_id: int):
+        """停止集群监听器"""
+        if cluster_id in self.watchers:
+            watcher = self.watchers[cluster_id]
+            watcher.stop()
+            del self.watchers[cluster_id]
+
+            logger.info(f"Stopped watcher for cluster {cluster_id}")
+
+    def stop_all_watchers(self):
+        """停止所有监听器"""
+        for cluster_id, watcher in self.watchers.items():
+            try:
+                watcher.stop()
+            except Exception as e:
+                logger.error(f"Error stopping watcher for cluster {cluster_id}: {e}")
+
+        self.watchers.clear()
+        logger.info("Stopped all Kubernetes watchers")
+
+    def get_watcher_stats(self) -> Dict[str, Any]:
+        """获取监听器统计信息"""
+        return {
+            "active_watchers": len(self.watchers),
+            "cluster_ids": list(self.watchers.keys())
+        }
+
+
+# 全局监听器管理器实例
+watcher_manager = KubernetesWatcherManager()

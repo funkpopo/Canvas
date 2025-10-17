@@ -6,9 +6,10 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
-import { LogOut, Server, FolderPen, Activity, Settings, Database, Loader2, Settings2, Cpu, Shield, Lock, AlertCircle } from "lucide-react";
+import { LogOut, Server, FolderPen, Activity, Settings, Database, Loader2, Settings2, Cpu, Shield, Lock, AlertCircle, Wifi, WifiOff, AlertTriangle } from "lucide-react";
 import ClusterSelector from "@/components/ClusterSelector";
 import { useAuth } from "@/lib/auth-context";
+import { useCluster } from "@/lib/cluster-context";
 
 interface DashboardStats {
   total_clusters: number;
@@ -25,6 +26,7 @@ export default function Home() {
   const [isLoadingStats, setIsLoadingStats] = useState(true);
   const router = useRouter();
   const { isAuthenticated, isLoading, logout } = useAuth();
+  const { wsConnected, wsConnecting, wsError } = useCluster();
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -86,6 +88,21 @@ export default function Home() {
             </div>
             <div className="flex items-center space-x-4">
               <ClusterSelector />
+              {/* WebSocket状态指示器 */}
+              <div className="flex items-center space-x-2">
+                {wsConnected ? (
+                  <Wifi className="h-4 w-4 text-green-500" />
+                ) : wsConnecting ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-yellow-500" />
+                ) : wsError ? (
+                  <AlertTriangle className="h-4 w-4 text-red-500" />
+                ) : (
+                  <WifiOff className="h-4 w-4 text-gray-500" />
+                )}
+                <span className="text-sm text-muted-foreground">
+                  {wsConnected ? '已连接' : wsConnecting ? '连接中' : wsError ? '连接错误' : '未连接'}
+                </span>
+              </div>
               <ThemeToggle />
               <Button variant="outline" onClick={logout}>
                 <LogOut className="h-4 w-4 mr-2" />

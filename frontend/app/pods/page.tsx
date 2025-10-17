@@ -7,12 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Activity, Square, FileText, Loader2, RefreshCw } from "lucide-react";
+import { ArrowLeft, Activity, Square, FileText, Loader2, RefreshCw, Wifi, WifiOff } from "lucide-react";
 import { useCluster } from "@/lib/cluster-context";
 import ClusterSelector from "@/components/ClusterSelector";
 import AuthGuard from "@/components/AuthGuard";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { useResourceUpdates } from "@/hooks/useWebSocket";
 
 interface PodInfo {
   name: string;
@@ -41,7 +42,10 @@ function PodsPageContent() {
     forceOption: false,
   });
   const router = useRouter();
-  const { activeCluster, isLoading: isClusterLoading } = useCluster();
+  const { activeCluster, isLoading: isClusterLoading, wsConnected } = useCluster();
+
+  // WebSocket实时更新
+  const { updates: podUpdates } = useResourceUpdates('pods');
 
   useEffect(() => {
     // 只有在集群加载完成后才获取数据
@@ -49,6 +53,25 @@ function PodsPageContent() {
       fetchPods();
     }
   }, [selectedNamespace, isClusterLoading, activeCluster]);
+
+  // 监听WebSocket Pod更新
+  useEffect(() => {
+    if (podUpdates.length > 0) {
+      const latestUpdate = podUpdates[podUpdates.length - 1];
+      const updateData = latestUpdate.data;
+
+      // 检查更新是否属于当前集群和命名空间
+      if (activeCluster && updateData.cluster_id === activeCluster.id) {
+        if (!selectedNamespace || updateData.namespace === selectedNamespace) {
+          console.log('Pod update received:', updateData);
+          // 短暂延迟后刷新数据，避免频繁请求
+          setTimeout(() => {
+            fetchPods();
+          }, 1000);
+        }
+      }
+    }
+  }, [podUpdates, activeCluster, selectedNamespace]);
 
   const fetchPods = async () => {
     try {
@@ -200,12 +223,29 @@ function PodsPageContent() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
-          <h2 className="text-3xl font-bold text-gray-900 dark:text-white">
-            Pod监控
-          </h2>
-          <p className="mt-2 text-gray-600 dark:text-gray-400">
-            实时监控和管理Kubernetes集群中的Pod资源
-          </p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-3xl font-bold text-gray-900 dark:text-white">
+                Pod监控
+              </h2>
+              <p className="mt-2 text-gray-600 dark:text-gray-400">
+                实时监控和管理Kubernetes集群中的Pod资源
+              </p>
+            </div>
+            <div className="flex items-center space-x-2">
+              {wsConnected ? (
+                <Badge variant="default" className="bg-green-500 hover:bg-green-600">
+                  <Wifi className="h-3 w-3 mr-1" />
+                  实时更新已连接
+                </Badge>
+              ) : (
+                <Badge variant="secondary">
+                  <WifiOff className="h-3 w-3 mr-1" />
+                  实时更新未连接
+                </Badge>
+              )}
+            </div>
+          </div>
         </div>
 
         {isLoading ? (
