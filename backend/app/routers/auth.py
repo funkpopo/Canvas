@@ -67,4 +67,11 @@ async def read_users_me(current_user: models.User = Depends(get_current_user)):
 @router.post("/verify-token")
 async def verify_token_endpoint(current_user: models.User = Depends(get_current_user)):
     """验证token是否有效"""
-    return {"valid": True, "username": current_user.username}
+    return {
+        "valid": True,
+        "username": current_user.username,
+        "id": current_user.id,
+        "role": current_user.role,
+        "email": current_user.email,
+        "is_active": current_user.is_active
+    }

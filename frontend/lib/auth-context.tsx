@@ -4,10 +4,18 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { authApi } from './api';
 
+interface UserInfo {
+  id: number;
+  username: string;
+  email?: string;
+  role: string;
+  is_active: boolean;
+}
+
 interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
-  user: { username: string } | null;
+  user: UserInfo | null;
   login: (token: string) => void;
   logout: () => void;
 }
@@ -17,7 +25,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [user, setUser] = useState<{ username: string } | null>(null);
+  const [user, setUser] = useState<UserInfo | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -34,9 +42,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     try {
       const result = await authApi.verifyToken();
-      if (result.valid) {
+      if (result.valid && result.username) {
         setIsAuthenticated(true);
-        setUser({ username: result.username || '' });
+        setUser({
+          id: result.id || 0,
+          username: result.username,
+          email: result.email,
+          role: result.role || 'user',
+          is_active: result.is_active !== undefined ? result.is_active : true
+        });
       } else {
         // Token无效，清除存储
         localStorage.removeItem('token');

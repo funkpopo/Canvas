@@ -9,11 +9,18 @@ const buildUrl = (endpoint: string): string => {
 
 // Token验证相关函数
 export const authApi = {
-  async verifyToken(): Promise<{valid: boolean, username?: string}> {
+  async verifyToken(): Promise<{valid: boolean, username?: string, id?: number, role?: string, email?: string, is_active?: boolean}> {
     try {
-      const response = await apiClient.post<{valid: boolean, username: string}>('auth/verify-token', {});
+      const response = await apiClient.post<{valid: boolean, username: string, id: number, role: string, email?: string, is_active: boolean}>('auth/verify-token', {});
       if (response.data) {
-        return { valid: response.data.valid, username: response.data.username };
+        return {
+          valid: response.data.valid,
+          username: response.data.username,
+          id: response.data.id,
+          role: response.data.role,
+          email: response.data.email,
+          is_active: response.data.is_active
+        };
       }
       return { valid: false };
     } catch {
@@ -724,5 +731,146 @@ export const jobApi = {
   // Job 状态监控
   async monitorJobStatus(historyId: number): Promise<ApiResponse<any>> {
     return apiClient.post<any>(`/jobs/monitor/${historyId}`, {});
+  },
+};
+
+// ===== 用户管理相关类型定义 =====
+export interface User {
+  id: number;
+  username: string;
+  email?: string;
+  role: string;
+  is_active: boolean;
+  last_login?: string;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface UserCreateData {
+  username: string;
+  email?: string;
+  password: string;
+  role: string;
+}
+
+export interface UserUpdateData {
+  email?: string;
+  role?: string;
+  is_active?: boolean;
+  password?: string;
+}
+
+export interface PasswordChangeData {
+  current_password: string;
+  new_password: string;
+}
+
+// ===== 审计日志相关类型定义 =====
+export interface AuditLog {
+  id: number;
+  user_id: number;
+  username?: string;
+  cluster_id: number;
+  cluster_name?: string;
+  action: string;
+  resource_type: string;
+  resource_name: string;
+  details?: string;
+  ip_address?: string;
+  user_agent?: string;
+  success: boolean;
+  error_message?: string;
+  created_at: string;
+}
+
+export interface AuditStats {
+  total_operations: number;
+  success_count: number;
+  failed_count: number;
+  success_rate: number;
+  action_stats: Array<{ action: string; count: number }>;
+  resource_stats: Array<{ resource_type: string; count: number }>;
+  user_stats: Array<{ username: string; count: number }>;
+}
+
+// ===== 用户管理 API =====
+export const userApi = {
+  async getUsers(params?: {
+    page?: number;
+    page_size?: number;
+    search?: string;
+    role?: string;
+    is_active?: boolean;
+  }): Promise<ApiResponse<{ total: number; users: User[] }>> {
+    const queryParams = new URLSearchParams();
+    if (params?.page) queryParams.append('page', params.page.toString());
+    if (params?.page_size) queryParams.append('page_size', params.page_size.toString());
+    if (params?.search) queryParams.append('search', params.search);
+    if (params?.role) queryParams.append('role', params.role);
+    if (params?.is_active !== undefined) queryParams.append('is_active', params.is_active.toString());
+    
+    const query = queryParams.toString() ? `?${queryParams.toString()}` : '';
+    return apiClient.get<{ total: number; users: User[] }>(`/users/${query}`);
+  },
+
+  async getUser(userId: number): Promise<ApiResponse<User>> {
+    return apiClient.get<User>(`/users/${userId}`);
+  },
+
+  async createUser(userData: UserCreateData): Promise<ApiResponse<User>> {
+    return apiClient.post<User>('/users/', userData);
+  },
+
+  async updateUser(userId: number, userData: UserUpdateData): Promise<ApiResponse<User>> {
+    return apiClient.put<User>(`/users/${userId}`, userData);
+  },
+
+  async deleteUser(userId: number): Promise<ApiResponse<null>> {
+    return apiClient.delete<null>(`/users/${userId}`);
+  },
+
+  async changePassword(userId: number, passwordData: PasswordChangeData): Promise<ApiResponse<{ message: string }>> {
+    return apiClient.put<{ message: string }>(`/users/${userId}/password`, passwordData);
+  },
+};
+
+// ===== 审计日志 API =====
+export const auditLogApi = {
+  async getAuditLogs(params?: {
+    page?: number;
+    page_size?: number;
+    user_id?: number;
+    cluster_id?: number;
+    action?: string;
+    resource_type?: string;
+    success?: boolean;
+    start_date?: string;
+    end_date?: string;
+  }): Promise<ApiResponse<{ total: number; logs: AuditLog[] }>> {
+    const queryParams = new URLSearchParams();
+    if (params?.page) queryParams.append('page', params.page.toString());
+    if (params?.page_size) queryParams.append('page_size', params.page_size.toString());
+    if (params?.user_id) queryParams.append('user_id', params.user_id.toString());
+    if (params?.cluster_id) queryParams.append('cluster_id', params.cluster_id.toString());
+    if (params?.action) queryParams.append('action', params.action);
+    if (params?.resource_type) queryParams.append('resource_type', params.resource_type);
+    if (params?.success !== undefined) queryParams.append('success', params.success.toString());
+    if (params?.start_date) queryParams.append('start_date', params.start_date);
+    if (params?.end_date) queryParams.append('end_date', params.end_date);
+    
+    const query = queryParams.toString() ? `?${queryParams.toString()}` : '';
+    return apiClient.get<{ total: number; logs: AuditLog[] }>(`/audit-logs/${query}`);
+  },
+
+  async getAuditStats(params?: {
+    start_date?: string;
+    end_date?: string;
+  }): Promise<ApiResponse<AuditStats>> {
+    const queryParams = new URLSearchParams();
+    if (params?.start_date) queryParams.append('start_date', params.start_date);
+    if (params?.end_date) queryParams.append('end_date', params.end_date);
+    
+    const query = queryParams.toString() ? `?${queryParams.toString()}` : '';
+    return apiClient.get<AuditStats>(`/audit-logs/stats/summary${query}`);
   },
 };

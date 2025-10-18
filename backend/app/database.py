@@ -44,13 +44,20 @@ def init_default_user():
             admin_user = User(
                 username="admin",
                 hashed_password=hashed_password,
+                role="admin",
                 is_active=True
             )
             db.add(admin_user)
             db.commit()
             print("默认用户 'admin' 已创建，密码：admin123")
         else:
-            print("默认用户 'admin' 已存在")
+            # 如果admin用户存在但role字段为空，更新为admin
+            if not hasattr(user, 'role') or not user.role or user.role == "user":
+                user.role = "admin"
+                db.commit()
+                print("默认用户 'admin' 角色已更新为管理员")
+            else:
+                print("默认用户 'admin' 已存在")
     except Exception as e:
         print(f"初始化默认用户失败: {e}")
         db.rollback()
