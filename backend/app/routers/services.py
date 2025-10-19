@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from ..database import get_db
@@ -8,6 +8,7 @@ from ..k8s_client import (
     get_namespace_services, create_service, delete_service,
     get_service_details, update_service, get_service_yaml, update_service_yaml
 )
+from ..audit import log_action
 from pydantic import BaseModel
 
 router = APIRouter()

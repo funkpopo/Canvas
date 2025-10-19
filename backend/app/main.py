@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from .database import create_tables, init_default_user
-from .routers import auth, clusters, stats, nodes, namespaces, pods, deployments, storage, services, configmaps, secrets, network_policies, resource_quotas, events, jobs, websocket, users, audit_logs
+from .routers import auth, clusters, stats, nodes, namespaces, pods, deployments, storage, services, configmaps, secrets, network_policies, resource_quotas, events, jobs, websocket, users, audit_logs, rbac
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -71,6 +71,7 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/api/auth", tags=["authentication"])
 app.include_router(users.router, prefix="/api/users", tags=["users"])
 app.include_router(audit_logs.router, prefix="/api/audit-logs", tags=["audit-logs"])
+app.include_router(rbac.router, prefix="/api/rbac", tags=["rbac"])
 app.include_router(clusters.router, prefix="/api/clusters", tags=["clusters"])
 app.include_router(stats.router, prefix="/api/stats", tags=["statistics"])
 app.include_router(nodes.router, prefix="/api/nodes", tags=["nodes"])

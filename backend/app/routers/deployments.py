@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from ..database import get_db
@@ -9,6 +9,7 @@ from ..k8s_client import (
     get_namespace_deployments, update_deployment, get_deployment_yaml, update_deployment_yaml,
     get_deployment_services, get_service_details, update_service, get_service_yaml, update_service_yaml
 )
+from ..audit import log_action
 from pydantic import BaseModel
 
 router = APIRouter()
@@ -206,10 +207,12 @@ async def scale_deployment_endpoint(
     deployment_name: str,
     scale_request: ScaleRequest,
     cluster_id: int = Query(..., description="集群ID"),
+    request: Request = None,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     """扩容/缩容部署"""
+    cluster = None
     try:
         if not isinstance(cluster_id, int) or cluster_id <= 0:
             raise HTTPException(status_code=422, detail="无效的集群ID")
@@ -223,12 +226,48 @@ async def scale_deployment_endpoint(
 
         result = scale_deployment(cluster, namespace, deployment_name, scale_request.replicas)
         if result:
+            log_action(
+                db=db,
+                user_id=current_user.id,
+                cluster_id=cluster_id,
+                action="scale",
+                resource_type="deployment",
+                resource_name=f"{namespace}/{deployment_name}",
+                details={"namespace": namespace, "deployment_name": deployment_name, "replicas": scale_request.replicas},
+                success=True,
+                request=request
+            )
             return {"message": f"部署 {namespace}/{deployment_name} 已调整为 {scale_request.replicas} 个副本"}
         else:
+            log_action(
+                db=db,
+                user_id=current_user.id,
+                cluster_id=cluster_id,
+                action="scale",
+                resource_type="deployment",
+                resource_name=f"{namespace}/{deployment_name}",
+                details={"namespace": namespace, "deployment_name": deployment_name, "replicas": scale_request.replicas},
+                success=False,
+                error_message="调整副本数失败",
+                request=request
+            )
             raise HTTPException(status_code=500, detail=f"调整部署副本数失败")
     except HTTPException:
         raise
     except Exception as e:
+        if cluster:
+            log_action(
+                db=db,
+                user_id=current_user.id,
+                cluster_id=cluster_id,
+                action="scale",
+                resource_type="deployment",
+                resource_name=f"{namespace}/{deployment_name}",
+                details={"namespace": namespace, "deployment_name": deployment_name, "replicas": scale_request.replicas},
+                success=False,
+                error_message=str(e),
+                request=request
+            )
         raise HTTPException(status_code=500, detail=f"调整部署副本数失败: {str(e)}")
 
 @router.post("/{namespace}/{deployment_name}/restart")
@@ -236,10 +275,12 @@ async def restart_deployment_endpoint(
     namespace: str,
     deployment_name: str,
     cluster_id: int = Query(..., description="集群ID"),
+    request: Request = None,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     """重启部署"""
+    cluster = None
     try:
         if not isinstance(cluster_id, int) or cluster_id <= 0:
             raise HTTPException(status_code=422, detail="无效的集群ID")
@@ -250,12 +291,48 @@ async def restart_deployment_endpoint(
 
         result = restart_deployment(cluster, namespace, deployment_name)
         if result:
+            log_action(
+                db=db,
+                user_id=current_user.id,
+                cluster_id=cluster_id,
+                action="restart",
+                resource_type="deployment",
+                resource_name=f"{namespace}/{deployment_name}",
+                details={"namespace": namespace, "deployment_name": deployment_name},
+                success=True,
+                request=request
+            )
             return {"message": f"部署 {namespace}/{deployment_name} 重启成功"}
         else:
+            log_action(
+                db=db,
+                user_id=current_user.id,
+                cluster_id=cluster_id,
+                action="restart",
+                resource_type="deployment",
+                resource_name=f"{namespace}/{deployment_name}",
+                details={"namespace": namespace, "deployment_name": deployment_name},
+                success=False,
+                error_message="重启失败",
+                request=request
+            )
             raise HTTPException(status_code=500, detail=f"重启部署失败")
     except HTTPException:
         raise
     except Exception as e:
+        if cluster:
+            log_action(
+                db=db,
+                user_id=current_user.id,
+                cluster_id=cluster_id,
+                action="restart",
+                resource_type="deployment",
+                resource_name=f"{namespace}/{deployment_name}",
+                details={"namespace": namespace, "deployment_name": deployment_name},
+                success=False,
+                error_message=str(e),
+                request=request
+            )
         raise HTTPException(status_code=500, detail=f"重启部署失败: {str(e)}")
 
 @router.delete("/{namespace}/{deployment_name}")
@@ -263,10 +340,12 @@ async def delete_deployment_endpoint(
     namespace: str,
     deployment_name: str,
     cluster_id: int = Query(..., description="集群ID"),
+    request: Request = None,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     """删除部署"""
+    cluster = None
     try:
         if not isinstance(cluster_id, int) or cluster_id <= 0:
             raise HTTPException(status_code=422, detail="无效的集群ID")
@@ -277,12 +356,48 @@ async def delete_deployment_endpoint(
 
         result = delete_deployment(cluster, namespace, deployment_name)
         if result:
+            log_action(
+                db=db,
+                user_id=current_user.id,
+                cluster_id=cluster_id,
+                action="delete",
+                resource_type="deployment",
+                resource_name=f"{namespace}/{deployment_name}",
+                details={"namespace": namespace, "deployment_name": deployment_name},
+                success=True,
+                request=request
+            )
             return {"message": f"部署 {namespace}/{deployment_name} 删除成功"}
         else:
+            log_action(
+                db=db,
+                user_id=current_user.id,
+                cluster_id=cluster_id,
+                action="delete",
+                resource_type="deployment",
+                resource_name=f"{namespace}/{deployment_name}",
+                details={"namespace": namespace, "deployment_name": deployment_name},
+                success=False,
+                error_message="删除失败",
+                request=request
+            )
             raise HTTPException(status_code=500, detail=f"删除部署失败")
     except HTTPException:
         raise
     except Exception as e:
+        if cluster:
+            log_action(
+                db=db,
+                user_id=current_user.id,
+                cluster_id=cluster_id,
+                action="delete",
+                resource_type="deployment",
+                resource_name=f"{namespace}/{deployment_name}",
+                details={"namespace": namespace, "deployment_name": deployment_name},
+                success=False,
+                error_message=str(e),
+                request=request
+            )
         raise HTTPException(status_code=500, detail=f"删除部署失败: {str(e)}")
 
 @router.patch("/{namespace}/{deployment_name}")
@@ -291,10 +406,12 @@ async def update_deployment_endpoint(
     deployment_name: str,
     update_request: DeploymentUpdateRequest,
     cluster_id: int = Query(..., description="集群ID"),
+    request: Request = None,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     """更新部署"""
+    cluster = None
     try:
         if not isinstance(cluster_id, int) or cluster_id <= 0:
             raise HTTPException(status_code=422, detail="无效的集群ID")
@@ -307,12 +424,49 @@ async def update_deployment_endpoint(
         updates = update_request.dict(exclude_unset=True)
         result = update_deployment(cluster, namespace, deployment_name, updates)
         if result:
+            log_action(
+                db=db,
+                user_id=current_user.id,
+                cluster_id=cluster_id,
+                action="update",
+                resource_type="deployment",
+                resource_name=f"{namespace}/{deployment_name}",
+                details={"namespace": namespace, "deployment_name": deployment_name, "updates": list(updates.keys())},
+                success=True,
+                request=request
+            )
             return {"message": f"部署 {namespace}/{deployment_name} 更新成功"}
         else:
+            log_action(
+                db=db,
+                user_id=current_user.id,
+                cluster_id=cluster_id,
+                action="update",
+                resource_type="deployment",
+                resource_name=f"{namespace}/{deployment_name}",
+                details={"namespace": namespace, "deployment_name": deployment_name, "updates": list(updates.keys())},
+                success=False,
+                error_message="更新失败",
+                request=request
+            )
             raise HTTPException(status_code=500, detail="更新部署失败")
     except HTTPException:
         raise
     except Exception as e:
+        if cluster:
+            updates = update_request.dict(exclude_unset=True)
+            log_action(
+                db=db,
+                user_id=current_user.id,
+                cluster_id=cluster_id,
+                action="update",
+                resource_type="deployment",
+                resource_name=f"{namespace}/{deployment_name}",
+                details={"namespace": namespace, "deployment_name": deployment_name, "updates": list(updates.keys())},
+                success=False,
+                error_message=str(e),
+                request=request
+            )
         raise HTTPException(status_code=500, detail=f"更新部署失败: {str(e)}")
 
 @router.get("/{namespace}/{deployment_name}/yaml")
@@ -353,10 +507,13 @@ async def update_deployment_yaml_endpoint(
     deployment_name: str,
     yaml_request: YamlUpdateRequest,
     cluster_id: str = Query(..., description="集群ID"),
+    request: Request = None,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     """通过YAML更新部署"""
+    cluster = None
+    cluster_id_int = None
     try:
         try:
             cluster_id_int = int(cluster_id)
@@ -372,12 +529,48 @@ async def update_deployment_yaml_endpoint(
 
         result = update_deployment_yaml(cluster, namespace, deployment_name, yaml_request.yaml_content)
         if result:
+            log_action(
+                db=db,
+                user_id=current_user.id,
+                cluster_id=cluster_id_int,
+                action="update_yaml",
+                resource_type="deployment",
+                resource_name=f"{namespace}/{deployment_name}",
+                details={"namespace": namespace, "deployment_name": deployment_name},
+                success=True,
+                request=request
+            )
             return {"message": f"部署 {namespace}/{deployment_name} YAML更新成功"}
         else:
+            log_action(
+                db=db,
+                user_id=current_user.id,
+                cluster_id=cluster_id_int,
+                action="update_yaml",
+                resource_type="deployment",
+                resource_name=f"{namespace}/{deployment_name}",
+                details={"namespace": namespace, "deployment_name": deployment_name},
+                success=False,
+                error_message="YAML更新失败",
+                request=request
+            )
             raise HTTPException(status_code=500, detail="更新部署YAML失败")
     except HTTPException:
         raise
     except Exception as e:
+        if cluster and cluster_id_int:
+            log_action(
+                db=db,
+                user_id=current_user.id,
+                cluster_id=cluster_id_int,
+                action="update_yaml",
+                resource_type="deployment",
+                resource_name=f"{namespace}/{deployment_name}",
+                details={"namespace": namespace, "deployment_name": deployment_name},
+                success=False,
+                error_message=str(e),
+                request=request
+            )
         raise HTTPException(status_code=500, detail=f"更新部署YAML失败: {str(e)}")
 
 @router.get("/{namespace}/{deployment_name}/services", response_model=List[dict])

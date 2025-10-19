@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -6,6 +6,7 @@ from ..database import get_db
 from ..models import Cluster
 from ..auth import get_current_user
 from ..k8s_client import get_pods_info, get_pod_details, get_pod_logs, restart_pod, delete_pod
+from ..audit import log_action
 from pydantic import BaseModel
 
 router = APIRouter()
@@ -166,9 +167,11 @@ async def restart_pod_endpoint(
   namespace: str,
   pod_name: str,
   cluster_id: int = Query(..., description="集群ID"),
+  request: Request = None,
   db: Session = Depends(get_db),
   current_user: dict = Depends(get_current_user),
 ):
+  cluster = None
   try:
     cluster = (
       db.query(Cluster)
@@ -180,12 +183,48 @@ async def restart_pod_endpoint(
 
     result = restart_pod(cluster, namespace, pod_name)
     if result:
+      log_action(
+        db=db,
+        user_id=current_user.id,
+        cluster_id=cluster_id,
+        action="restart",
+        resource_type="pod",
+        resource_name=f"{namespace}/{pod_name}",
+        details={"namespace": namespace, "pod_name": pod_name},
+        success=True,
+        request=request
+      )
       return {"message": f"Pod {namespace}/{pod_name} 重启成功"}
     else:
+      log_action(
+        db=db,
+        user_id=current_user.id,
+        cluster_id=cluster_id,
+        action="restart",
+        resource_type="pod",
+        resource_name=f"{namespace}/{pod_name}",
+        details={"namespace": namespace, "pod_name": pod_name},
+        success=False,
+        error_message="重启操作失败",
+        request=request
+      )
       raise HTTPException(status_code=500, detail=f"重启 Pod {namespace}/{pod_name} 失败")
   except HTTPException:
     raise
   except Exception as e:
+    if cluster:
+      log_action(
+        db=db,
+        user_id=current_user.id,
+        cluster_id=cluster_id,
+        action="restart",
+        resource_type="pod",
+        resource_name=f"{namespace}/{pod_name}",
+        details={"namespace": namespace, "pod_name": pod_name},
+        success=False,
+        error_message=str(e),
+        request=request
+      )
     raise HTTPException(status_code=500, detail=f"重启 Pod 失败: {str(e)}")
 
 
@@ -195,9 +234,11 @@ async def delete_pod_endpoint(
   pod_name: str,
   cluster_id: int = Query(..., description="集群ID"),
   force: bool = Query(False, description="是否强制删除Pod（设置grace_period_seconds=0）"),
+  request: Request = None,
   db: Session = Depends(get_db),
   current_user: dict = Depends(get_current_user),
 ):
+  cluster = None
   try:
     cluster = (
       db.query(Cluster)
@@ -210,11 +251,47 @@ async def delete_pod_endpoint(
     result = delete_pod(cluster, namespace, pod_name, force)
     if result:
       delete_type = "强制" if force else "正常"
+      log_action(
+        db=db,
+        user_id=current_user.id,
+        cluster_id=cluster_id,
+        action="delete",
+        resource_type="pod",
+        resource_name=f"{namespace}/{pod_name}",
+        details={"namespace": namespace, "pod_name": pod_name, "force": force},
+        success=True,
+        request=request
+      )
       return {"message": f"Pod {namespace}/{pod_name} {delete_type}删除成功"}
     else:
+      log_action(
+        db=db,
+        user_id=current_user.id,
+        cluster_id=cluster_id,
+        action="delete",
+        resource_type="pod",
+        resource_name=f"{namespace}/{pod_name}",
+        details={"namespace": namespace, "pod_name": pod_name, "force": force},
+        success=False,
+        error_message="删除操作失败",
+        request=request
+      )
       raise HTTPException(status_code=500, detail=f"删除 Pod {namespace}/{pod_name} 失败")
   except HTTPException:
     raise
   except Exception as e:
+    if cluster:
+      log_action(
+        db=db,
+        user_id=current_user.id,
+        cluster_id=cluster_id,
+        action="delete",
+        resource_type="pod",
+        resource_name=f"{namespace}/{pod_name}",
+        details={"namespace": namespace, "pod_name": pod_name, "force": force},
+        success=False,
+        error_message=str(e),
+        request=request
+      )
     raise HTTPException(status_code=500, detail=f"删除 Pod 失败: {str(e)}")
 

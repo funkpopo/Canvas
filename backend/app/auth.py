@@ -78,3 +78,57 @@ async def get_current_user_ws(token: str, db: Session):
         return user
     except Exception:
         raise credentials_exception
+
+
+# ========== 权限验证 ==========
+
+def require_role(allowed_roles: list):
+    """
+    权限验证装饰器工厂函数
+    :param allowed_roles: 允许的角色列表，如['admin'], ['admin', 'user']
+    """
+    def role_checker(current_user: models.User = Depends(get_current_user)):
+        if current_user.role not in allowed_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"需要以下角色之一: {', '.join(allowed_roles)}"
+            )
+        return current_user
+    return role_checker
+
+
+def require_admin(current_user: models.User = Depends(get_current_user)):
+    """
+    要求管理员权限
+    """
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="需要管理员权限"
+        )
+    return current_user
+
+
+def require_user_or_admin(current_user: models.User = Depends(get_current_user)):
+    """
+    要求用户或管理员权限（user, admin）
+    """
+    if current_user.role not in ["user", "admin"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="需要用户或管理员权限"
+        )
+    return current_user
+
+
+def require_viewer_or_above(current_user: models.User = Depends(get_current_user)):
+    """
+    要求查看者及以上权限（viewer, user, admin）
+    所有已登录用户都可以
+    """
+    if current_user.role not in ["viewer", "user", "admin"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="需要有效的用户权限"
+        )
+    return current_user
