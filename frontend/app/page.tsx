@@ -292,6 +292,12 @@ export default function Home() {
                   审计日志
                 </Link>
               </Button>
+              <Button variant="outline" className="h-20 flex-col" asChild>
+                <Link href="/rbac">
+                  <Shield className="h-6 w-6 mb-2" />
+                  RBAC权限
+                </Link>
+              </Button>
             </div>
           </CardContent>
         </Card>
