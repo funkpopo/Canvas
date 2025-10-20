@@ -50,7 +50,7 @@ export default function AuditLogsPage() {
   // 筛选条件
   const [searchAction, setSearchAction] = useState("");
   const [resourceTypeFilter, setResourceTypeFilter] = useState("");
-  const [successFilter, setSuccessFilter] = useState<string>("");
+  const [successFilter, setSuccessFilter] = useState<string>("all");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
@@ -72,7 +72,7 @@ export default function AuditLogsPage() {
       const params: any = { page, page_size: pageSize };
       if (searchAction) params.action = searchAction;
       if (resourceTypeFilter) params.resource_type = resourceTypeFilter;
-      if (successFilter !== "") params.success = successFilter === "true";
+      if (successFilter && successFilter !== "all") params.success = successFilter === "true";
       if (startDate) params.start_date = new Date(startDate).toISOString();
       if (endDate) params.end_date = new Date(endDate).toISOString();
 
@@ -282,7 +282,7 @@ export default function AuditLogsPage() {
                   <SelectValue placeholder="所有状态" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">所有状态</SelectItem>
+                  <SelectItem value="all">所有状态</SelectItem>
                   <SelectItem value="true">成功</SelectItem>
                   <SelectItem value="false">失败</SelectItem>
                 </SelectContent>

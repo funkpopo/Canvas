@@ -30,9 +30,9 @@ export default function JobHistoryPage() {
   const [namespaces, setNamespaces] = useState<Namespace[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [clusterFilter, setClusterFilter] = useState<string>("");
-  const [namespaceFilter, setNamespaceFilter] = useState<string>("");
-  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [clusterFilter, setClusterFilter] = useState<string>("all");
+  const [namespaceFilter, setNamespaceFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
   const [limit, setLimit] = useState<number>(50);
@@ -58,7 +58,7 @@ export default function JobHistoryPage() {
   }, [isAuthenticated]);
 
   useEffect(() => {
-    if (isAuthenticated && clusterFilter) {
+    if (isAuthenticated && clusterFilter && clusterFilter !== "all") {
       fetchNamespaces();
     }
   }, [isAuthenticated, clusterFilter]);
@@ -82,7 +82,7 @@ export default function JobHistoryPage() {
   };
 
   const fetchNamespaces = async () => {
-    if (!clusterFilter) return;
+    if (!clusterFilter || clusterFilter === "all") return;
 
     try {
       const response = await fetch(`http://localhost:8000/api/namespaces?cluster_id=${clusterFilter}`, {
@@ -105,9 +105,9 @@ export default function JobHistoryPage() {
     setIsLoading(true);
     try {
       const response = await jobApi.getJobHistory(
-        clusterFilter ? parseInt(clusterFilter) : undefined,
-        namespaceFilter || undefined,
-        statusFilter || undefined,
+        clusterFilter && clusterFilter !== "all" ? parseInt(clusterFilter) : undefined,
+        namespaceFilter && namespaceFilter !== "all" ? namespaceFilter : undefined,
+        statusFilter && statusFilter !== "all" ? statusFilter : undefined,
         startDate || undefined,
         endDate || undefined,
         limit
@@ -227,7 +227,7 @@ export default function JobHistoryPage() {
                 <SelectValue placeholder="选择集群" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">所有集群</SelectItem>
+                <SelectItem value="all">所有集群</SelectItem>
                 {clusters.map((cluster) => (
                   <SelectItem key={cluster.id} value={cluster.id.toString()}>
                     {cluster.name}
@@ -237,12 +237,12 @@ export default function JobHistoryPage() {
             </Select>
 
             {/* 命名空间筛选 */}
-            <Select value={namespaceFilter} onValueChange={setNamespaceFilter} disabled={!clusterFilter}>
+            <Select value={namespaceFilter} onValueChange={setNamespaceFilter} disabled={clusterFilter === "all"}>
               <SelectTrigger>
                 <SelectValue placeholder="选择命名空间" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">所有命名空间</SelectItem>
+                <SelectItem value="all">所有命名空间</SelectItem>
                 {namespaces.map((ns) => (
                   <SelectItem key={ns.name} value={ns.name}>
                     {ns.name}
@@ -257,7 +257,7 @@ export default function JobHistoryPage() {
                 <SelectValue placeholder="选择状态" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">所有状态</SelectItem>
+                <SelectItem value="all">所有状态</SelectItem>
                 <SelectItem value="Pending">等待中</SelectItem>
                 <SelectItem value="Running">运行中</SelectItem>
                 <SelectItem value="Succeeded">成功</SelectItem>

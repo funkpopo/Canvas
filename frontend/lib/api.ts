@@ -143,6 +143,7 @@ export const clusterApi = {
     return apiClient.get<Cluster[]>('clusters');
   },
 
+  
   async getCluster(id: number): Promise<ApiResponse<Cluster>> {
     return apiClient.get<Cluster>(`clusters/${id}`);
   },

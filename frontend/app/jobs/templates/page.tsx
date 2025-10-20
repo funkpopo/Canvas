@@ -23,7 +23,7 @@ export default function JobTemplatesPage() {
   const [templates, setTemplates] = useState<JobTemplate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<string>("");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<JobTemplate | null>(null);
@@ -63,7 +63,7 @@ export default function JobTemplatesPage() {
   const fetchTemplates = async () => {
     setIsLoading(true);
     try {
-      const response = await jobApi.getJobTemplates(categoryFilter || undefined);
+      const response = await jobApi.getJobTemplates(categoryFilter && categoryFilter !== "all" ? categoryFilter : undefined);
       if (response.data) {
         setTemplates(response.data);
       } else if (response.error) {
@@ -317,7 +317,7 @@ export default function JobTemplatesPage() {
                     <SelectValue placeholder="所有分类" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">所有分类</SelectItem>
+                    <SelectItem value="all">所有分类</SelectItem>
                     {categories.map((category) => (
                       <SelectItem key={category} value={category}>
                         {category}

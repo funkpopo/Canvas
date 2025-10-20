@@ -30,7 +30,7 @@ export default function JobsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedNamespace, setSelectedNamespace] = useState<string>("");
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [yamlContent, setYamlContent] = useState("");
   const [isOperationLoading, setIsOperationLoading] = useState(false);
@@ -237,7 +237,7 @@ export default function JobsPage() {
 
   const filteredJobs = jobs.filter(job => {
     const matchesSearch = job.name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = !statusFilter || job.status.toLowerCase() === statusFilter.toLowerCase();
+    const matchesStatus = !statusFilter || statusFilter === "all" || job.status.toLowerCase() === statusFilter.toLowerCase();
     return matchesSearch && matchesStatus;
   });
 
@@ -353,7 +353,7 @@ export default function JobsPage() {
                     <SelectValue placeholder="状态筛选" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">全部状态</SelectItem>
+                    <SelectItem value="all">全部状态</SelectItem>
                     <SelectItem value="succeeded">成功</SelectItem>
                     <SelectItem value="failed">失败</SelectItem>
                     <SelectItem value="running">运行中</SelectItem>

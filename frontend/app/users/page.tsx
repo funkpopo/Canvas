@@ -44,7 +44,7 @@ import {
 } from "lucide-react";
 import { userApi, User, UserCreateData, UserUpdateData } from "@/lib/api";
 import UserForm from "@/components/UserForm";
-import ConfirmDialog from "@/components/ConfirmDialog";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useAuth } from "@/lib/auth-context";
 
 export default function UsersPage() {
@@ -58,8 +58,8 @@ export default function UsersPage() {
   
   // 筛选条件
   const [searchTerm, setSearchTerm] = useState("");
-  const [roleFilter, setRoleFilter] = useState<string>("");
-  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [roleFilter, setRoleFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
 
   // 对话框状态
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -85,8 +85,8 @@ export default function UsersPage() {
     try {
       const params: any = { page, page_size: pageSize };
       if (searchTerm) params.search = searchTerm;
-      if (roleFilter) params.role = roleFilter;
-      if (statusFilter !== "") params.is_active = statusFilter === "active";
+      if (roleFilter && roleFilter !== "all") params.role = roleFilter;
+      if (statusFilter && statusFilter !== "all") params.is_active = statusFilter === "active";
 
       const response = await userApi.getUsers(params);
       if (response.data) {
@@ -224,7 +224,7 @@ export default function UsersPage() {
                   <SelectValue placeholder="所有角色" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">所有角色</SelectItem>
+                  <SelectItem value="all">所有角色</SelectItem>
                   <SelectItem value="admin">管理员</SelectItem>
                   <SelectItem value="user">用户</SelectItem>
                   <SelectItem value="viewer">只读用户</SelectItem>
@@ -235,7 +235,7 @@ export default function UsersPage() {
                   <SelectValue placeholder="所有状态" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">所有状态</SelectItem>
+                  <SelectItem value="all">所有状态</SelectItem>
                   <SelectItem value="active">活跃</SelectItem>
                   <SelectItem value="inactive">停用</SelectItem>
                 </SelectContent>
@@ -244,8 +244,8 @@ export default function UsersPage() {
                 variant="outline"
                 onClick={() => {
                   setSearchTerm("");
-                  setRoleFilter("");
-                  setStatusFilter("");
+                  setRoleFilter("all");
+                  setStatusFilter("all");
                   setPage(1);
                 }}
               >
