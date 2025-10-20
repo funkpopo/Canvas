@@ -4259,6 +4259,8 @@ class KubernetesResourceWatcher:
         self.watchers: Dict[str, Any] = {}  # 存储不同资源类型的监听器
         self.executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix=f"k8s-watcher-{cluster.id}")
         self.running = False
+        self.loop = None
+        self.loop_thread = None
 
     def start(self):
         """启动资源监听"""
@@ -4272,13 +4274,36 @@ class KubernetesResourceWatcher:
             logger.error(f"Failed to create Kubernetes client for cluster {self.cluster.id}")
             return
 
-        # 启动各个资源类型的监听
-        asyncio.create_task(self._start_pod_watcher())
-        asyncio.create_task(self._start_deployment_watcher())
-        asyncio.create_task(self._start_job_watcher())
-        asyncio.create_task(self._start_service_watcher())
+        # 在新线程中运行事件循环
+        self.loop_thread = threading.Thread(
+            target=self._run_event_loop,
+            daemon=True,
+            name=f"k8s-watcher-loop-{self.cluster.id}"
+        )
+        self.loop_thread.start()
 
         logger.info(f"Started Kubernetes resource watchers for cluster {self.cluster.id}")
+
+    def _run_event_loop(self):
+        """在独立线程中运行事件循环"""
+        try:
+            # 创建新的事件循环
+            self.loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self.loop)
+
+            # 启动各个资源类型的监听
+            self.loop.create_task(self._start_pod_watcher())
+            self.loop.create_task(self._start_deployment_watcher())
+            self.loop.create_task(self._start_job_watcher())
+            self.loop.create_task(self._start_service_watcher())
+
+            # 运行事件循环直到被停止
+            self.loop.run_forever()
+        except Exception as e:
+            logger.error(f"Error in watcher event loop for cluster {self.cluster.id}: {e}")
+        finally:
+            if self.loop and not self.loop.is_closed():
+                self.loop.close()
 
     def stop(self):
         """停止资源监听"""
@@ -4295,6 +4320,14 @@ class KubernetesResourceWatcher:
                 logger.error(f"Error stopping watcher {watcher_name}: {e}")
 
         self.watchers.clear()
+
+        # 停止事件循环
+        if self.loop and self.loop.is_running():
+            self.loop.call_soon_threadsafe(self.loop.stop)
+
+        # 等待线程结束
+        if self.loop_thread and self.loop_thread.is_alive():
+            self.loop_thread.join(timeout=5)
 
         # 关闭客户端连接
         if self.client_instance:
@@ -4597,6 +4630,21 @@ class KubernetesWatcherManager:
 
 # 全局监听器管理器实例
 watcher_manager = KubernetesWatcherManager()
+
+
+# 全局线程池用于异步启动watcher
+_watcher_startup_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="watcher-startup")
+
+
+def start_watcher_async(cluster: Cluster):
+    """在线程池中异步启动watcher，避免阻塞API请求"""
+    def _start():
+        try:
+            watcher_manager.start_watcher(cluster)
+        except Exception as e:
+            logger.error(f"Error starting watcher for cluster {cluster.id}: {e}")
+    
+    _watcher_startup_executor.submit(_start)
 
 
 # ========== RBAC管理 ==========

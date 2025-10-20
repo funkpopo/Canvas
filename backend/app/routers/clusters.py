@@ -39,10 +39,10 @@ async def create_cluster(
         db.commit()
     db.refresh(db_cluster)
 
-    # 如果集群被激活，启动监听器
+    # 如果集群被激活，在后台线程中启动监听器
     if db_cluster.is_active:
-        from ..k8s_client import watcher_manager
-        watcher_manager.start_watcher(db_cluster)
+        from ..k8s_client import start_watcher_async
+        start_watcher_async(db_cluster)
 
     return db_cluster
 
@@ -99,11 +99,11 @@ async def update_cluster(
     db.refresh(cluster)
 
     # 处理监听器状态变化
-    from ..k8s_client import watcher_manager
+    from ..k8s_client import watcher_manager, start_watcher_async
 
-    # 如果集群被激活，启动监听器
+    # 如果集群被激活，在后台线程中启动监听器
     if cluster.is_active and not update_data.get("is_active") is False:
-        watcher_manager.start_watcher(cluster)
+        start_watcher_async(cluster)
     # 如果集群被停用，停止监听器
     elif update_data.get("is_active") is False:
         watcher_manager.stop_watcher(cluster.id)
@@ -160,9 +160,9 @@ async def activate_cluster(
     db.commit()
     db.refresh(cluster)
 
-    # 激活集群时启动监听器
-    from ..k8s_client import watcher_manager
-    watcher_manager.start_watcher(cluster)
+    # 激活集群时在后台线程中启动监听器
+    from ..k8s_client import start_watcher_async
+    start_watcher_async(cluster)
 
     return cluster
 
