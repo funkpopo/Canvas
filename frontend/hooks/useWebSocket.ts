@@ -22,12 +22,14 @@ export interface WebSocketHookReturn {
   unsubscribe: (options: SubscriptionOptions) => void;
   sendMessage: (message: any) => void;
   reconnect: () => void;
+  addMessageHandler: (type: string, handler: (message: WebSocketMessage) => void) => void;
+  removeMessageHandler: (type: string) => void;
 }
 
 const WS_BASE_URL = 'ws://localhost:8000/api/ws';
 
 export function useWebSocket(): WebSocketHookReturn {
-  const { token } = useAuth();
+  const [token, setToken] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,6 +39,12 @@ export function useWebSocket(): WebSocketHookReturn {
   const reconnectAttempts = useRef(0);
   const maxReconnectAttempts = 5;
   const reconnectDelay = 3000; // 3秒
+
+  // 获取token
+  useEffect(() => {
+    const storedToken = localStorage.getItem('token');
+    setToken(storedToken);
+  }, []);
 
   // 消息处理器
   const messageHandlers = useRef<Map<string, (message: WebSocketMessage) => void>>(new Map());

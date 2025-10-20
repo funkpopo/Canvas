@@ -5,12 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { LanguageToggle } from "@/components/ui/language-toggle";
 import { Plus, Edit, Trash2, TestTube, ArrowLeft, Loader2, Power, PowerOff } from "lucide-react";
 import Link from "next/link";
 import AuthGuard from "@/components/AuthGuard";
 import { clusterApi } from "@/lib/api";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { useTranslations } from "next-intl";
 
 interface Cluster {
   id: number;
@@ -21,6 +23,9 @@ interface Cluster {
 }
 
 function ClustersPageContent() {
+  const t = useTranslations("cluster");
+  const tCommon = useTranslations("common");
+
   const [clusters, setClusters] = useState<Cluster[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [confirmDialog, setConfirmDialog] = useState({
@@ -54,8 +59,8 @@ function ClustersPageContent() {
   const handleDeleteCluster = (clusterId: number, clusterName: string) => {
     setConfirmDialog({
       open: true,
-      title: "删除集群",
-      description: `确定要删除集群 "${clusterName}" 吗？此操作不可撤销。`,
+      title: t("deleteCluster"),
+      description: t("deleteClusterConfirm", { name: clusterName }),
       onConfirm: () => performDeleteCluster(clusterId, clusterName),
     });
   };
@@ -67,13 +72,13 @@ function ClustersPageContent() {
 
       if (response.data !== undefined) {
         setClusters(clusters.filter(cluster => cluster.id !== clusterId));
-        toast.success("集群删除成功");
+        toast.success(t("deleteCluster") + " " + tCommon("success"));
       } else {
-        toast.error("删除集群失败");
+        toast.error(t("deleteCluster") + " " + tCommon("failed"));
       }
     } catch (error) {
-      console.error("删除集群出错:", error);
-      toast.error("删除集群时发生错误");
+      console.error(t("deleteCluster") + " error:", error);
+      toast.error(t("deleteCluster") + " " + tCommon("error"));
     }
   };
 
@@ -132,15 +137,16 @@ function ClustersPageContent() {
             <div className="flex items-center">
               <Link href="/" className="flex items-center">
                 <ArrowLeft className="h-5 w-5 mr-2" />
-                <span className="text-gray-600 dark:text-gray-400">返回仪表板</span>
+                <span className="text-gray-600 dark:text-gray-400">{tCommon("backToDashboard")}</span>
               </Link>
             </div>
             <div className="flex items-center space-x-4">
+              <LanguageToggle />
               <ThemeToggle />
               <Button asChild>
                 <Link href="/clusters/new">
                   <Plus className="h-4 w-4 mr-2" />
-                  添加集群
+                  {t("addCluster")}
                 </Link>
               </Button>
             </div>
@@ -152,32 +158,32 @@ function ClustersPageContent() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <h2 className="text-3xl font-bold text-gray-900 dark:text-white">
-            集群管理
+            {t("title")}
           </h2>
           <p className="mt-2 text-gray-600 dark:text-gray-400">
-            管理您的Kubernetes集群配置
+            {t("description")}
           </p>
         </div>
 
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin mr-2" />
-            <span className="text-lg">加载中...</span>
+            <span className="text-lg">{tCommon("loading")}</span>
           </div>
         ) : clusters.length === 0 ? (
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-12">
               <div className="text-center">
                 <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                  暂无集群
+                  {t("noClusters")}
                 </h3>
                 <p className="text-gray-600 dark:text-gray-400 mb-4">
-                  开始添加您的第一个Kubernetes集群
+                  {t("noClustersDescription")}
                 </p>
                 <Button asChild>
                   <Link href="/clusters/new">
                     <Plus className="h-4 w-4 mr-2" />
-                    添加集群
+                    {t("addCluster")}
                   </Link>
                 </Button>
               </div>
@@ -191,7 +197,7 @@ function ClustersPageContent() {
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-lg">{cluster.name}</CardTitle>
                     <Badge variant={cluster.is_active ? "default" : "secondary"}>
-                      {cluster.is_active ? "活跃" : "停用"}
+                      {cluster.is_active ? tCommon("active") : tCommon("inactive")}
                     </Badge>
                   </div>
                   <CardDescription>{cluster.endpoint}</CardDescription>
@@ -199,7 +205,7 @@ function ClustersPageContent() {
                 <CardContent>
                   <div className="space-y-4">
                     <div className="text-sm text-gray-600 dark:text-gray-400">
-                      认证方式: {cluster.auth_type === 'kubeconfig' ? 'Kubeconfig' : 'Token'}
+                      {t("authType")}: {cluster.auth_type === 'kubeconfig' ? t("kubeconfig") : t("token")}
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <Button
@@ -210,12 +216,12 @@ function ClustersPageContent() {
                         {cluster.is_active ? (
                           <>
                             <PowerOff className="h-4 w-4 mr-1" />
-                            停用
+                            {tCommon("deactivate")}
                           </>
                         ) : (
                           <>
                             <Power className="h-4 w-4 mr-1" />
-                            激活
+                            {tCommon("activate")}
                           </>
                         )}
                       </Button>
@@ -225,7 +231,7 @@ function ClustersPageContent() {
                         onClick={() => handleTestConnection(cluster.id, cluster.name)}
                       >
                         <TestTube className="h-4 w-4 mr-1" />
-                        测试连接
+                        {t("testConnection")}
                       </Button>
                       <Button
                         size="sm"
@@ -234,7 +240,7 @@ function ClustersPageContent() {
                       >
                         <Link href={`/clusters/${cluster.id}/edit`}>
                           <Edit className="h-4 w-4 mr-1" />
-                          编辑
+                          {tCommon("edit")}
                         </Link>
                       </Button>
                       <Button

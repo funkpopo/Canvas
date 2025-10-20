@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ArrowLeft, Activity, Loader2, RefreshCw, AlertCircle, Play, Trash2, FileText, Code } from "lucide-react";
@@ -457,9 +458,10 @@ export default function JobDetailsPage({ params }: { params: Promise<{ namespace
                 </div>
               ) : (
                 <YamlEditor
-                  content={yamlContent}
-                  onSave={handleSaveYaml}
-                  isLoading={isOperationLoading}
+                  value={yamlContent}
+                  onChange={setYamlContent}
+                  onSave={() => handleSaveYaml(yamlContent)}
+                  readOnly={false}
                 />
               )}
             </CardContent>

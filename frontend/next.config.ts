@@ -1,4 +1,8 @@
 import type { NextConfig } from "next";
+import { routing } from './i18n/routing';
+import createNextIntlPlugin from 'next-intl/plugin';
+
+const withNextIntl = createNextIntlPlugin('./i18n.ts');
 
 const nextConfig: NextConfig = {
   experimental: {
@@ -10,4 +14,4 @@ const nextConfig: NextConfig = {
   trailingSlash: false,
 };
 
-export default nextConfig;
+export default withNextIntl(nextConfig);

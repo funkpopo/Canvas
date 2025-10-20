@@ -33,7 +33,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 export default function RBACPage() {
   const router = useRouter();
   const { user: currentUser, isLoading: authLoading } = useAuth();
-  const { selectedCluster } = useCluster();
+  const { activeCluster: selectedCluster } = useCluster();
 
   // Roles
   const [roles, setRoles] = useState<Role[]>([]);
@@ -650,7 +650,6 @@ export default function RBACPage() {
           description={`确定要删除 ${deleteDialog.type === 'role' ? 'Role' : deleteDialog.type === 'roleBinding' ? 'RoleBinding' : 'ServiceAccount'} "${deleteDialog.name}" 吗？此操作无法撤销。`}
           onConfirm={handleDelete}
           confirmText="删除"
-          isLoading={isDeleting}
         />
       </div>
     </div>

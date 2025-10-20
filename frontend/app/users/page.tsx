@@ -417,7 +417,6 @@ export default function UsersPage() {
         description={`确定要删除用户 "${userToDelete?.username}" 吗？此操作无法撤销。`}
         onConfirm={handleDeleteUser}
         confirmText="删除"
-        isLoading={isSubmitting}
       />
     </div>
   );

@@ -21,6 +21,7 @@ import { useCluster } from "@/lib/cluster-context";
 import { serviceApi } from "@/lib/api";
 import type { Cluster } from "@/lib/cluster-context";
 import { toast } from "sonner";
+import { useTranslations } from "next-intl";
 
 interface Service {
   name: string;
@@ -37,6 +38,9 @@ interface Service {
 }
 
 export default function ServicesManagement() {
+  const t = useTranslations("services");
+  const tCommon = useTranslations("common");
+
   const [services, setServices] = useState<Service[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedClusterId, setSelectedClusterId] = useState<number | null>(null);
@@ -345,10 +349,10 @@ spec:
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <h2 className="text-3xl font-bold text-gray-900 dark:text-white">
-            服务管理
+            {t("title")}
           </h2>
           <p className="mt-2 text-gray-600 dark:text-gray-400">
-            管理Kubernetes集群中的服务资源（支持YAML格式编辑）
+            {t("description")}
           </p>
         </div>
 
@@ -356,33 +360,33 @@ spec:
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>服务列表</CardTitle>
+              <CardTitle>{t("list")}</CardTitle>
               <CardDescription>
-                {selectedNamespace ? `命名空间: ${selectedNamespace}` : "请选择命名空间"}
+                {selectedNamespace ? `${tCommon("namespace")}: ${selectedNamespace}` : t("selectNamespace")}
               </CardDescription>
             </div>
             <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
               <DialogTrigger asChild>
                 <Button onClick={() => { resetServiceForm(); setIsCreateOpen(true); }} disabled={!selectedNamespace}>
                   <Plus className="w-4 h-4 mr-2" />
-                  创建服务
+                  {t("createService")}
                 </Button>
               </DialogTrigger>
               <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
                 <DialogHeader>
-                  <DialogTitle>创建服务</DialogTitle>
-                  <DialogDescription>创建新的Kubernetes服务</DialogDescription>
+                  <DialogTitle>{t("createServiceTitle")}</DialogTitle>
+                  <DialogDescription>{t("createServiceDescription")}</DialogDescription>
                 </DialogHeader>
                 <Tabs defaultValue="yaml" className="w-full">
                   <TabsList className="grid w-full grid-cols-1">
-                    <TabsTrigger value="yaml">YAML配置</TabsTrigger>
+                    <TabsTrigger value="yaml">{t("yamlConfig")}</TabsTrigger>
                   </TabsList>
                   <TabsContent value="yaml" className="space-y-4">
                     <YamlEditor
                       value={yamlContent}
                       onChange={handleYamlChange}
                       error={yamlError}
-                      label="Service YAML配置"
+                      label={t("serviceYamlConfig")}
                       template={`apiVersion: v1
 kind: Service
 metadata:
@@ -415,12 +419,12 @@ spec:
                   </TabsContent>
                 </Tabs>
                 <DialogFooter>
-                  <Button variant="outline" onClick={() => setIsCreateOpen(false)}>取消</Button>
+                  <Button variant="outline" onClick={() => setIsCreateOpen(false)}>{tCommon("cancel")}</Button>
                   <Button
                     onClick={handleCreateService}
                     disabled={!yamlContent.trim() || !!yamlError}
                   >
-                    创建服务
+                    {t("create")}
                   </Button>
                 </DialogFooter>
               </DialogContent>
@@ -431,23 +435,23 @@ spec:
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="w-8 h-8 animate-spin" />
-              <span className="ml-2">加载中...</span>
+              <span className="ml-2">{tCommon("loading")}</span>
             </div>
           ) : services.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              {selectedNamespace ? "该命名空间下没有服务" : "请选择命名空间查看服务"}
+              {selectedNamespace ? t("noServices") : t("selectNamespace")}
             </div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>名称</TableHead>
-                  <TableHead>类型</TableHead>
-                  <TableHead>集群IP</TableHead>
-                  <TableHead>外部IP</TableHead>
-                  <TableHead>端口</TableHead>
-                  <TableHead>年龄</TableHead>
-                  <TableHead>操作</TableHead>
+                  <TableHead>{tCommon("name")}</TableHead>
+                  <TableHead>{t("type")}</TableHead>
+                  <TableHead>{t("clusterIP")}</TableHead>
+                  <TableHead>{t("externalIP")}</TableHead>
+                  <TableHead>{t("ports")}</TableHead>
+                  <TableHead>{tCommon("age")}</TableHead>
+                  <TableHead>{tCommon("actions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -499,7 +503,7 @@ spec:
         <DialogContent className="max-w-4xl max-h-[80vh]">
           <DialogHeader>
             <DialogTitle>
-              {selectedService ? `${selectedService.namespace}/${selectedService.name} - YAML配置` : "YAML配置"}
+              {selectedService ? `${selectedService.namespace}/${selectedService.name} - ${t("yamlConfig")}` : t("yamlConfig")}
             </DialogTitle>
           </DialogHeader>
           <div className="mt-4">
@@ -510,7 +514,7 @@ spec:
             />
           </div>
           <DialogFooter>
-            <Button onClick={() => setIsYamlOpen(false)}>关闭</Button>
+            <Button onClick={() => setIsYamlOpen(false)}>{tCommon("close")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

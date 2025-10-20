@@ -186,7 +186,7 @@ export default function JobTemplatesPage() {
   });
 
   // 获取所有分类
-  const categories = Array.from(new Set(templates.map(t => t.category).filter(Boolean)));
+  const categories = Array.from(new Set(templates.map(t => t.category).filter(Boolean))) as string[];
 
   if (!isAuthenticated) {
     return <div>验证中...</div>;

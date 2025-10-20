@@ -6,10 +6,12 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { LanguageToggle } from "@/components/ui/language-toggle";
 import { LogOut, Server, FolderPen, Activity, Settings, Database, Loader2, Settings2, Cpu, Shield, Lock, AlertCircle, Wifi, WifiOff, AlertTriangle, User as UserIcon } from "lucide-react";
 import ClusterSelector from "@/components/ClusterSelector";
 import { useAuth } from "@/lib/auth-context";
 import { useCluster } from "@/lib/cluster-context";
+import { useTranslations } from "next-intl";
 
 interface DashboardStats {
   total_clusters: number;
@@ -22,6 +24,9 @@ interface DashboardStats {
 }
 
 export default function Home() {
+  const t = useTranslations("dashboard");
+  const tCommon = useTranslations("common");
+
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [isLoadingStats, setIsLoadingStats] = useState(true);
   const router = useRouter();
@@ -100,13 +105,14 @@ export default function Home() {
                   <WifiOff className="h-4 w-4 text-gray-500" />
                 )}
                 <span className="text-sm text-muted-foreground">
-                  {wsConnected ? '已连接' : wsConnecting ? '连接中' : wsError ? '连接错误' : '未连接'}
+                  {wsConnected ? t("connected") : wsConnecting ? t("connecting") : wsError ? t("connectionError") : t("disconnected")}
                 </span>
               </div>
+              <LanguageToggle />
               <ThemeToggle />
               <Button variant="outline" onClick={logout}>
                 <LogOut className="h-4 w-4 mr-2" />
-                登出
+                {t("logout")}
               </Button>
             </div>
           </div>
@@ -117,7 +123,7 @@ export default function Home() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <p className="mt-2 text-gray-600 dark:text-gray-400">
-            管理Kubernetes集群资源
+            {t("manageResources")}
           </p>
         </div>
 
@@ -125,19 +131,19 @@ export default function Home() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">集群节点</CardTitle>
+              <CardTitle className="text-sm font-medium">{t("totalClusters")}</CardTitle>
               <Server className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               {isLoadingStats ? (
                 <div className="flex items-center">
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  <span className="text-sm text-muted-foreground">加载中...</span>
+                  <span className="text-sm text-muted-foreground">{tCommon("loading")}</span>
                 </div>
               ) : (
                 <>
                   <div className="text-2xl font-bold">{stats?.total_nodes || 0}</div>
-                  <p className="text-xs text-muted-foreground">活跃节点</p>
+                  <p className="text-xs text-muted-foreground">{tCommon("active")}{tCommon("nodes").toLowerCase()}</p>
                 </>
               )}
             </CardContent>
@@ -145,19 +151,19 @@ export default function Home() {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">命名空间</CardTitle>
+              <CardTitle className="text-sm font-medium">{t("totalNamespaces")}</CardTitle>
               <FolderPen className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               {isLoadingStats ? (
                 <div className="flex items-center">
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  <span className="text-sm text-muted-foreground">加载中...</span>
+                  <span className="text-sm text-muted-foreground">{tCommon("loading")}</span>
                 </div>
               ) : (
                 <>
                   <div className="text-2xl font-bold">{stats?.total_namespaces || 0}</div>
-                  <p className="text-xs text-muted-foreground">包含系统和用户命名空间</p>
+                  <p className="text-xs text-muted-foreground">{t("includesSystem")}</p>
                 </>
               )}
             </CardContent>
@@ -165,20 +171,20 @@ export default function Home() {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Pod数量</CardTitle>
+              <CardTitle className="text-sm font-medium">{t("totalPods")}</CardTitle>
               <Activity className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               {isLoadingStats ? (
                 <div className="flex items-center">
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  <span className="text-sm text-muted-foreground">加载中...</span>
+                  <span className="text-sm text-muted-foreground">{tCommon("loading")}</span>
                 </div>
               ) : (
                 <>
                   <div className="text-2xl font-bold">{stats?.total_pods || 0}</div>
                   <p className="text-xs text-muted-foreground">
-                    {stats?.running_pods || 0} 运行中，{(stats?.total_pods || 0) - (stats?.running_pods || 0)} 停止
+                    {stats?.running_pods || 0} {t("running")}, {(stats?.total_pods || 0) - (stats?.running_pods || 0)} {t("stopped")}
                   </p>
                 </>
               )}
@@ -187,19 +193,19 @@ export default function Home() {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">服务</CardTitle>
+              <CardTitle className="text-sm font-medium">{t("totalServices")}</CardTitle>
               <Settings className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               {isLoadingStats ? (
                 <div className="flex items-center">
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  <span className="text-sm text-muted-foreground">加载中...</span>
+                  <span className="text-sm text-muted-foreground">{tCommon("loading")}</span>
                 </div>
               ) : (
                 <>
                   <div className="text-2xl font-bold">{stats?.total_services || 0}</div>
-                  <p className="text-xs text-muted-foreground">负载均衡器和ClusterIP</p>
+                  <p className="text-xs text-muted-foreground">LoadBalancers and ClusterIPs</p>
                 </>
               )}
             </CardContent>

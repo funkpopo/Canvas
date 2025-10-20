@@ -14,6 +14,7 @@ import AuthGuard from "@/components/AuthGuard";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useResourceUpdates } from "@/hooks/useWebSocket";
+import { useTranslations } from "next-intl";
 
 interface PodInfo {
   name: string;
@@ -29,6 +30,9 @@ interface PodInfo {
 }
 
 function PodsPageContent() {
+  const t = useTranslations("pods");
+  const tCommon = useTranslations("common");
+
   const [pods, setPods] = useState<PodInfo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedNamespace, setSelectedNamespace] = useState<string>("");
@@ -196,10 +200,10 @@ function PodsPageContent() {
               <ClusterSelector />
               <Select value={selectedNamespace || "all"} onValueChange={(value) => setSelectedNamespace(value === "all" ? "" : value)}>
                 <SelectTrigger className="w-48">
-                  <SelectValue placeholder="选择命名空间" />
+                  <SelectValue placeholder={t("selectNamespace")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">全部命名空间</SelectItem>
+                  <SelectItem value="all">{t("allNamespaces")}</SelectItem>
                   {availableNamespaces.map((ns) => (
                     <SelectItem key={ns} value={ns}>
                       {ns}
@@ -213,7 +217,7 @@ function PodsPageContent() {
                 ) : (
                   <RefreshCw className="h-4 w-4 mr-2" />
                 )}
-                刷新
+                {t("refresh")}
               </Button>
             </div>
           </div>
@@ -226,22 +230,22 @@ function PodsPageContent() {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-3xl font-bold text-gray-900 dark:text-white">
-                Pod监控
+                {t("title")}
               </h2>
               <p className="mt-2 text-gray-600 dark:text-gray-400">
-                实时监控和管理Kubernetes集群中的Pod资源
+                {t("description")}
               </p>
             </div>
             <div className="flex items-center space-x-2">
               {wsConnected ? (
                 <Badge variant="default" className="bg-green-500 hover:bg-green-600">
                   <Wifi className="h-3 w-3 mr-1" />
-                  实时更新已连接
+                  {t("realTimeConnected")}
                 </Badge>
               ) : (
                 <Badge variant="secondary">
                   <WifiOff className="h-3 w-3 mr-1" />
-                  实时更新未连接
+                  {t("realTimeDisconnected")}
                 </Badge>
               )}
             </div>
@@ -251,17 +255,17 @@ function PodsPageContent() {
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin mr-2" />
-            <span className="text-lg">加载中...</span>
+            <span className="text-lg">{tCommon("loading")}</span>
           </div>
         ) : pods.length === 0 ? (
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-12">
               <Activity className="h-12 w-12 text-gray-400 mb-4" />
               <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                暂无Pod
+                {t("noPods")}
               </h3>
               <p className="text-gray-600 dark:text-gray-400">
-                没有找到任何Pod信息
+                {t("noPodsDescription")}
               </p>
             </CardContent>
           </Card>
