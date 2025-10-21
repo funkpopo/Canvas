@@ -7,9 +7,13 @@ Canvas Kubernetes Management Console支持Docker容器化部署，提供完整�
 ## 架构
 
 - **后端**: FastAPI + SQLite/MySQL
-- **前端**: Next.js + Nginx
+- **前端**: Next.js（内置服务器 + API代理）
 - **数据库**: SQLite（默认）或 MySQL 8.0
 - **缓存**: Redis（可选）
+
+### Next.js API代理
+
+前端通过Next.js内置的`rewrites`功能代理所有`/api/*`请求到后端服务，无需额外反向代理层。这种设计简化了部署架构并提高了性能。
 
 ## 快速开始
 
@@ -50,19 +54,18 @@ Canvas Kubernetes Management Console支持Docker容器化部署，提供完整�
 | 服务 | 端口 | 说明 |
 |------|------|------|
 | backend | 8000 | FastAPI后端API |
-| frontend | 80 | Next.js前端 + Nginx |
+| frontend | 3000 | Next.js前端（内置服务器） |
 | mysql | 3306 | MySQL数据库（profile: mysql） |
 | redis | 6379 | Redis缓存（profile: redis） |
 
 ### 生产环境 (docker-compose.prod.yml)
 
-| 服务 | 说明 |
-|------|------|
-| backend | FastAPI后端服务 |
-| frontend | Next.js前端服务 |
-| mysql | MySQL数据库 |
-| redis | Redis缓存 |
-| nginx | Nginx反向代理 |
+| 服务 | 端口 | 说明 |
+|------|------|------|
+| backend | - | FastAPI后端服务 |
+| frontend | 3000 | Next.js前端服务（内置服务器） |
+| mysql | - | MySQL数据库 |
+| redis | - | Redis缓存 |
 
 ## 环境变量
 
@@ -84,8 +87,10 @@ DATABASE_PASSWORD=your_password
 ### CORS配置
 
 ```bash
-CORS_ORIGINS=http://localhost,http://localhost:3000,http://frontend:80
+CORS_ORIGINS=http://localhost:3000,http://frontend:3000
 ```
+
+注意：由于前端通过Next.js代理访问后端API，CORS配置主要用于开发环境或直接API访问。
 
 ## 数据持久化
 
@@ -100,8 +105,8 @@ CORS_ORIGINS=http://localhost,http://localhost:3000,http://frontend:80
 
 ## 访问应用
 
-- **开发环境**: http://localhost (前端) 或 http://localhost:8000 (后端API)
-- **生产环境**: http://localhost (通过nginx反向代理)
+- **开发环境**: http://localhost:3000 (前端，通过Next.js代理访问后端API)
+- **生产环境**: http://localhost:3000 (前端，通过Next.js代理访问后端API)
 
 ## 默认用户
 
@@ -163,29 +168,27 @@ docker-compose logs -f frontend
 # 后端健康检查
 curl http://localhost:8000/health
 
-# 前端健康检查
-curl http://localhost/health
+# 前端健康检查（通过Next.js代理）
+curl http://localhost:3000/api/health
 ```
 
 ## 自定义配置
 
 ### 添加SSL证书
 
-1. 将证书文件放入 `docker/nginx/ssl/`
-2. 取消 `docker/nginx/conf.d/canvas.conf` 中的HTTPS配置注释
-3. 重启服务
+对于生产环境，建议在前端服务器或负载均衡器层面配置SSL，而不是在Next.js应用层面。
 
-### 修改nginx配置
+### 修改Next.js配置
 
-- 编辑 `docker/nginx/conf.d/canvas.conf`
-- 重启nginx服务: `docker-compose restart nginx`
+- 编辑 `frontend/next.config.ts` 中的API代理配置
+- 重启前端服务: `docker-compose restart frontend`
 
 ## 性能优化
 
 ### 生产环境建议
 
 1. **资源限制**: 在compose文件中添加资源限制
-2. **日志轮转**: 配置logrotate处理nginx日志
+2. **日志轮转**: 配置Next.js应用的日志轮转
 3. **监控**: 添加Prometheus和Grafana监控
 4. **备份**: 设置定期数据库备份
 

@@ -12,6 +12,16 @@ const nextConfig: NextConfig = {
   // Disable static optimization for pages with dynamic content
   // to prevent hydration issues
   trailingSlash: false,
+
+  // API代理配置 - Docker环境
+  async rewrites() {
+    return [
+      {
+        source: '/api/:path*',
+        destination: process.env.API_URL || 'http://backend:8000/api/:path*',
+      },
+    ];
+  },
 };
 
 export default withNextIntl(nextConfig);

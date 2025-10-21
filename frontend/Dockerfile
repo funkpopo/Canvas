@@ -1,14 +1,18 @@
-# 多阶段构建：第一阶段构建应用
-FROM node:18-alpine AS builder
+# 使用Node.js 18 Alpine镜像
+FROM node:18-alpine
 
 # 设置工作目录
 WORKDIR /app
 
+# 设置环境变量
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+
 # 复制package文件
 COPY package*.json ./
 
-# 安装依赖
-RUN npm ci --only=production
+# 安装所有依赖（包括devDependencies用于构建）
+RUN npm ci
 
 # 复制源代码
 COPY . .
@@ -16,17 +20,20 @@ COPY . .
 # 构建应用
 RUN npm run build
 
-# 第二阶段：运行环境
-FROM nginx:alpine
+# 创建非root用户
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
 
-# 复制自定义nginx配置
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-
-# 复制构建产物到nginx服务目录
-COPY --from=builder /app/out /usr/share/nginx/html
+# 更改文件所有权
+RUN chown -R nextjs:nodejs /app
+USER nextjs
 
 # 暴露端口
-EXPOSE 80
+EXPOSE 3000
 
-# 启动nginx
-CMD ["nginx", "-g", "daemon off;"]
+# 设置环境变量
+ENV PORT=3000
+ENV API_URL=http://backend:8000
+
+# 启动Next.js应用
+CMD ["npm", "start"]

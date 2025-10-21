@@ -54,8 +54,6 @@ app = FastAPI(
 allowed_origins = [
     "http://localhost:3000",  # Next.js开发服务器地址
     "http://frontend:3000",   # Docker前端服务地址
-    "http://localhost:80",    # nginx反向代理地址
-    "http://nginx:80",        # Docker nginx服务地址
 ]
 
 # 从环境变量获取额外允许的源
