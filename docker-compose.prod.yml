@@ -1,0 +1,116 @@
+version: '3.8'
+
+services:
+  # 后端服务 - 生产环境
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: canvas-backend-prod
+    environment:
+      - DATABASE_TYPE=mysql  # 生产环境推荐使用MySQL
+      - DATABASE_HOST=mysql
+      - DATABASE_PORT=3306
+      - DATABASE_NAME=canvas
+      - DATABASE_USER=canvas
+      - DATABASE_PASSWORD=${MYSQL_PASSWORD:-canvas123}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost}
+    volumes:
+      - ./backend/canvas.db:/app/canvas.db  # SQLite作为备份
+    networks:
+      - canvas-network
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # 前端服务 - 生产环境
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: canvas-frontend-prod
+    networks:
+      - canvas-network
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # MySQL数据库 - 生产环境
+  mysql:
+    image: mysql:8.0
+    container_name: canvas-mysql-prod
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: canvas
+      MYSQL_USER: canvas
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-canvas123}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./docker/mysql/conf.d:/etc/mysql/conf.d
+    networks:
+      - canvas-network
+    command: --default-authentication-plugin=mysql_native_password
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis缓存 - 生产环境
+  redis:
+    image: redis:7-alpine
+    container_name: canvas-redis-prod
+    volumes:
+      - redis_data:/data
+    networks:
+      - canvas-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Nginx反向代理 - 生产环境
+  nginx:
+    image: nginx:alpine
+    container_name: canvas-nginx-prod
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./docker/nginx/ssl:/etc/nginx/ssl
+      - nginx_logs:/var/log/nginx
+    networks:
+      - canvas-network
+    depends_on:
+      - frontend
+      - backend
+    restart: unless-stopped
+
+volumes:
+  mysql_data:
+    driver: local
+  redis_data:
+    driver: local
+  nginx_logs:
+    driver: local
+
+networks:
+  canvas-network:
+    driver: bridge

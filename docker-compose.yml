@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  # 后端服务
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: canvas-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_TYPE=sqlite  # 可改为mysql切换到MySQL
+      # MySQL配置（当DATABASE_TYPE=mysql时使用）
+      - DATABASE_HOST=mysql
+      - DATABASE_PORT=3306
+      - DATABASE_NAME=canvas
+      - DATABASE_USER=canvas
+      - DATABASE_PASSWORD=canvas123
+    volumes:
+      - ./backend/canvas.db:/app/canvas.db  # SQLite数据库文件挂载
+    networks:
+      - canvas-network
+    depends_on:
+      - mysql
+    restart: unless-stopped
+
+  # 前端服务
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: canvas-frontend
+    ports:
+      - "80:80"
+    networks:
+      - canvas-network
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  # MySQL数据库（可选，默认不启动）
+  mysql:
+    image: mysql:8.0
+    container_name: canvas-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: canvas
+      MYSQL_USER: canvas
+      MYSQL_PASSWORD: canvas123
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - canvas-network
+    command: --default-authentication-plugin=mysql_native_password
+    restart: unless-stopped
+    profiles:
+      - mysql  # 只有在指定--profile mysql时才启动
+
+  # Redis缓存（可选，用于未来扩展）
+  redis:
+    image: redis:7-alpine
+    container_name: canvas-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - canvas-network
+    restart: unless-stopped
+    profiles:
+      - redis
+
+volumes:
+  mysql_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  canvas-network:
+    driver: bridge
