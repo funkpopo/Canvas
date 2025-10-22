@@ -201,7 +201,7 @@ export function BatchOperations<T extends BatchOperationItem>({
       <div className="flex items-center gap-2 mb-4">
         <Checkbox
           checked={selectedItems.length === items.length && items.length > 0}
-          indeterminate={selectedItems.length > 0 && selectedItems.length < items.length}
+          indeterminate={selectedItems.length > 0 && selectedItems.length < items.length ? true : undefined}
           onCheckedChange={handleSelectAll}
         />
         <span className="text-sm text-muted-foreground">
