@@ -4,7 +4,13 @@ Canvas Backend Server
 启动FastAPI服务器
 """
 
+import os
 import uvicorn
+from dotenv import load_dotenv
+
+# 加载环境变量
+load_dotenv()
+
 from app.main import app
 
 if __name__ == "__main__":
