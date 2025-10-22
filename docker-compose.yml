@@ -44,7 +44,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - API_URL=http://backend:8000
+      - NEXT_PUBLIC_API_URL=http://backend:8000/api/
       - NODE_ENV=production
     networks:
       - canvas-network

@@ -26,7 +26,14 @@ export interface WebSocketHookReturn {
   removeMessageHandler: (type: string) => void;
 }
 
-const WS_BASE_URL = 'ws://localhost:8000/api/ws';
+// 从API基础URL动态构造WebSocket URL
+const getWebSocketBaseUrl = (): string => {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/';
+  // 将http/https替换为ws/wss，并移除最后的/api/
+  return apiUrl.replace(/^http/, 'ws').replace(/\/api\/$/, '/api/ws');
+};
+
+const WS_BASE_URL = getWebSocketBaseUrl();
 
 export function useWebSocket(): WebSocketHookReturn {
   const [token, setToken] = useState<string | null>(null);
