@@ -5,7 +5,7 @@ from typing import Optional
 from datetime import datetime
 from .. import models, schemas
 from ..database import get_db
-from ..auth import get_current_user
+from ..auth import get_current_user, require_user_management, require_read_only
 from ..audit import log_user_action
 
 router = APIRouter()
@@ -29,7 +29,7 @@ async def get_users(
     role: Optional[str] = None,
     is_active: Optional[bool] = None,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(require_admin)
+    current_user: models.User = Depends(require_user_management)
 ):
     """获取用户列表（需要管理员权限）"""
     query = db.query(models.User)
@@ -58,7 +58,7 @@ async def get_users(
 async def get_user(
     user_id: int,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(require_admin)
+    current_user: models.User = Depends(require_user_management)
 ):
     """获取用户详情（需要管理员权限）"""
     user = db.query(models.User).filter(models.User.id == user_id).first()
@@ -75,7 +75,7 @@ async def create_user(
     user_data: schemas.UserCreate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(require_admin)
+    current_user: models.User = Depends(require_user_management)
 ):
     """创建新用户（需要管理员权限）"""
     existing_user = db.query(models.User).filter(models.User.username == user_data.username).first()
@@ -124,7 +124,7 @@ async def update_user(
     user_data: schemas.UserUpdate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(require_admin)
+    current_user: models.User = Depends(require_user_management)
 ):
     """更新用户信息（需要管理员权限）"""
     user = db.query(models.User).filter(models.User.id == user_id).first()
@@ -192,7 +192,7 @@ async def delete_user(
     user_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(require_admin)
+    current_user: models.User = Depends(require_user_management)
 ):
     """删除用户（需要管理员权限）"""
     user = db.query(models.User).filter(models.User.id == user_id).first()

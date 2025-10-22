@@ -136,3 +136,63 @@ class AuditLogFilter(BaseModel):
     end_date: Optional[datetime] = None
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=50, ge=1, le=200)
+
+
+# ========== 权限管理 Schemas ==========
+
+class ClusterPermissionBase(BaseModel):
+    cluster_id: int
+    permission_level: str = Field(pattern="^(read|manage)$", description="权限等级：read（只读）或 manage（管理）")
+
+
+class NamespacePermissionBase(BaseModel):
+    cluster_id: int
+    namespace: str
+    permission_level: str = Field(pattern="^(read|manage)$", description="权限等级：read（只读）或 manage（管理）")
+
+
+class ClusterPermissionResponse(ClusterPermissionBase):
+    id: int
+    user_id: int
+    cluster_name: Optional[str] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class NamespacePermissionResponse(NamespacePermissionBase):
+    id: int
+    user_id: int
+    cluster_name: Optional[str] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class UserPermissionsResponse(BaseModel):
+    user_id: int
+    username: str
+    role: str
+    cluster_permissions: List[ClusterPermissionResponse]
+    namespace_permissions: List[NamespacePermissionResponse]
+
+
+class PermissionGrantRequest(BaseModel):
+    permission_level: str = Field(pattern="^(read|manage)$", description="权限等级：read（只读）或 manage（管理）")
+
+
+class ClusterPermissionGrantRequest(PermissionGrantRequest):
+    cluster_id: int
+
+
+class NamespacePermissionGrantRequest(PermissionGrantRequest):
+    cluster_id: int
+    namespace: str
+
+
+class PermissionUpdateRequest(BaseModel):
+    permission_level: str = Field(pattern="^(read|manage)$", description="权限等级：read（只读）或 manage（管理）")

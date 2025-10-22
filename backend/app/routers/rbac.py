@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from ..database import get_db
 from ..models import Cluster, User
-from ..auth import get_current_user, require_admin
+from ..auth import get_current_user, require_admin, require_read_only
 from ..k8s_client import (
     get_roles, get_role, delete_role,
     get_role_bindings, get_role_binding, delete_role_binding,
@@ -22,7 +22,7 @@ async def list_roles(
     cluster_id: int = Query(..., description="集群ID"),
     namespace: Optional[str] = Query(None, description="命名空间，不指定则返回所有"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_admin)
 ):
     """获取Roles列表"""
     try:
@@ -52,7 +52,7 @@ async def get_role_detail(
     name: str,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_admin)
 ):
     """获取Role详情"""
     try:
@@ -141,7 +141,7 @@ async def list_role_bindings(
     cluster_id: int = Query(..., description="集群ID"),
     namespace: Optional[str] = Query(None, description="命名空间，不指定则返回所有"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_admin)
 ):
     """获取RoleBindings列表"""
     try:
@@ -171,7 +171,7 @@ async def get_role_binding_detail(
     name: str,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_admin)
 ):
     """获取RoleBinding详情"""
     try:
@@ -260,7 +260,7 @@ async def list_service_accounts(
     cluster_id: int = Query(..., description="集群ID"),
     namespace: Optional[str] = Query(None, description="命名空间，不指定则返回所有"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_admin)
 ):
     """获取ServiceAccounts列表"""
     try:
@@ -290,7 +290,7 @@ async def get_service_account_detail(
     name: str,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_admin)
 ):
     """获取ServiceAccount详情"""
     try:
@@ -378,7 +378,7 @@ async def delete_service_account_endpoint(
 async def list_cluster_roles(
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_admin)
 ):
     """获取ClusterRoles列表"""
     try:
@@ -408,7 +408,7 @@ async def list_cluster_roles(
 async def list_cluster_role_bindings(
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_admin)
 ):
     """获取ClusterRoleBindings列表"""
     try:

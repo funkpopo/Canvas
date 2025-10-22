@@ -105,3 +105,44 @@ class JobHistory(Base):
     cluster = relationship("Cluster")
     template = relationship("JobTemplate")
     creator = relationship("User")
+
+
+class UserClusterPermission(Base):
+    """用户集群权限"""
+    __tablename__ = "user_cluster_permissions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    cluster_id = Column(Integer, ForeignKey("clusters.id"), nullable=False)
+    permission_level = Column(String, nullable=False)  # 'read' or 'manage'
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    user = relationship("User")
+    cluster = relationship("Cluster")
+
+    __table_args__ = (
+        {"schema": None},  # 确保没有schema前缀
+    )
+
+
+class UserNamespacePermission(Base):
+    """用户命名空间权限"""
+    __tablename__ = "user_namespace_permissions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    cluster_id = Column(Integer, ForeignKey("clusters.id"), nullable=False)
+    namespace = Column(String, nullable=False)
+    permission_level = Column(String, nullable=False)  # 'read' or 'manage'
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    user = relationship("User")
+    cluster = relationship("Cluster")
+
+    __table_args__ = (
+        {"schema": None},  # 确保没有schema前缀
+    )

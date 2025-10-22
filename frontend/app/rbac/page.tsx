@@ -28,12 +28,19 @@ import {
 import { rbacApi, Role, RoleBinding, ServiceAccount, ClusterRole, ClusterRoleBinding } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useCluster } from "@/lib/cluster-context";
+import { canManageRBAC } from "@/lib/utils";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 export default function RBACPage() {
   const router = useRouter();
   const { user: currentUser, isLoading: authLoading } = useAuth();
   const { activeCluster: selectedCluster } = useCluster();
+
+  // 权限检查
+  if (!authLoading && (!currentUser || !canManageRBAC(currentUser))) {
+    router.push('/');
+    return null;
+  }
 
   // Roles
   const [roles, setRoles] = useState<Role[]>([]);

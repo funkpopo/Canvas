@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from ..database import get_db
 from ..models import Cluster, AuditLog, User
-from ..auth import get_current_user
+from ..auth import get_current_user, require_configmap_management, require_read_only
 from ..k8s_client import (
     get_namespace_configmaps, get_configmap_details, create_configmap, update_configmap, delete_configmap,
     get_configmap_yaml, update_configmap_yaml
@@ -44,7 +44,7 @@ async def get_configmaps(
     cluster_id: Optional[int] = Query(None, description="集群ID，不传则获取所有活跃集群"),
     namespace: Optional[str] = Query(None, description="命名空间名称"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_read_only)
 ):
     """获取ConfigMap列表"""
     try:
@@ -82,7 +82,7 @@ async def get_configmap(
     configmap_name: str,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_read_only)
 ):
     """获取ConfigMap详细信息"""
     try:
@@ -107,7 +107,7 @@ async def create_new_configmap(
     configmap_data: ConfigMapCreate,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_configmap_management)
 ):
     """创建ConfigMap"""
     try:
@@ -155,7 +155,7 @@ async def update_existing_configmap(
     updates: ConfigMapUpdate,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_configmap_management)
 ):
     """更新ConfigMap"""
     try:
@@ -203,7 +203,7 @@ async def delete_existing_configmap(
     configmap_name: str,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_configmap_management)
 ):
     """删除ConfigMap"""
     try:
@@ -245,7 +245,7 @@ async def create_configmap_from_yaml(
     yaml_data: YamlCreateRequest,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_configmap_management)
 ):
     """通过YAML创建ConfigMap"""
     try:
@@ -292,7 +292,7 @@ async def get_configmap_yaml_config(
     configmap_name: str,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_read_only)
 ):
     """获取ConfigMap的YAML配置"""
     try:
@@ -319,7 +319,7 @@ async def update_configmap_yaml_config(
     yaml_data: YamlUpdateRequest,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_configmap_management)
 ):
     """通过YAML更新ConfigMap"""
     try:

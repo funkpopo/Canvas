@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from ..database import get_db
 from ..models import Cluster
-from ..auth import get_current_user
+from ..auth import get_current_user, require_resource_management
 from ..k8s_client import (
     get_deployment_details, get_deployment_pods, scale_deployment, restart_deployment, delete_deployment,
     get_namespace_deployments, update_deployment, get_deployment_yaml, update_deployment_yaml,
@@ -209,7 +209,7 @@ async def scale_deployment_endpoint(
     cluster_id: int = Query(..., description="集群ID"),
     request: Request = None,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_resource_management),
 ):
     """扩容/缩容部署"""
     cluster = None
@@ -277,7 +277,7 @@ async def restart_deployment_endpoint(
     cluster_id: int = Query(..., description="集群ID"),
     request: Request = None,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_resource_management),
 ):
     """重启部署"""
     cluster = None
@@ -342,7 +342,7 @@ async def delete_deployment_endpoint(
     cluster_id: int = Query(..., description="集群ID"),
     request: Request = None,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_resource_management),
 ):
     """删除部署"""
     cluster = None
@@ -509,7 +509,7 @@ async def update_deployment_yaml_endpoint(
     cluster_id: str = Query(..., description="集群ID"),
     request: Request = None,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_resource_management),
 ):
     """通过YAML更新部署"""
     cluster = None
@@ -692,7 +692,7 @@ async def update_service_yaml_endpoint(
     yaml_request: YamlUpdateRequest,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_resource_management),
 ):
     """通过YAML更新服务"""
     try:

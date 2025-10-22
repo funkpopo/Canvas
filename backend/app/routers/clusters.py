@@ -4,7 +4,7 @@ from typing import List
 from ..database import get_db
 from ..models import Cluster
 from ..schemas import ClusterCreate, ClusterUpdate, ClusterResponse
-from ..auth import get_current_user
+from ..auth import get_current_user, require_cluster_management, require_read_only
 
 router = APIRouter()
 
@@ -13,7 +13,7 @@ router = APIRouter()
 async def create_cluster(
     cluster: ClusterCreate,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_cluster_management),
 ):
     # 名称唯一校验
     db_cluster = db.query(Cluster).filter(Cluster.name == cluster.name).first()
@@ -53,7 +53,7 @@ async def get_clusters(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_read_only),
 ):
     clusters = db.query(Cluster).offset(skip).limit(limit).all()
     return clusters
@@ -63,7 +63,7 @@ async def get_clusters(
 async def get_cluster(
     cluster_id: int,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_read_only),
 ):
     cluster = db.query(Cluster).filter(Cluster.id == cluster_id).first()
     if not cluster:
@@ -76,7 +76,7 @@ async def update_cluster(
     cluster_id: int,
     cluster_update: ClusterUpdate,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_cluster_management),
 ):
     cluster = db.query(Cluster).filter(Cluster.id == cluster_id).first()
     if not cluster:
@@ -115,7 +115,7 @@ async def update_cluster(
 async def delete_cluster(
     cluster_id: int,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_cluster_management),
 ):
     cluster = db.query(Cluster).filter(Cluster.id == cluster_id).first()
     if not cluster:
@@ -134,7 +134,7 @@ async def delete_cluster(
 async def test_cluster_connection(
     cluster_id: int,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_read_only),
 ):
     from ..k8s_client import test_cluster_connection as test_conn
     cluster = db.query(Cluster).filter(Cluster.id == cluster_id).first()
@@ -149,7 +149,7 @@ async def test_cluster_connection(
 async def activate_cluster(
     cluster_id: int,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_cluster_management),
 ):
     cluster = db.query(Cluster).filter(Cluster.id == cluster_id).first()
     if not cluster:

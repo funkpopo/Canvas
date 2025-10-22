@@ -44,6 +44,7 @@ import {
 } from "lucide-react";
 import { userApi, User, UserCreateData, UserUpdateData } from "@/lib/api";
 import UserForm from "@/components/UserForm";
+import UserPermissions from "@/components/UserPermissions";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useAuth } from "@/lib/auth-context";
 
@@ -64,6 +65,7 @@ export default function UsersPage() {
   // 对话框状态
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isPermissionsDialogOpen, setIsPermissionsDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
@@ -327,6 +329,16 @@ export default function UsersPage() {
                               variant="ghost"
                               size="sm"
                               onClick={() => {
+                                setSelectedUser(user);
+                                setIsPermissionsDialogOpen(true);
+                              }}
+                            >
+                              <ShieldCheck className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
                                 setUserToDelete(user);
                                 setIsDeleteDialogOpen(true);
                               }}
@@ -404,6 +416,27 @@ export default function UsersPage() {
                 setSelectedUser(null);
               }}
               isLoading={isSubmitting}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* User Permissions Dialog */}
+      <Dialog open={isPermissionsDialogOpen} onOpenChange={setIsPermissionsDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>用户权限管理</DialogTitle>
+            <DialogDescription>
+              {selectedUser && `管理用户 ${selectedUser.username} 的访问权限`}
+            </DialogDescription>
+          </DialogHeader>
+          {selectedUser && (
+            <UserPermissions
+              userId={selectedUser.id}
+              username={selectedUser.username}
+              onPermissionsChange={() => {
+                // 可以在这里添加权限变更后的回调逻辑
+              }}
             />
           )}
         </DialogContent>

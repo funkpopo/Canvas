@@ -19,6 +19,7 @@ import YamlEditor from "@/components/YamlEditor";
 import { useAuth } from "@/lib/auth-context";
 import { useCluster } from "@/lib/cluster-context";
 import { serviceApi } from "@/lib/api";
+import { canManageResources } from "@/lib/utils";
 import type { Cluster } from "@/lib/cluster-context";
 import { toast } from "sonner";
 import { useTranslations } from "@/hooks/use-translations";
@@ -400,13 +401,14 @@ spec:
                 {selectedNamespace ? `${tCommon("namespace")}: ${selectedNamespace}` : t("selectNamespace")}
               </CardDescription>
             </div>
-            <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-              <DialogTrigger asChild>
-                <Button onClick={() => { resetServiceForm(); setIsCreateOpen(true); }} disabled={!selectedNamespace}>
-                  <Plus className="w-4 h-4 mr-2" />
-                  {t("createService")}
-                </Button>
-              </DialogTrigger>
+            {canManageResources(user) && (
+              <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+                <DialogTrigger asChild>
+                  <Button onClick={() => { resetServiceForm(); setIsCreateOpen(true); }} disabled={!selectedNamespace}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    {t("createService")}
+                  </Button>
+                </DialogTrigger>
               <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>{t("createServiceTitle")}</DialogTitle>
@@ -464,6 +466,7 @@ spec:
                 </DialogFooter>
               </DialogContent>
             </Dialog>
+            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -542,14 +545,16 @@ spec:
                         <Button variant="outline" size="sm">
                           <Eye className="w-4 h-4" />
                         </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleDeleteService(service)}
-                          className="text-red-600 hover:text-red-700"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
+                        {canManageResources(user) && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDeleteService(service)}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>

@@ -18,6 +18,7 @@ import YamlEditor from "@/components/YamlEditor";
 import { useAuth } from "@/lib/auth-context";
 import { useCluster } from "@/lib/cluster-context";
 import { configmapApi } from "@/lib/api";
+import { canManageConfigMaps } from "@/lib/utils";
 import { toast } from "sonner";
 
 interface ConfigMap {
@@ -331,7 +332,8 @@ data:
                 {selectedNamespace ? `命名空间: ${selectedNamespace}` : "请选择命名空间"}
               </CardDescription>
             </div>
-            <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+            {canManageConfigMaps(user) && (
+              <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
                 <DialogTrigger asChild>
                   <Button onClick={() => { resetForm(); setIsCreateOpen(true); }} disabled={!selectedNamespace}>
                     <Plus className="w-4 h-4 mr-2" />
@@ -382,6 +384,7 @@ data:
                 </DialogFooter>
               </DialogContent>
             </Dialog>
+            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -428,14 +431,16 @@ data:
                         >
                           <Code className="w-4 h-4" />
                         </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleDeleteConfigMap(cm)}
-                          className="text-red-600 hover:text-red-700"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
+                        {canManageConfigMaps(user) && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDeleteConfigMap(cm)}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>

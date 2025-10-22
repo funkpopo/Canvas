@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from ..database import get_db
 from ..models import Cluster, AuditLog, User
-from ..auth import get_current_user
+from ..auth import get_current_user, require_resource_management
 from ..k8s_client import (
     get_namespace_services, create_service, delete_service,
     get_service_details, update_service, get_service_yaml, update_service_yaml
@@ -61,7 +61,7 @@ async def get_services(
     cluster_id: Optional[int] = Query(None, description="集群ID，不传则获取所有活跃集群"),
     namespace: Optional[str] = Query(None, description="命名空间名称"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_resource_management)
 ):
     """获取服务列表"""
     try:
@@ -99,7 +99,7 @@ async def get_service(
     service_name: str,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_resource_management)
 ):
     """获取服务详细信息"""
     try:
@@ -124,7 +124,7 @@ async def create_new_service(
     service_data: ServiceCreate,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_resource_management)
 ):
     """创建服务"""
     try:
@@ -179,7 +179,7 @@ async def update_existing_service(
     updates: ServiceUpdate,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_resource_management)
 ):
     """更新服务"""
     try:
@@ -241,7 +241,7 @@ async def delete_existing_service(
     service_name: str,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_resource_management)
 ):
     """删除服务"""
     try:
@@ -280,7 +280,7 @@ async def get_service_yaml_config(
     service_name: str,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_resource_management)
 ):
     """获取服务的YAML配置"""
     try:
@@ -307,7 +307,7 @@ async def update_service_yaml_config(
     yaml_data: dict,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_resource_management)
 ):
     """通过YAML更新服务"""
     try:

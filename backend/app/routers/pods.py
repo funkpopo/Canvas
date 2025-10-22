@@ -3,8 +3,8 @@ from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from ..database import get_db
-from ..models import Cluster
-from ..auth import get_current_user
+from ..models import Cluster, User
+from ..auth import get_current_user, require_namespace_access, require_cluster_access
 from ..k8s_client import get_pods_info, get_pod_details, get_pod_logs, restart_pod, delete_pod, batch_delete_pods, batch_restart_pods
 from ..audit import log_action
 from pydantic import BaseModel
@@ -110,7 +110,7 @@ async def get_pod_detail(
   pod_name: str,
   cluster_id: int = Query(..., description="集群ID"),
   db: Session = Depends(get_db),
-  current_user: dict = Depends(get_current_user),
+  current_user: User = Depends(require_namespace_access("read")),
 ):
   try:
     # 验证cluster_id参数
@@ -142,31 +142,21 @@ async def get_pod_detail(
 async def get_pod_log(
   namespace: str,
   pod_name: str,
-  cluster_id: Optional[int] = Query(None, description="集群ID；为空时使用唯一活跃集群"),
+  cluster_id: int = Query(..., description="集群ID"),
   container: Optional[str] = Query(None, description="容器名称"),
   tail_lines: Optional[int] = Query(100, description="获取的日志行数"),
   db: Session = Depends(get_db),
-  current_user: dict = Depends(get_current_user),
+  current_user: User = Depends(require_namespace_access("read")),
 ):
   try:
     # 解析集群
-    cluster: Optional[Cluster] = None
-    if cluster_id is not None:
-      cluster = (
-        db.query(Cluster)
-        .filter(Cluster.id == cluster_id, Cluster.is_active == True)
-        .first()
-      )
-      if not cluster:
-        raise HTTPException(status_code=404, detail="集群不存在或未激活")
-    else:
-      active_clusters = db.query(Cluster).filter(Cluster.is_active == True).all()
-      if len(active_clusters) == 1:
-        cluster = active_clusters[0]
-      elif len(active_clusters) == 0:
-        raise HTTPException(status_code=404, detail="没有可用的活跃集群")
-      else:
-        raise HTTPException(status_code=400, detail="存在多个活跃集群，请指定 cluster_id")
+    cluster = (
+      db.query(Cluster)
+      .filter(Cluster.id == cluster_id, Cluster.is_active == True)
+      .first()
+    )
+    if not cluster:
+      raise HTTPException(status_code=404, detail="集群不存在或未激活")
 
     logs = get_pod_logs(cluster, namespace, pod_name, container, tail_lines)
     if logs is not None:
@@ -186,7 +176,7 @@ async def restart_pod_endpoint(
   cluster_id: int = Query(..., description="集群ID"),
   request: Request = None,
   db: Session = Depends(get_db),
-  current_user: dict = Depends(get_current_user),
+  current_user: User = Depends(require_namespace_access("manage")),
 ):
   cluster = None
   try:
@@ -253,7 +243,7 @@ async def delete_pod_endpoint(
   force: bool = Query(False, description="是否强制删除Pod（设置grace_period_seconds=0）"),
   request: Request = None,
   db: Session = Depends(get_db),
-  current_user: dict = Depends(get_current_user),
+  current_user: User = Depends(require_namespace_access("manage")),
 ):
   cluster = None
   try:
