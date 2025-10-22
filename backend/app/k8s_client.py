@@ -1150,6 +1150,63 @@ def delete_pod(cluster: Cluster, namespace: str, pod_name: str, force: bool = Fa
             client_instance.close()
 
 
+def batch_delete_pods(cluster: Cluster, pod_list: List[Dict[str, str]], force: bool = False) -> Dict[str, bool]:
+    """批量删除Pods
+
+    Args:
+        cluster: 集群配置
+        pod_list: Pod列表，每个元素包含 'namespace' 和 'name'
+        force: 是否强制删除
+
+    Returns:
+        字典，key为"namespace/name"，value为操作结果
+    """
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return {f"{pod['namespace']}/{pod['name']}": False for pod in pod_list}
+
+    results = {}
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+
+        # 构建删除选项
+        delete_options = client.V1DeleteOptions()
+        if force:
+            delete_options.grace_period_seconds = 0
+
+        for pod in pod_list:
+            pod_key = f"{pod['namespace']}/{pod['name']}"
+            try:
+                core_v1.delete_namespaced_pod(
+                    name=pod['name'],
+                    namespace=pod['namespace'],
+                    body=delete_options
+                )
+                results[pod_key] = True
+            except Exception as e:
+                print(f"删除Pod {pod_key} 失败: {e}")
+                results[pod_key] = False
+
+        return results
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def batch_restart_pods(cluster: Cluster, pod_list: List[Dict[str, str]]) -> Dict[str, bool]:
+    """批量重启Pods（通过删除实现重启）
+
+    Args:
+        cluster: 集群配置
+        pod_list: Pod列表，每个元素包含 'namespace' 和 'name'
+
+    Returns:
+        字典，key为"namespace/name"，value为操作结果
+    """
+    # 重启实际上就是删除Pod，让控制器重新创建
+    return batch_delete_pods(cluster, pod_list, force=False)
+
+
 def get_namespace_deployments(cluster: Cluster, namespace_name: str) -> List[Dict[str, Any]]:
     """获取命名空间中的部署"""
     client_instance = create_k8s_client(cluster)

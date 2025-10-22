@@ -11,7 +11,7 @@ import { LogOut, Server, FolderPen, Activity, Settings, Database, Loader2, Setti
 import ClusterSelector from "@/components/ClusterSelector";
 import { useAuth } from "@/lib/auth-context";
 import { useCluster } from "@/lib/cluster-context";
-import { useTranslations } from "next-intl";
+import { useTranslations } from "@/hooks/use-translations";
 
 interface DashboardStats {
   total_clusters: number;

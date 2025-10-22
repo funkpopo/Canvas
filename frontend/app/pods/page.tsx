@@ -14,9 +14,11 @@ import AuthGuard from "@/components/AuthGuard";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useResourceUpdates } from "@/hooks/useWebSocket";
-import { useTranslations } from "next-intl";
+import { useTranslations } from "@/hooks/use-translations";
+import { BatchOperations, ItemCheckbox } from "@/components/BatchOperations";
 
 interface PodInfo {
+  id: string;
   name: string;
   namespace: string;
   status: string;
@@ -37,6 +39,7 @@ function PodsPageContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedNamespace, setSelectedNamespace] = useState<string>("");
   const [availableNamespaces, setAvailableNamespaces] = useState<string[]>([]);
+  const [selectedPods, setSelectedPods] = useState<string[]>([]);
   const [confirmDialog, setConfirmDialog] = useState({
     open: false,
     title: "",
@@ -98,7 +101,12 @@ function PodsPageContent() {
 
       if (response.ok) {
         const data = await response.json();
-        setPods(data);
+        // 为每个pod添加唯一ID
+        const podsWithIds = data.map((pod: PodInfo) => ({
+          ...pod,
+          id: `${pod.cluster_id}-${pod.namespace}-${pod.name}`
+        }));
+        setPods(podsWithIds);
 
         // 提取可用的命名空间列表
         const namespaces = Array.from(new Set(data.map((pod: PodInfo) => pod.namespace))) as string[];
@@ -158,6 +166,73 @@ function PodsPageContent() {
     } catch (error) {
       console.error("删除Pod出错:", error);
       toast.error("删除Pod时发生错误");
+    }
+  };
+
+  const handleBatchDelete = async (selectedPodsData: PodInfo[]) => {
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch("http://localhost:8000/api/pods/batch-delete", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          cluster_id: selectedPodsData[0]?.cluster_id,
+          pods: selectedPodsData.map(pod => ({ namespace: pod.namespace, name: pod.name })),
+          force: false,
+        }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.failure_count > 0) {
+          toast.error(`批量删除完成，成功: ${result.success_count}, 失败: ${result.failure_count}`);
+        } else {
+          toast.success(`批量删除成功，共删除 ${result.success_count} 个Pod`);
+        }
+        fetchPods();
+      } else {
+        toast.error("批量删除Pod失败");
+      }
+    } catch (error) {
+      console.error("批量删除Pod出错:", error);
+      toast.error("批量删除Pod时发生错误");
+      throw error;
+    }
+  };
+
+  const handleBatchRestart = async (selectedPodsData: PodInfo[]) => {
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch("http://localhost:8000/api/pods/batch-restart", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          cluster_id: selectedPodsData[0]?.cluster_id,
+          pods: selectedPodsData.map(pod => ({ namespace: pod.namespace, name: pod.name })),
+        }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.failure_count > 0) {
+          toast.error(`批量重启完成，成功: ${result.success_count}, 失败: ${result.failure_count}`);
+        } else {
+          toast.success(`批量重启成功，共重启 ${result.success_count} 个Pod`);
+        }
+        fetchPods();
+      } else {
+        toast.error("批量重启Pod失败");
+      }
+    } catch (error) {
+      console.error("批量重启Pod出错:", error);
+      toast.error("批量重启Pod时发生错误");
+      throw error;
     }
   };
 
@@ -270,7 +345,22 @@ function PodsPageContent() {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <>
+            <BatchOperations
+              items={pods}
+              selectedItems={selectedPods}
+              onSelectionChange={setSelectedPods}
+              onBatchDelete={handleBatchDelete}
+              onBatchRestart={handleBatchRestart}
+              resourceType="Pod"
+              supportedOperations={{
+                delete: true,
+                restart: true,
+                label: false,
+              }}
+            />
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {pods.map((pod) => (
               <Card
                 key={`${pod.cluster_id}-${pod.namespace}-${pod.name}`}
@@ -287,9 +377,22 @@ function PodsPageContent() {
               >
                 <CardHeader>
                   <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg truncate max-w-[200px] overflow-hidden text-ellipsis whitespace-nowrap" title={pod.name}>
-                      {pod.name}
-                    </CardTitle>
+                    <div className="flex items-center gap-2">
+                      <ItemCheckbox
+                        itemId={pod.id}
+                        isSelected={selectedPods.includes(pod.id)}
+                        onChange={(itemId, checked) => {
+                          if (checked) {
+                            setSelectedPods([...selectedPods, itemId]);
+                          } else {
+                            setSelectedPods(selectedPods.filter(id => id !== itemId));
+                          }
+                        }}
+                      />
+                      <CardTitle className="text-lg truncate max-w-[200px] overflow-hidden text-ellipsis whitespace-nowrap" title={pod.name}>
+                        {pod.name}
+                      </CardTitle>
+                    </div>
                     <Badge variant={getStatusBadgeVariant(pod.status)}>
                       {pod.status}
                     </Badge>
@@ -346,6 +449,7 @@ function PodsPageContent() {
               </Card>
             ))}
           </div>
+          </>
         )}
       </main>
 

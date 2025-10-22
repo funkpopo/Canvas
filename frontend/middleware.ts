@@ -1,9 +1,6 @@
-import createMiddleware from 'next-intl/middleware'
-import { routing } from './i18n/routing'
-
-export default createMiddleware(routing)
+// Middleware for API proxy and other functionality
+// Removed internationalization routing
 
 export const config = {
-  // Match only internationalized pathnames
-  matcher: ['/', '/(zh|en)/:path*']
+  matcher: ['/api/:path*']
 }

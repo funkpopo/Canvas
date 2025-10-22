@@ -21,6 +21,7 @@ import { configmapApi } from "@/lib/api";
 import { toast } from "sonner";
 
 interface ConfigMap {
+  id: string;
   name: string;
   namespace: string;
   data: Record<string, any>;

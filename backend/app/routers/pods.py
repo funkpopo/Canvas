@@ -5,7 +5,7 @@ from typing import List, Optional
 from ..database import get_db
 from ..models import Cluster
 from ..auth import get_current_user
-from ..k8s_client import get_pods_info, get_pod_details, get_pod_logs, restart_pod, delete_pod
+from ..k8s_client import get_pods_info, get_pod_details, get_pod_logs, restart_pod, delete_pod, batch_delete_pods, batch_restart_pods
 from ..audit import log_action
 from pydantic import BaseModel
 
@@ -45,6 +45,23 @@ class PodDetails(BaseModel):
 class PodLogs(BaseModel):
   logs: str
   container_name: Optional[str] = None
+
+
+class PodItem(BaseModel):
+  namespace: str
+  name: str
+
+
+class BatchOperationRequest(BaseModel):
+  cluster_id: int
+  pods: List[PodItem]
+  force: bool = False
+
+
+class BatchOperationResponse(BaseModel):
+  results: dict
+  success_count: int
+  failure_count: int
 
 
 @router.get("/", response_model=List[PodInfo])
@@ -294,4 +311,138 @@ async def delete_pod_endpoint(
         request=request
       )
     raise HTTPException(status_code=500, detail=f"删除 Pod 失败: {str(e)}")
+
+
+@router.post("/batch-delete", response_model=BatchOperationResponse)
+async def batch_delete_pods_endpoint(
+  request_data: BatchOperationRequest,
+  request: Request = None,
+  db: Session = Depends(get_db),
+  current_user: dict = Depends(get_current_user),
+):
+  cluster = None
+  try:
+    cluster = (
+      db.query(Cluster)
+      .filter(Cluster.id == request_data.cluster_id, Cluster.is_active == True)
+      .first()
+    )
+    if not cluster:
+      raise HTTPException(status_code=404, detail="集群不存在或未激活")
+
+    pod_list = [{"namespace": pod.namespace, "name": pod.name} for pod in request_data.pods]
+    results = batch_delete_pods(cluster, pod_list, request_data.force)
+
+    success_count = sum(1 for result in results.values() if result)
+    failure_count = len(results) - success_count
+
+    # 记录审计日志
+    log_action(
+      db=db,
+      user_id=current_user.id,
+      cluster_id=request_data.cluster_id,
+      action="batch_delete",
+      resource_type="pod",
+      resource_name=f"批量删除 {len(request_data.pods)} 个Pods",
+      details={
+        "pod_count": len(request_data.pods),
+        "force": request_data.force,
+        "success_count": success_count,
+        "failure_count": failure_count,
+        "results": results
+      },
+      success=failure_count == 0,
+      request=request
+    )
+
+    return BatchOperationResponse(
+      results=results,
+      success_count=success_count,
+      failure_count=failure_count
+    )
+  except HTTPException:
+    raise
+  except Exception as e:
+    if cluster:
+      log_action(
+        db=db,
+        user_id=current_user.id,
+        cluster_id=request_data.cluster_id,
+        action="batch_delete",
+        resource_type="pod",
+        resource_name=f"批量删除 {len(request_data.pods)} 个Pods",
+        details={
+          "pod_count": len(request_data.pods),
+          "force": request_data.force
+        },
+        success=False,
+        error_message=str(e),
+        request=request
+      )
+    raise HTTPException(status_code=500, detail=f"批量删除 Pods 失败: {str(e)}")
+
+
+@router.post("/batch-restart", response_model=BatchOperationResponse)
+async def batch_restart_pods_endpoint(
+  request_data: BatchOperationRequest,
+  request: Request = None,
+  db: Session = Depends(get_db),
+  current_user: dict = Depends(get_current_user),
+):
+  cluster = None
+  try:
+    cluster = (
+      db.query(Cluster)
+      .filter(Cluster.id == request_data.cluster_id, Cluster.is_active == True)
+      .first()
+    )
+    if not cluster:
+      raise HTTPException(status_code=404, detail="集群不存在或未激活")
+
+    pod_list = [{"namespace": pod.namespace, "name": pod.name} for pod in request_data.pods]
+    results = batch_restart_pods(cluster, pod_list)
+
+    success_count = sum(1 for result in results.values() if result)
+    failure_count = len(results) - success_count
+
+    # 记录审计日志
+    log_action(
+      db=db,
+      user_id=current_user.id,
+      cluster_id=request_data.cluster_id,
+      action="batch_restart",
+      resource_type="pod",
+      resource_name=f"批量重启 {len(request_data.pods)} 个Pods",
+      details={
+        "pod_count": len(request_data.pods),
+        "success_count": success_count,
+        "failure_count": failure_count,
+        "results": results
+      },
+      success=failure_count == 0,
+      request=request
+    )
+
+    return BatchOperationResponse(
+      results=results,
+      success_count=success_count,
+      failure_count=failure_count
+    )
+  except HTTPException:
+    raise
+  except Exception as e:
+    if cluster:
+      log_action(
+        db=db,
+        user_id=current_user.id,
+        cluster_id=request_data.cluster_id,
+        action="batch_restart",
+        resource_type="pod",
+        resource_name=f"批量重启 {len(request_data.pods)} 个Pods",
+        details={"pod_count": len(request_data.pods)},
+        success=False,
+        error_message=str(e),
+        request=request
+      )
+    raise HTTPException(status_code=500, detail=f"批量重启 Pods 失败: {str(e)}")
 

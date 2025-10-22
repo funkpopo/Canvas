@@ -21,9 +21,11 @@ import { useCluster } from "@/lib/cluster-context";
 import { serviceApi } from "@/lib/api";
 import type { Cluster } from "@/lib/cluster-context";
 import { toast } from "sonner";
-import { useTranslations } from "next-intl";
+import { useTranslations } from "@/hooks/use-translations";
+import { BatchOperations, ItemCheckbox } from "@/components/BatchOperations";
 
 interface Service {
+  id: string;
   name: string;
   namespace: string;
   type: string;
@@ -46,6 +48,7 @@ export default function ServicesManagement() {
   const [selectedClusterId, setSelectedClusterId] = useState<number | null>(null);
   const [selectedNamespace, setSelectedNamespace] = useState<string>("default");
   const [namespaces, setNamespaces] = useState<string[]>([]);
+  const [selectedServices, setSelectedServices] = useState<string[]>([]);
 
   // 创建对话框状态
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -85,7 +88,12 @@ export default function ServicesManagement() {
     try {
       const response = await serviceApi.getServices(selectedClusterId, selectedNamespace);
       if (response.data) {
-        setServices(response.data);
+        // 为每个service添加唯一ID
+        const servicesWithIds = response.data.map((service: Service) => ({
+          ...service,
+          id: `${service.cluster_id}-${service.namespace}-${service.name}`
+        }));
+        setServices(servicesWithIds);
       } else if (response.error) {
         toast.error(`获取服务列表失败: ${response.error}`);
       }
@@ -93,6 +101,33 @@ export default function ServicesManagement() {
       toast.error("获取服务列表失败");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleBatchDelete = async (selectedServicesData: Service[]) => {
+    try {
+      const token = localStorage.getItem("token");
+      // 注意：这里需要先实现services的批量删除API
+      // 暂时使用单个删除的方式
+      for (const service of selectedServicesData) {
+        const response = await fetch(`http://localhost:8000/api/services/${service.namespace}/${service.name}?cluster_id=${service.cluster_id}`, {
+          method: "DELETE",
+          headers: {
+            "Authorization": `Bearer ${token}`,
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(`删除服务 ${service.namespace}/${service.name} 失败`);
+        }
+      }
+
+      toast.success(`批量删除成功，共删除 ${selectedServicesData.length} 个服务`);
+      fetchServices();
+    } catch (error) {
+      console.error("批量删除服务出错:", error);
+      toast.error("批量删除服务时发生错误");
+      throw error;
     }
   };
 
@@ -442,9 +477,24 @@ spec:
               {selectedNamespace ? t("noServices") : t("selectNamespace")}
             </div>
           ) : (
-            <Table>
+            <>
+              <BatchOperations
+                items={services}
+                selectedItems={selectedServices}
+                onSelectionChange={setSelectedServices}
+                onBatchDelete={handleBatchDelete}
+                resourceType="Service"
+                supportedOperations={{
+                  delete: true,
+                  restart: false,
+                  label: false,
+                }}
+              />
+
+              <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-12"></TableHead>
                   <TableHead>{tCommon("name")}</TableHead>
                   <TableHead>{t("type")}</TableHead>
                   <TableHead>{t("clusterIP")}</TableHead>
@@ -457,6 +507,19 @@ spec:
               <TableBody>
                 {services.map((service) => (
                   <TableRow key={`${service.cluster_id}-${service.namespace}-${service.name}`}>
+                    <TableCell>
+                      <ItemCheckbox
+                        itemId={service.id}
+                        isSelected={selectedServices.includes(service.id)}
+                        onChange={(itemId, checked) => {
+                          if (checked) {
+                            setSelectedServices([...selectedServices, itemId]);
+                          } else {
+                            setSelectedServices(selectedServices.filter(id => id !== itemId));
+                          }
+                        }}
+                      />
+                    </TableCell>
                     <TableCell className="font-medium">{service.name}</TableCell>
                     <TableCell>
                       <Badge variant="outline">{service.type}</Badge>
@@ -493,6 +556,7 @@ spec:
                 ))}
               </TableBody>
             </Table>
+            </>
           )}
         </CardContent>
       </Card>

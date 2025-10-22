@@ -12,7 +12,7 @@ import AuthGuard from "@/components/AuthGuard";
 import { clusterApi } from "@/lib/api";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { useTranslations } from "next-intl";
+import { useTranslations } from "@/hooks/use-translations";
 
 interface Cluster {
   id: number;

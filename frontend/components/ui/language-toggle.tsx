@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { Languages } from "lucide-react"
-import { useLocale, useTranslations } from "next-intl"
+import { useLanguage } from "@/lib/language-context"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -11,17 +11,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { useRouter, usePathname } from "next/navigation"
 
 export function LanguageToggle() {
-  const t = useTranslations("common")
-  const locale = useLocale()
-  const router = useRouter()
-  const pathname = usePathname()
+  const { locale, setLocale, messages } = useLanguage()
+  const t = (key: string) => messages.common?.[key] || key
 
-  const switchLocale = (newLocale: string) => {
-    const newPath = pathname.replace(`/${locale}`, `/${newLocale}`)
-    router.push(newPath)
+  const switchLocale = (newLocale: 'zh' | 'en') => {
+    setLocale(newLocale)
   }
 
   return (
