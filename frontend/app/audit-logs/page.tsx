@@ -53,18 +53,23 @@ export default function AuditLogsPage() {
   const [successFilter, setSuccessFilter] = useState<string>("all");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [permissionErrorShown, setPermissionErrorShown] = useState(false);
 
   useEffect(() => {
     if (!authLoading) {
       if (!currentUser || currentUser.role !== "admin") {
-        toast.error("需要管理员权限");
+        if (!permissionErrorShown) {
+          toast.error("需要管理员权限");
+          setPermissionErrorShown(true);
+        }
         router.push("/");
         return;
       }
+      setPermissionErrorShown(false); // 重置错误状态
       fetchLogs();
       fetchStats();
     }
-  }, [authLoading, currentUser, page, searchAction, resourceTypeFilter, successFilter, startDate, endDate, router]);
+  }, [authLoading, currentUser, page, searchAction, resourceTypeFilter, successFilter, startDate, endDate, router, permissionErrorShown]);
 
   const fetchLogs = async () => {
     setIsLoading(true);

@@ -70,17 +70,22 @@ export default function UsersPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [permissionErrorShown, setPermissionErrorShown] = useState(false);
 
   useEffect(() => {
     if (!authLoading) {
       if (!currentUser || currentUser.role !== "admin") {
-        toast.error("需要管理员权限");
+        if (!permissionErrorShown) {
+          toast.error("需要管理员权限");
+          setPermissionErrorShown(true);
+        }
         router.push("/");
         return;
       }
+      setPermissionErrorShown(false); // 重置错误状态
       fetchUsers();
     }
-  }, [authLoading, currentUser, page, searchTerm, roleFilter, statusFilter, router]);
+  }, [authLoading, currentUser, page, searchTerm, roleFilter, statusFilter, router, permissionErrorShown]);
 
   const fetchUsers = async () => {
     setIsLoading(true);

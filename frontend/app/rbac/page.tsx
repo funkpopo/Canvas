@@ -36,11 +36,11 @@ export default function RBACPage() {
   const { user: currentUser, isLoading: authLoading } = useAuth();
   const { activeCluster: selectedCluster } = useCluster();
 
-  // 权限检查
-  if (!authLoading && (!currentUser || !canManageRBAC(currentUser))) {
-    router.push('/');
-    return null;
-  }
+  // 权限状态
+  const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
+  const [permissionErrorShown, setPermissionErrorShown] = useState(false);
+
+  // 权限检查将在useEffect中处理
 
   // Roles
   const [roles, setRoles] = useState<Role[]>([]);
@@ -77,16 +77,27 @@ export default function RBACPage() {
   const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
-    if (!authLoading && (!currentUser || currentUser.role !== "admin")) {
-      toast.error("需要管理员权限");
+    if (authLoading) {
+      setIsAuthorized(null);
+      return;
+    }
+
+    if (!currentUser || !canManageRBAC(currentUser)) {
+      setIsAuthorized(false);
+      if (!permissionErrorShown) {
+        toast.error("需要管理员权限");
+        setPermissionErrorShown(true);
+      }
       router.push("/");
       return;
     }
 
+    setIsAuthorized(true);
+    setPermissionErrorShown(false); // 重置错误状态
     if (selectedCluster) {
       fetchAllData();
     }
-  }, [authLoading, currentUser, selectedCluster, router]);
+  }, [authLoading, currentUser, selectedCluster, router, permissionErrorShown]);
 
   const fetchAllData = async () => {
     if (!selectedCluster) return;
@@ -236,12 +247,16 @@ export default function RBACPage() {
     crb.name.toLowerCase().includes(clusterRoleBindingsSearch.toLowerCase())
   );
 
-  if (authLoading) {
+  if (authLoading || isAuthorized === null) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin" />
       </div>
     );
+  }
+
+  if (isAuthorized === false) {
+    return null; // 权限检查失败，已在useEffect中处理导航
   }
 
   if (!selectedCluster) {
