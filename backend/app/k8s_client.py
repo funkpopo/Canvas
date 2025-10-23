@@ -4172,7 +4172,7 @@ def update_job_yaml(cluster: Cluster, namespace: str, job_name: str, yaml_conten
 
 def monitor_job_status_changes(cluster: Cluster, namespace: str, job_name: str, history_id: int, db_session) -> Dict[str, Any]:
     """监控Job状态变化并更新历史记录"""
-    from ..models import JobHistory
+    from .models import JobHistory
 
     client_instance = create_k8s_client(cluster)
     if not client_instance:
