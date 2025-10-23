@@ -18,27 +18,12 @@ import ClusterSelector from "@/components/ClusterSelector";
 import YamlEditor from "@/components/YamlEditor";
 import { useAuth } from "@/lib/auth-context";
 import { useCluster } from "@/lib/cluster-context";
-import { serviceApi } from "@/lib/api";
+import { serviceApi, Service } from "@/lib/api";
 import { canManageResources } from "@/lib/utils";
 import type { Cluster } from "@/lib/cluster-context";
 import { toast } from "sonner";
 import { useTranslations } from "@/hooks/use-translations";
 import { BatchOperations, ItemCheckbox } from "@/components/BatchOperations";
-
-interface Service {
-  id: string;
-  name: string;
-  namespace: string;
-  type: string;
-  cluster_ip: string;
-  external_ip: string | null;
-  ports: any[];
-  selector: Record<string, any>;
-  labels: Record<string, any>;
-  age: string;
-  cluster_name: string;
-  cluster_id: number;
-}
 
 export default function ServicesManagement() {
   const t = useTranslations("services");
@@ -93,7 +78,7 @@ export default function ServicesManagement() {
         const servicesWithIds = response.data.map((service: Service) => ({
           ...service,
           id: `${service.cluster_id}-${service.namespace}-${service.name}`
-        }));
+        } as Service));
         setServices(servicesWithIds);
       } else if (response.error) {
         toast.error(`获取服务列表失败: ${response.error}`);

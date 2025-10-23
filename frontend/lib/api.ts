@@ -9,7 +9,7 @@ const buildUrl = (endpoint: string): string => {
 
 // Token验证相关函数
 export const authApi = {
-  async verifyToken(): Promise<{valid: boolean, username?: string, id?: number, role?: string, email?: string, is_active?: boolean}> {
+  async verifyToken(): Promise<{valid: boolean, username?: string, id?: number, role?: string, email?: string | undefined, is_active?: boolean}> {
     try {
       const response = await apiClient.post<{valid: boolean, username: string, id: number, role: string, email?: string, is_active: boolean}>('auth/verify-token', {});
       if (response.data) {
@@ -129,7 +129,7 @@ class ApiClient {
 export const apiClient = new ApiClient();
 
 // 集群相关类型
-interface Cluster {
+export interface Cluster {
   id: number;
   name: string;
   endpoint: string;
@@ -284,7 +284,8 @@ export const storageApi = {
 };
 
 // 服务相关类型
-interface Service {
+export interface Service {
+  id: string; // 用于前端UI的唯一标识符
   name: string;
   namespace: string;
   type: string;
@@ -299,7 +300,8 @@ interface Service {
 }
 
 // ConfigMap相关类型
-interface ConfigMap {
+export interface ConfigMap {
+  id: string; // 用于前端UI的唯一标识符
   name: string;
   namespace: string;
   data: Record<string, any>;

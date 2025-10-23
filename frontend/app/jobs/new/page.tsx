@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -20,7 +20,7 @@ interface Namespace {
   status: string;
 }
 
-export default function CreateJobPage() {
+function CreateJobContent() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [namespaces, setNamespaces] = useState<Namespace[]>([]);
   const [templates, setTemplates] = useState<JobTemplate[]>([]);
@@ -322,6 +322,14 @@ export default function CreateJobPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function CreateJobPage() {
+  return (
+    <Suspense fallback={<div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin" /></div>}>
+      <CreateJobContent />
+    </Suspense>
   );
 }
 

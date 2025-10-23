@@ -17,21 +17,9 @@ import ClusterSelector from "@/components/ClusterSelector";
 import YamlEditor from "@/components/YamlEditor";
 import { useAuth } from "@/lib/auth-context";
 import { useCluster } from "@/lib/cluster-context";
-import { configmapApi } from "@/lib/api";
+import { configmapApi, ConfigMap } from "@/lib/api";
 import { canManageConfigMaps } from "@/lib/utils";
 import { toast } from "sonner";
-
-interface ConfigMap {
-  id: string;
-  name: string;
-  namespace: string;
-  data: Record<string, any>;
-  labels: Record<string, any>;
-  annotations: Record<string, any>;
-  age: string;
-  cluster_name: string;
-  cluster_id: number;
-}
 
 export default function ConfigMapsManagement() {
   const [configmaps, setConfigmaps] = useState<ConfigMap[]>([]);
@@ -71,7 +59,12 @@ export default function ConfigMapsManagement() {
     try {
       const response = await configmapApi.getConfigMaps(selectedClusterId, selectedNamespace);
       if (response.data) {
-        setConfigmaps(response.data);
+        // 为每个configmap添加唯一ID
+        const configmapsWithIds = response.data.map((configmap: ConfigMap) => ({
+          ...configmap,
+          id: `${configmap.cluster_id}-${configmap.namespace}-${configmap.name}`
+        } as ConfigMap));
+        setConfigmaps(configmapsWithIds);
       } else if (response.error) {
         toast.error(`获取ConfigMap列表失败: ${response.error}`);
       }

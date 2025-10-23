@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -23,7 +23,7 @@ interface Namespace {
   status: string;
 }
 
-export default function JobsPage() {
+function JobsContent() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [namespaces, setNamespaces] = useState<Namespace[]>([]);
@@ -498,5 +498,13 @@ export default function JobsPage() {
         onConfirm={confirmDialog.onConfirm}
       />
     </div>
+  );
+}
+
+export default function JobsPage() {
+  return (
+    <Suspense fallback={<div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin" /></div>}>
+      <JobsContent />
+    </Suspense>
   );
 }
