@@ -1187,9 +1187,9 @@ def batch_delete_pods(cluster: Cluster, pod_list: List[Dict[str, str]], force: b
                     body=delete_options
                 )
                 results[pod_key] = True
-        except Exception as e:
-            logger.warning("删除Pod失败: pod=%s error=%s", pod_key, e)
-            results[pod_key] = False
+            except Exception as e:
+                logger.warning("删除Pod失败: pod=%s error=%s", pod_key, e)
+                results[pod_key] = False
 
         return results
     finally:
@@ -2742,8 +2742,8 @@ def create_secret_yaml(cluster: Cluster, yaml_content: str) -> bool:
         # 解析YAML内容
         secret_dict = yaml.safe_load(yaml_content)
         if not secret_dict:
-        logger.warning("YAML内容无效")
-        return False
+            logger.warning("YAML内容无效")
+            return False
 
         # 提取metadata
         metadata = secret_dict.get('metadata', {})
@@ -2751,8 +2751,8 @@ def create_secret_yaml(cluster: Cluster, yaml_content: str) -> bool:
         namespace = metadata.get('namespace', 'default')
 
         if not name:
-        logger.warning("Secret名称不能为空")
-        return False
+            logger.warning("Secret名称不能为空")
+            return False
 
         core_v1 = client.CoreV1Api(client_instance)
 
@@ -2790,15 +2790,15 @@ def update_secret_yaml(cluster: Cluster, namespace: str, secret_name: str, yaml_
         # 解析YAML内容
         secret_dict = yaml.safe_load(yaml_content)
         if not secret_dict:
-        logger.warning("YAML内容无效")
-        return False
+            logger.warning("YAML内容无效")
+            return False
 
         # 验证Secret名称匹配
         metadata = secret_dict.get('metadata', {})
         yaml_secret_name = metadata.get('name')
         if yaml_secret_name != secret_name:
-        logger.warning("Secret名称不匹配: YAML=%s 请求=%s", yaml_secret_name, secret_name)
-        return False
+            logger.warning("Secret名称不匹配: YAML=%s 请求=%s", yaml_secret_name, secret_name)
+            return False
 
         core_v1 = client.CoreV1Api(client_instance)
 
