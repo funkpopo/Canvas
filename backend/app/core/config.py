@@ -63,6 +63,7 @@ class Settings:
     LOG_FILE: Optional[str] = os.getenv("LOG_FILE")
     LOG_FORMAT: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     LOG_DATE_FORMAT: str = "%Y-%m-%d %H:%M:%S"
+    LOG_JSON: bool = os.getenv("LOG_JSON", "false").lower() == "true"
 
     # 安全配置
     FORCE_HTTPS: bool = os.getenv("FORCE_HTTPS", "false").lower() == "true"

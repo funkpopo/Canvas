@@ -10,8 +10,11 @@ from ..k8s_client import (
 )
 from ..audit import log_action
 from pydantic import BaseModel
+from ..core.logging import get_logger
 
 router = APIRouter()
+
+logger = get_logger(__name__)
 
 # Secret相关模型
 class SecretInfo(BaseModel):
@@ -90,9 +93,7 @@ async def get_secrets(
         return secrets
 
     except Exception as e:
-        print(f"获取Secret列表失败: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        logger.exception("获取Secret列表失败: %s", e)
         raise HTTPException(status_code=500, detail=f"获取Secret列表失败: {str(e)}")
 
 

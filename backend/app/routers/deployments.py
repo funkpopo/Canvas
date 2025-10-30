@@ -10,9 +10,12 @@ from ..k8s_client import (
     get_deployment_services, get_service_details, update_service, get_service_yaml, update_service_yaml
 )
 from ..audit import log_action
+from ..core.logging import get_logger
 from pydantic import BaseModel
 
 router = APIRouter()
+
+logger = get_logger(__name__)
 
 class DeploymentInfo(BaseModel):
     name: str
@@ -141,7 +144,7 @@ async def get_deployments(
                         deployment["namespace"] = namespace or deployment.get("namespace", "")
                         all_deployments.append(DeploymentInfo(**deployment))
             except Exception as e:
-                print(f"获取集群 {cluster.name} 部署信息失败: {e}")
+                logger.warning("获取集群部署信息失败: cluster=%s error=%s", cluster.name, e)
                 continue
 
         return all_deployments

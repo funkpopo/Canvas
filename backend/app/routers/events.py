@@ -5,9 +5,12 @@ from ..database import get_db
 from ..models import Cluster
 from ..auth import get_current_user
 from ..k8s_client import get_cluster_events
+from ..core.logging import get_logger
 from pydantic import BaseModel
 
 router = APIRouter()
+
+logger = get_logger(__name__)
 
 
 class EventInfo(BaseModel):
@@ -57,7 +60,7 @@ async def get_events(
                         event["cluster_name"] = cluster.name
                         all_events.append(EventInfo(**event))
             except Exception as e:
-                print(f"获取集群 {cluster.name} 事件失败: {e}")
+                logger.warning("获取集群事件失败: cluster=%s error=%s", cluster.name, e)
                 continue
 
         return all_events

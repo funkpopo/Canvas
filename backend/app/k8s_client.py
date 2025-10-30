@@ -11,6 +11,10 @@ from kubernetes import client, config
 from kubernetes.client.rest import ApiException
 from kubernetes.stream import stream
 from .models import Cluster
+from .core.logging import get_logger
+
+
+logger = get_logger(__name__)
 
 
 class KubernetesClientPool:
@@ -183,7 +187,7 @@ class KubernetesClientPool:
             try:
                 self.cleanup_expired_connections()
             except Exception as e:
-                print(f"连接池清理出错: {e}")
+                logger.exception("连接池清理出错: %s", e)
 
     def _create_new_connection(self, cluster: Cluster) -> Optional[client.ApiClient]:
         """
@@ -240,7 +244,7 @@ class KubernetesClientPool:
                 raise ValueError(f"不支持的认证类型: {cluster.auth_type}")
 
         except Exception as e:
-            print(f"创建Kubernetes客户端失败: {e}")
+            logger.exception("创建Kubernetes客户端失败: %s", e)
             return None
 
     def _is_connection_valid(self, client_instance: client.ApiClient) -> bool:
@@ -376,7 +380,7 @@ def get_cluster_stats(cluster: Cluster) -> Dict[str, Any]:
                 nodes = core_v1.list_node()
                 stats['nodes'] = len(nodes.items)
             except ApiException as e:
-                print(f"获取节点信息失败: {e}")
+                logger.warning("获取节点信息失败: %s", e)
                 stats['nodes'] = 0
 
             # 获取命名空间数量
@@ -384,7 +388,7 @@ def get_cluster_stats(cluster: Cluster) -> Dict[str, Any]:
                 namespaces = core_v1.list_namespace()
                 stats['namespaces'] = len(namespaces.items)
             except ApiException as e:
-                print(f"获取命名空间信息失败: {e}")
+                logger.warning("获取命名空间信息失败: %s", e)
                 stats['namespaces'] = 0
 
             # 获取Pod统计
@@ -396,7 +400,7 @@ def get_cluster_stats(cluster: Cluster) -> Dict[str, Any]:
                 stats['total_pods'] = total_pods
                 stats['running_pods'] = running_pods
             except ApiException as e:
-                print(f"获取Pod信息失败: {e}")
+                logger.warning("获取Pod信息失败: %s", e)
                 stats['total_pods'] = 0
                 stats['running_pods'] = 0
 
@@ -405,13 +409,13 @@ def get_cluster_stats(cluster: Cluster) -> Dict[str, Any]:
                 services = core_v1.list_service_for_all_namespaces()
                 stats['services'] = len(services.items)
             except ApiException as e:
-                print(f"获取服务信息失败: {e}")
+                logger.warning("获取服务信息失败: %s", e)
                 stats['services'] = 0
 
             return stats
 
         except Exception as e:
-            print(f"获取集群统计信息失败: {e}")
+            logger.exception("获取集群统计信息失败: %s", e)
             return {}
 
 def get_nodes_info(cluster: Cluster) -> List[Dict[str, Any]]:
@@ -547,7 +551,7 @@ def get_nodes_info(cluster: Cluster) -> List[Dict[str, Any]]:
             return node_list
 
         except Exception as e:
-            print(f"获取节点信息失败: {e}")
+            logger.exception("获取节点信息失败: %s", e)
             return []
 
 # def get_node_details(cluster: Cluster, node_name: str) -> Optional[Dict[str, Any]]:
@@ -653,7 +657,7 @@ def get_node_details(cluster: Cluster, node_name: str) -> Optional[Dict[str, Any
         }
 
     except Exception as e:
-        print(f"获取节点详情失败: {e}")
+        logger.exception("获取节点详情失败: %s", e)
         return None
     finally:
         if client_instance:
@@ -792,10 +796,10 @@ def create_namespace(cluster: Cluster, namespace_name: str, labels: Optional[dic
         return True
 
     except ApiException as e:
-        print(f"创建命名空间失败: {e}")
+        logger.warning("创建命名空间失败: %s", e)
         return False
     except Exception as e:
-        print(f"创建命名空间异常: {e}")
+        logger.exception("创建命名空间异常: %s", e)
         return False
     finally:
         if client_instance:
@@ -813,10 +817,10 @@ def delete_namespace(cluster: Cluster, namespace_name: str) -> bool:
         return True
 
     except ApiException as e:
-        print(f"删除命名空间失败: {e}")
+        logger.warning("删除命名空间失败: %s", e)
         return False
     except Exception as e:
-        print(f"删除命名空间异常: {e}")
+        logger.exception("删除命名空间异常: %s", e)
         return False
     finally:
         if client_instance:
@@ -886,7 +890,7 @@ def get_namespace_resources(cluster: Cluster, namespace_name: str) -> Optional[D
         }
 
     except Exception as e:
-        print(f"获取命名空间资源信息失败: {e}")
+        logger.exception("获取命名空间资源信息失败: %s", e)
         return None
     finally:
         if client_instance:
@@ -973,7 +977,7 @@ def get_pods_info(cluster: Cluster, namespace: Optional[str] = None) -> List[Dic
         return pod_list
 
     except Exception as e:
-        print(f"获取Pod信息失败: {e}")
+        logger.exception("获取Pod信息失败: %s", e)
         return []
     finally:
         if client_instance:
@@ -1081,7 +1085,7 @@ def get_pod_details(cluster: Cluster, namespace: str, pod_name: str) -> Optional
         }
 
     except Exception as e:
-        print(f"获取Pod详情失败: {e}")
+        logger.exception("获取Pod详情失败: %s", e)
         return None
     finally:
         if client_instance:
@@ -1103,7 +1107,7 @@ def get_pod_logs(cluster: Cluster, namespace: str, pod_name: str, container: Opt
         )
         return logs
     except Exception as e:
-        print(f"获取Pod日志失败: {e}")
+        logger.exception("获取Pod日志失败: %s", e)
         return None
     finally:
         if client_instance:
@@ -1143,7 +1147,7 @@ def delete_pod(cluster: Cluster, namespace: str, pod_name: str, force: bool = Fa
         )
         return True
     except Exception as e:
-        print(f"删除Pod失败: {e}")
+        logger.exception("删除Pod失败: %s", e)
         return False
     finally:
         if client_instance:
@@ -1183,9 +1187,9 @@ def batch_delete_pods(cluster: Cluster, pod_list: List[Dict[str, str]], force: b
                     body=delete_options
                 )
                 results[pod_key] = True
-            except Exception as e:
-                print(f"删除Pod {pod_key} 失败: {e}")
-                results[pod_key] = False
+        except Exception as e:
+            logger.warning("删除Pod失败: pod=%s error=%s", pod_key, e)
+            results[pod_key] = False
 
         return results
     finally:
@@ -1274,7 +1278,7 @@ def get_namespace_deployments(cluster: Cluster, namespace_name: str) -> List[Dic
         return deployment_list
 
     except Exception as e:
-        print(f"获取命名空间部署失败: {e}")
+        logger.exception("获取命名空间部署失败: %s", e)
         return []
     finally:
         if client_instance:
@@ -1352,7 +1356,7 @@ def get_namespace_services(cluster: Cluster, namespace_name: str) -> List[Dict[s
         return service_list
 
     except Exception as e:
-        print(f"获取命名空间服务失败: {e}")
+        logger.exception("获取命名空间服务失败: %s", e)
         return []
     finally:
         if client_instance:
@@ -1429,7 +1433,7 @@ def get_namespace_crds(cluster: Cluster, namespace_name: str) -> List[Dict[str, 
         return crd_list
 
     except Exception as e:
-        print(f"获取命名空间CRD失败: {e}")
+        logger.exception("获取命名空间CRD失败: %s", e)
         return []
     finally:
         if client_instance:
@@ -1508,14 +1512,14 @@ def get_deployment_details(cluster: Cluster, namespace: str, deployment_name: st
             # 将Kubernetes对象转换为字典
             spec_dict = client.ApiClient().sanitize_for_serialization(deployment.spec)
         except Exception as e:
-            print(f"转换spec失败: {e}")
+            logger.warning("转换spec失败: %s", e)
             spec_dict = {}
 
         try:
             # 将Kubernetes对象转换为字典
             status_dict = client.ApiClient().sanitize_for_serialization(deployment.status)
         except Exception as e:
-            print(f"转换status失败: {e}")
+            logger.warning("转换status失败: %s", e)
             status_dict = {}
 
         return {
@@ -1540,7 +1544,7 @@ def get_deployment_details(cluster: Cluster, namespace: str, deployment_name: st
         }
 
     except Exception as e:
-        print(f"获取部署详情失败: {e}")
+        logger.exception("获取部署详情失败: %s", e)
         return None
     finally:
         if client_instance:
@@ -1620,7 +1624,7 @@ def get_deployment_pods(cluster: Cluster, namespace: str, deployment_name: str) 
         return pod_list
 
     except Exception as e:
-        print(f"获取部署Pods失败: {e}")
+        logger.exception("获取部署Pods失败: %s", e)
         return []
     finally:
         if client_instance:
@@ -1647,7 +1651,7 @@ def scale_deployment(cluster: Cluster, namespace: str, deployment_name: str, rep
         return True
 
     except Exception as e:
-        print(f"扩容部署失败: {e}")
+        logger.exception("扩容部署失败: %s", e)
         return False
     finally:
         if client_instance:
@@ -1683,7 +1687,7 @@ def restart_deployment(cluster: Cluster, namespace: str, deployment_name: str) -
         return True
 
     except Exception as e:
-        print(f"重启部署失败: {e}")
+        logger.exception("重启部署失败: %s", e)
         return False
     finally:
         if client_instance:
@@ -1701,7 +1705,7 @@ def delete_deployment(cluster: Cluster, namespace: str, deployment_name: str) ->
         apps_v1.delete_namespaced_deployment(deployment_name, namespace)
         return True
     except Exception as e:
-        print(f"删除部署失败: {e}")
+        logger.exception("删除部署失败: %s", e)
         return False
     finally:
         if client_instance:
@@ -1781,7 +1785,7 @@ def get_deployment_services(cluster: Cluster, namespace: str, deployment_name: s
         return matching_services
 
     except Exception as e:
-        print(f"获取部署服务失败: {e}")
+        logger.exception("获取部署服务失败: %s", e)
         return []
     finally:
         if client_instance:
@@ -1864,7 +1868,7 @@ def get_service_details(cluster: Cluster, namespace: str, service_name: str) -> 
         }
 
     except Exception as e:
-        print(f"获取服务详情失败: {e}")
+        logger.exception("获取服务详情失败: %s", e)
         return None
     finally:
         if client_instance:
@@ -1874,7 +1878,7 @@ def get_service_details(cluster: Cluster, namespace: str, service_name: str) -> 
 # 以下是其他需要实现的函数的存根，暂时返回默认值以避免导入错误
 def update_deployment(cluster: Cluster, namespace: str, deployment_name: str, update_data: dict) -> bool:
     """更新部署（暂未实现）"""
-    print(f"update_deployment 暂未实现: {namespace}/{deployment_name}")
+    logger.warning("update_deployment 暂未实现: %s/%s", namespace, deployment_name)
     return False
 
 
@@ -1882,12 +1886,12 @@ def get_deployment_yaml(cluster: Cluster, namespace: str, deployment_name: str) 
     """获取部署YAML"""
     client_instance = create_k8s_client(cluster)
     if not client_instance:
-        print(f"无法创建Kubernetes客户端连接: {cluster.name}")
+        logger.warning("无法创建Kubernetes客户端连接: %s", cluster.name)
         return None
 
     try:
         apps_v1 = client.AppsV1Api(client_instance)
-        print(f"正在获取部署: {namespace}/{deployment_name} 在集群 {cluster.name}")
+        logger.info("正在获取部署: %s/%s 在集群 %s", namespace, deployment_name, cluster.name)
         deployment = apps_v1.read_namespaced_deployment(deployment_name, namespace)
 
         # 将Kubernetes对象转换为YAML
@@ -1903,13 +1907,11 @@ def get_deployment_yaml(cluster: Cluster, namespace: str, deployment_name: str) 
         yaml.dump(deployment_dict, yaml_output, default_flow_style=False, allow_unicode=True, sort_keys=False)
         yaml_content = yaml_output.getvalue()
 
-        print(f"成功获取部署YAML，长度: {len(yaml_content)} 字符")
+        logger.info("成功获取部署YAML，长度: %d 字符", len(yaml_content))
         return yaml_content
 
     except Exception as e:
-        print(f"获取部署YAML失败: {namespace}/{deployment_name}, 错误: {e}")
-        import traceback
-        print(f"详细错误信息: {traceback.format_exc()}")
+        logger.exception("获取部署YAML失败: %s/%s 错误: %s", namespace, deployment_name, e)
         return None
     finally:
         if client_instance:
@@ -1949,7 +1951,7 @@ def update_deployment_yaml(cluster: Cluster, namespace: str, deployment_name: st
         return True
 
     except Exception as e:
-        print(f"更新部署YAML失败: {e}")
+        logger.exception("更新部署YAML失败: %s", e)
         return False
     finally:
         if client_instance:
@@ -1958,19 +1960,19 @@ def update_deployment_yaml(cluster: Cluster, namespace: str, deployment_name: st
 
 def update_service(cluster: Cluster, namespace: str, service_name: str, update_data: dict) -> bool:
     """更新服务（暂未实现）"""
-    print(f"update_service 暂未实现: {namespace}/{service_name}")
+    logger.warning("update_service 暂未实现: %s/%s", namespace, service_name)
     return False
 
 
 def get_service_yaml(cluster: Cluster, namespace: str, service_name: str) -> Optional[str]:
     """获取服务YAML（暂未实现）"""
-    print(f"get_service_yaml 暂未实现: {namespace}/{service_name}")
+    logger.warning("get_service_yaml 暂未实现: %s/%s", namespace, service_name)
     return None
 
 
 def update_service_yaml(cluster: Cluster, namespace: str, service_name: str, yaml_content: str) -> bool:
     """更新服务YAML（暂未实现）"""
-    print(f"update_service_yaml 暂未实现: {namespace}/{service_name}")
+    logger.warning("update_service_yaml 暂未实现: %s/%s", namespace, service_name)
     return False
 
 
@@ -2031,7 +2033,7 @@ def create_service(cluster: Cluster, service_data: dict) -> bool:
         return True
 
     except Exception as e:
-        print(f"创建服务失败: {e}")
+        logger.exception("创建服务失败: %s", e)
         return False
     finally:
         if client_instance:
@@ -2050,7 +2052,7 @@ def delete_service(cluster: Cluster, namespace: str, service_name: str) -> bool:
         return True
 
     except Exception as e:
-        print(f"删除服务失败: {e}")
+        logger.exception("删除服务失败: %s", e)
         return False
     finally:
         if client_instance:
@@ -2063,7 +2065,7 @@ def get_namespace_configmaps(cluster: Cluster, namespace: str) -> List[Dict[str,
     """获取命名空间中的ConfigMaps"""
     client_instance = create_k8s_client(cluster)
     if not client_instance:
-        print(f"警告: 无法连接到集群 {cluster.name}，返回空列表")
+        logger.warning("无法连接到集群，返回空列表: %s", cluster.name)
         return []
 
     try:
@@ -2106,7 +2108,7 @@ def get_namespace_configmaps(cluster: Cluster, namespace: str) -> List[Dict[str,
         return configmap_list
 
     except Exception as e:
-        print(f"获取ConfigMaps失败 (集群: {cluster.name}, 命名空间: {namespace}): {e}")
+        logger.exception("获取ConfigMaps失败: cluster=%s namespace=%s error=%s", cluster.name, namespace, e)
         # 返回空列表而不是抛出异常，让前端能正常工作
         return []
     finally:
@@ -2155,7 +2157,7 @@ def get_configmap_details(cluster: Cluster, namespace: str, configmap_name: str)
         }
 
     except Exception as e:
-        print(f"获取ConfigMap详情失败: {e}")
+        logger.exception("获取ConfigMap详情失败: %s", e)
         return None
     finally:
         if client_instance:
@@ -2184,7 +2186,7 @@ def create_configmap(cluster: Cluster, configmap_data: dict) -> bool:
         return True
 
     except Exception as e:
-        print(f"创建ConfigMap失败: {e}")
+        logger.exception("创建ConfigMap失败: %s", e)
         return False
     finally:
         if client_instance:
@@ -2193,7 +2195,7 @@ def create_configmap(cluster: Cluster, configmap_data: dict) -> bool:
 
 def update_configmap(cluster: Cluster, namespace: str, configmap_name: str, update_data: dict) -> bool:
     """更新ConfigMap（暂未实现）"""
-    print(f"update_configmap 暂未实现: {namespace}/{configmap_name}")
+    logger.warning("update_configmap 暂未实现: %s/%s", namespace, configmap_name)
     return False
 
 
@@ -2209,7 +2211,7 @@ def delete_configmap(cluster: Cluster, namespace: str, configmap_name: str) -> b
         return True
 
     except Exception as e:
-        print(f"删除ConfigMap失败: {e}")
+        logger.exception("删除ConfigMap失败: %s", e)
         return False
     finally:
         if client_instance:
@@ -2231,7 +2233,7 @@ def get_configmap_yaml(cluster: Cluster, namespace: str, configmap_name: str) ->
         return yaml_content
 
     except Exception as e:
-        print(f"获取ConfigMap YAML失败: {e}")
+        logger.exception("获取ConfigMap YAML失败: %s", e)
         return None
     finally:
         if client_instance:
@@ -2248,7 +2250,7 @@ def create_configmap_from_yaml(cluster: Cluster, yaml_content: str) -> bool:
         # 解析YAML内容
         configmap_dict = yaml.safe_load(yaml_content)
         if not configmap_dict:
-            print("YAML内容无效")
+            logger.warning("YAML内容无效")
             return False
 
         # 提取metadata
@@ -2257,7 +2259,7 @@ def create_configmap_from_yaml(cluster: Cluster, yaml_content: str) -> bool:
         namespace = metadata.get('namespace', 'default')
 
         if not name:
-            print("ConfigMap名称不能为空")
+            logger.warning("ConfigMap名称不能为空")
             return False
 
         core_v1 = client.CoreV1Api(client_instance)
@@ -2277,7 +2279,7 @@ def create_configmap_from_yaml(cluster: Cluster, yaml_content: str) -> bool:
         return True
 
     except Exception as e:
-        print(f"通过YAML创建ConfigMap失败: {e}")
+        logger.exception("通过YAML创建ConfigMap失败: %s", e)
         return False
     finally:
         if client_instance:
@@ -2286,7 +2288,7 @@ def create_configmap_from_yaml(cluster: Cluster, yaml_content: str) -> bool:
 
 def update_configmap_yaml(cluster: Cluster, namespace: str, configmap_name: str, yaml_content: str) -> bool:
     """更新ConfigMap YAML（暂未实现）"""
-    print(f"update_configmap_yaml 暂未实现: {namespace}/{configmap_name}")
+    logger.warning("update_configmap_yaml 暂未实现: %s/%s", namespace, configmap_name)
     return False
 
 
@@ -2342,7 +2344,7 @@ def get_namespace_resource_quotas(cluster: Cluster, namespace: str) -> List[Dict
         return quota_list
 
     except Exception as e:
-        print(f"获取Resource Quotas失败: {e}")
+        logger.exception("获取Resource Quotas失败: %s", e)
         return []
     finally:
         if client_instance:
@@ -2409,7 +2411,7 @@ def get_resource_quota_details(cluster: Cluster, namespace: str, quota_name: str
         }
 
     except Exception as e:
-        print(f"获取Resource Quota详情失败: {e}")
+        logger.exception("获取Resource Quota详情失败: %s", e)
         return None
     finally:
         if client_instance:
@@ -2458,7 +2460,7 @@ def create_resource_quota(cluster: Cluster, quota_data: dict) -> bool:
         return True
 
     except Exception as e:
-        print(f"创建Resource Quota失败: {e}")
+        logger.exception("创建Resource Quota失败: %s", e)
         return False
     finally:
         if client_instance:
@@ -2505,7 +2507,7 @@ def update_resource_quota(cluster: Cluster, namespace: str, quota_name: str, upd
         return True
 
     except Exception as e:
-        print(f"更新Resource Quota失败: {e}")
+        logger.exception("更新Resource Quota失败: %s", e)
         return False
     finally:
         if client_instance:
@@ -2524,7 +2526,7 @@ def delete_resource_quota(cluster: Cluster, namespace: str, quota_name: str) -> 
         return True
 
     except Exception as e:
-        print(f"删除Resource Quota失败: {e}")
+        logger.exception("删除Resource Quota失败: %s", e)
         return False
     finally:
         if client_instance:
@@ -2580,7 +2582,7 @@ def get_namespace_secrets(cluster: Cluster, namespace: str) -> List[Dict[str, An
         return secret_list
 
     except Exception as e:
-        print(f"获取Secrets失败: {e}")
+        logger.exception("获取Secrets失败: %s", e)
         return []
     finally:
         if client_instance:
@@ -2636,7 +2638,7 @@ def get_secret_details(cluster: Cluster, namespace: str, secret_name: str) -> Op
         }
 
     except Exception as e:
-        print(f"获取Secret详情失败: {e}")
+        logger.exception("获取Secret详情失败: %s", e)
         return None
     finally:
         if client_instance:
@@ -2676,7 +2678,7 @@ def create_secret(cluster: Cluster, secret_data: dict) -> bool:
         return True
 
     except Exception as e:
-        print(f"创建Secret失败: {e}")
+        logger.exception("创建Secret失败: %s", e)
         return False
     finally:
         if client_instance:
@@ -2685,7 +2687,7 @@ def create_secret(cluster: Cluster, secret_data: dict) -> bool:
 
 def update_secret(cluster: Cluster, namespace: str, secret_name: str, update_data: dict) -> bool:
     """更新Secret（暂未实现）"""
-    print(f"update_secret 暂未实现: {namespace}/{secret_name}")
+    logger.warning("update_secret 暂未实现: %s/%s", namespace, secret_name)
     return False
 
 
@@ -2701,7 +2703,7 @@ def delete_secret(cluster: Cluster, namespace: str, secret_name: str) -> bool:
         return True
 
     except Exception as e:
-        print(f"删除Secret失败: {e}")
+        logger.exception("删除Secret失败: %s", e)
         return False
     finally:
         if client_instance:
@@ -2723,7 +2725,7 @@ def get_secret_yaml(cluster: Cluster, namespace: str, secret_name: str) -> Optio
         return yaml_content
 
     except Exception as e:
-        print(f"获取Secret YAML失败: {e}")
+        logger.exception("获取Secret YAML失败: %s", e)
         return None
     finally:
         if client_instance:
@@ -2740,8 +2742,8 @@ def create_secret_yaml(cluster: Cluster, yaml_content: str) -> bool:
         # 解析YAML内容
         secret_dict = yaml.safe_load(yaml_content)
         if not secret_dict:
-            print("YAML内容无效")
-            return False
+        logger.warning("YAML内容无效")
+        return False
 
         # 提取metadata
         metadata = secret_dict.get('metadata', {})
@@ -2749,8 +2751,8 @@ def create_secret_yaml(cluster: Cluster, yaml_content: str) -> bool:
         namespace = metadata.get('namespace', 'default')
 
         if not name:
-            print("Secret名称不能为空")
-            return False
+        logger.warning("Secret名称不能为空")
+        return False
 
         core_v1 = client.CoreV1Api(client_instance)
 
@@ -2771,7 +2773,7 @@ def create_secret_yaml(cluster: Cluster, yaml_content: str) -> bool:
         return True
 
     except Exception as e:
-        print(f"通过YAML创建Secret失败: {e}")
+        logger.exception("通过YAML创建Secret失败: %s", e)
         return False
     finally:
         if client_instance:
@@ -2788,15 +2790,15 @@ def update_secret_yaml(cluster: Cluster, namespace: str, secret_name: str, yaml_
         # 解析YAML内容
         secret_dict = yaml.safe_load(yaml_content)
         if not secret_dict:
-            print("YAML内容无效")
-            return False
+        logger.warning("YAML内容无效")
+        return False
 
         # 验证Secret名称匹配
         metadata = secret_dict.get('metadata', {})
         yaml_secret_name = metadata.get('name')
         if yaml_secret_name != secret_name:
-            print(f"Secret名称不匹配: YAML中为{yaml_secret_name}, 请求为{secret_name}")
-            return False
+        logger.warning("Secret名称不匹配: YAML=%s 请求=%s", yaml_secret_name, secret_name)
+        return False
 
         core_v1 = client.CoreV1Api(client_instance)
 
@@ -2818,7 +2820,7 @@ def update_secret_yaml(cluster: Cluster, namespace: str, secret_name: str, yaml_
         return True
 
     except Exception as e:
-        print(f"更新Secret YAML失败: {e}")
+        logger.exception("更新Secret YAML失败: %s", e)
         return False
     finally:
         if client_instance:
@@ -2869,7 +2871,7 @@ def get_namespace_network_policies(cluster: Cluster, namespace: str) -> List[Dic
         return policy_list
 
     except Exception as e:
-        print(f"获取Network Policies失败: {e}")
+        logger.exception("获取Network Policies失败: %s", e)
         return []
     finally:
         if client_instance:
@@ -2915,7 +2917,7 @@ def get_network_policy_details(cluster: Cluster, namespace: str, policy_name: st
         }
 
     except Exception as e:
-        print(f"获取Network Policy详情失败: {e}")
+        logger.exception("获取Network Policy详情失败: %s", e)
         return None
     finally:
         if client_instance:
@@ -3058,7 +3060,7 @@ def create_network_policy(cluster: Cluster, policy_data: dict) -> bool:
         return True
 
     except Exception as e:
-        print(f"创建Network Policy失败: {e}")
+        logger.exception("创建Network Policy失败: %s", e)
         return False
     finally:
         if client_instance:
@@ -3100,7 +3102,7 @@ def update_network_policy(cluster: Cluster, namespace: str, policy_name: str, up
         return True
 
     except Exception as e:
-        print(f"更新Network Policy失败: {e}")
+        logger.exception("更新Network Policy失败: %s", e)
         return False
     finally:
         if client_instance:
@@ -3119,7 +3121,7 @@ def delete_network_policy(cluster: Cluster, namespace: str, policy_name: str) ->
         return True
 
     except Exception as e:
-        print(f"删除Network Policy失败: {e}")
+        logger.exception("删除Network Policy失败: %s", e)
         return False
     finally:
         if client_instance:
@@ -3165,7 +3167,7 @@ def get_storage_classes(cluster: Cluster) -> List[Dict[str, Any]]:
         return sc_list
 
     except Exception as e:
-        print(f"获取存储类失败: {e}")
+        logger.exception("获取存储类失败: %s", e)
         return []
     finally:
         if client_instance:
@@ -3195,7 +3197,7 @@ def create_storage_class(cluster: Cluster, sc_data: dict) -> bool:
         return True
 
     except Exception as e:
-        print(f"创建存储类失败: {e}")
+        logger.exception("创建存储类失败: %s", e)
         return False
     finally:
         if client_instance:
@@ -3214,7 +3216,7 @@ def delete_storage_class(cluster: Cluster, storage_class_name: str) -> bool:
         return True
 
     except Exception as e:
-        print(f"删除存储类失败: {e}")
+        logger.exception("删除存储类失败: %s", e)
         return False
     finally:
         if client_instance:
@@ -3269,7 +3271,7 @@ def get_persistent_volumes(cluster: Cluster) -> List[Dict[str, Any]]:
         return pv_list
 
     except Exception as e:
-        print(f"获取持久卷失败: {e}")
+        logger.exception("获取持久卷失败: %s", e)
         return []
     finally:
         if client_instance:
@@ -3338,7 +3340,7 @@ def get_pv_details(cluster: Cluster, pv_name: str) -> Optional[Dict[str, Any]]:
         }
 
     except Exception as e:
-        print(f"获取PV详情失败: {e}")
+        logger.exception("获取PV详情失败: %s", e)
         return None
     finally:
         if client_instance:
@@ -3375,7 +3377,7 @@ def create_pv(cluster: Cluster, pv_data: dict) -> bool:
         return True
 
     except Exception as e:
-        print(f"创建持久卷失败: {e}")
+        logger.exception("创建持久卷失败: %s", e)
         return False
     finally:
         if client_instance:
@@ -3394,7 +3396,7 @@ def delete_pv(cluster: Cluster, pv_name: str) -> bool:
         return True
 
     except Exception as e:
-        print(f"删除持久卷失败: {e}")
+        logger.exception("删除持久卷失败: %s", e)
         return False
     finally:
         if client_instance:
@@ -3448,7 +3450,7 @@ def get_persistent_volume_claims(cluster: Cluster) -> List[Dict[str, Any]]:
         return pvc_list
 
     except Exception as e:
-        print(f"获取PVC失败: {e}")
+        logger.exception("获取PVC失败: %s", e)
         return []
     finally:
         if client_instance:
@@ -3502,7 +3504,7 @@ def get_namespace_pvcs(cluster: Cluster, namespace: str) -> List[Dict[str, Any]]
         return pvc_list
 
     except Exception as e:
-        print(f"获取命名空间PVC失败: {e}")
+        logger.exception("获取命名空间PVC失败: %s", e)
         return []
     finally:
         if client_instance:
@@ -3570,7 +3572,7 @@ def get_pvc_details(cluster: Cluster, namespace: str, pvc_name: str) -> Optional
         }
 
     except Exception as e:
-        print(f"获取PVC详情失败: {e}")
+        logger.exception("获取PVC详情失败: %s", e)
         return None
     finally:
         if client_instance:
@@ -3603,7 +3605,7 @@ def create_pvc(cluster: Cluster, pvc_data: dict) -> bool:
         return True
 
     except Exception as e:
-        print(f"创建PVC失败: {e}")
+        logger.exception("创建PVC失败: %s", e)
         return False
     finally:
         if client_instance:
@@ -3622,7 +3624,7 @@ def delete_pvc(cluster: Cluster, namespace: str, pvc_name: str) -> bool:
         return True
 
     except Exception as e:
-        print(f"删除PVC失败: {e}")
+        logger.exception("删除PVC失败: %s", e)
         return False
     finally:
         if client_instance:
@@ -3651,7 +3653,7 @@ def browse_volume_files(cluster: Cluster, pv_name: str, path: str) -> List[Dict[
             return []
 
     except Exception as e:
-        print(f"浏览卷文件失败: {e}")
+        logger.exception("浏览卷文件失败: %s", e)
         return []
 
 
@@ -3674,7 +3676,7 @@ def read_volume_file(cluster: Cluster, pv_name: str, file_path: str, max_lines: 
         return content
 
     except Exception as e:
-        print(f"读取卷文件失败: {e}")
+        logger.exception("读取卷文件失败: %s", e)
         return None
 
 
@@ -3757,7 +3759,7 @@ def get_cluster_events(cluster: Cluster, namespace: Optional[str] = None, limit:
         return events
 
     except Exception as e:
-        print(f"获取集群事件失败: {e}")
+        logger.exception("获取集群事件失败: %s", e)
         return []
     finally:
         if client_instance:
@@ -3825,7 +3827,7 @@ def get_namespace_jobs(cluster: Cluster, namespace: str) -> List[Dict[str, Any]]
         return jobs
 
     except Exception as e:
-        print(f"获取命名空间Jobs失败: {e}")
+        logger.exception("获取命名空间Jobs失败: %s", e)
         return []
     finally:
         if client_instance:
@@ -3899,7 +3901,7 @@ def get_job_details(cluster: Cluster, namespace: str, job_name: str) -> Optional
         }
 
     except Exception as e:
-        print(f"获取Job详情失败: {e}")
+        logger.exception("获取Job详情失败: %s", e)
         return None
     finally:
         if client_instance:
@@ -4098,7 +4100,7 @@ def get_job_pods(cluster: Cluster, namespace: str, job_name: str) -> List[Dict[s
         return job_pods
 
     except Exception as e:
-        print(f"获取Job Pods失败: {e}")
+        logger.exception("获取Job Pods失败: %s", e)
         return []
     finally:
         if client_instance:
@@ -4120,7 +4122,7 @@ def get_job_yaml(cluster: Cluster, namespace: str, job_name: str) -> Optional[st
         return yaml.dump(job_dict, default_flow_style=False)
 
     except Exception as e:
-        print(f"获取Job YAML失败: {e}")
+        logger.exception("获取Job YAML失败: %s", e)
         return None
     finally:
         if client_instance:
@@ -4741,7 +4743,7 @@ def get_roles(cluster: Cluster, namespace: str = None):
         
         return roles
     except ApiException as e:
-        print(f"获取Roles失败: {e}")
+        logger.warning("获取Roles失败: %s", e)
         return None
     finally:
         _client_pool.return_client(cluster, api_client)
@@ -4774,7 +4776,7 @@ def get_role(cluster: Cluster, namespace: str, name: str):
             "creation_timestamp": role.metadata.creation_timestamp.isoformat() if role.metadata.creation_timestamp else None
         }
     except ApiException as e:
-        print(f"获取Role失败: {e}")
+        logger.warning("获取Role失败: %s", e)
         return None
     finally:
         _client_pool.return_client(cluster, api_client)
@@ -4791,7 +4793,7 @@ def delete_role(cluster: Cluster, namespace: str, name: str):
         rbac_v1.delete_namespaced_role(name, namespace)
         return True
     except ApiException as e:
-        print(f"删除Role失败: {e}")
+        logger.warning("删除Role失败: %s", e)
         return False
     finally:
         _client_pool.return_client(cluster, api_client)
@@ -4837,7 +4839,7 @@ def get_role_bindings(cluster: Cluster, namespace: str = None):
         
         return bindings
     except ApiException as e:
-        print(f"获取RoleBindings失败: {e}")
+        logger.warning("获取RoleBindings失败: %s", e)
         return None
     finally:
         _client_pool.return_client(cluster, api_client)
@@ -4875,7 +4877,7 @@ def get_role_binding(cluster: Cluster, namespace: str, name: str):
             "creation_timestamp": binding.metadata.creation_timestamp.isoformat() if binding.metadata.creation_timestamp else None
         }
     except ApiException as e:
-        print(f"获取RoleBinding失败: {e}")
+        logger.warning("获取RoleBinding失败: %s", e)
         return None
     finally:
         _client_pool.return_client(cluster, api_client)
@@ -4892,7 +4894,7 @@ def delete_role_binding(cluster: Cluster, namespace: str, name: str):
         rbac_v1.delete_namespaced_role_binding(name, namespace)
         return True
     except ApiException as e:
-        print(f"删除RoleBinding失败: {e}")
+        logger.warning("删除RoleBinding失败: %s", e)
         return False
     finally:
         _client_pool.return_client(cluster, api_client)
@@ -4925,7 +4927,7 @@ def get_service_accounts(cluster: Cluster, namespace: str = None):
         
         return service_accounts
     except ApiException as e:
-        print(f"获取ServiceAccounts失败: {e}")
+        logger.warning("获取ServiceAccounts失败: %s", e)
         return None
     finally:
         _client_pool.return_client(cluster, api_client)
@@ -4951,7 +4953,7 @@ def get_service_account(cluster: Cluster, namespace: str, name: str):
             "creation_timestamp": sa.metadata.creation_timestamp.isoformat() if sa.metadata.creation_timestamp else None
         }
     except ApiException as e:
-        print(f"获取ServiceAccount失败: {e}")
+        logger.warning("获取ServiceAccount失败: %s", e)
         return None
     finally:
         _client_pool.return_client(cluster, api_client)
@@ -4968,7 +4970,7 @@ def delete_service_account(cluster: Cluster, namespace: str, name: str):
         core_v1.delete_namespaced_service_account(name, namespace)
         return True
     except ApiException as e:
-        print(f"删除ServiceAccount失败: {e}")
+        logger.warning("删除ServiceAccount失败: %s", e)
         return False
     finally:
         _client_pool.return_client(cluster, api_client)
@@ -5004,7 +5006,7 @@ def get_cluster_roles(cluster: Cluster):
         
         return roles
     except ApiException as e:
-        print(f"获取ClusterRoles失败: {e}")
+        logger.warning("获取ClusterRoles失败: %s", e)
         return None
     finally:
         _client_pool.return_client(cluster, api_client)
@@ -5045,7 +5047,7 @@ def get_cluster_role_bindings(cluster: Cluster):
         
         return bindings
     except ApiException as e:
-        print(f"获取ClusterRoleBindings失败: {e}")
+        logger.warning("获取ClusterRoleBindings失败: %s", e)
         return None
     finally:
         _client_pool.return_client(cluster, api_client)

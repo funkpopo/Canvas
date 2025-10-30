@@ -5,9 +5,12 @@ from ..database import get_db
 from ..models import Cluster
 from ..auth import get_current_user
 from ..k8s_client import get_nodes_info, get_node_details
+from ..core.logging import get_logger
 from pydantic import BaseModel
 
 router = APIRouter()
+
+logger = get_logger(__name__)
 
 class NodeInfo(BaseModel):
     name: str
@@ -72,7 +75,7 @@ async def get_nodes(
                     node['cluster_name'] = cluster.name
                 all_nodes.extend(nodes)
             except Exception as e:
-                print(f"获取集群 {cluster.name} 节点信息失败: {e}")
+                logger.warning("获取集群节点信息失败: cluster=%s error=%s", cluster.name, e)
                 continue
 
         return all_nodes
@@ -105,7 +108,9 @@ async def get_node_detail(
                     node_detail['cluster_name'] = cluster.name
                     return node_detail
             except Exception as e:
-                print(f"在集群 {cluster.name} 中查找节点 {node_name} 失败: {e}")
+                logger.warning(
+                    "查找节点失败: cluster=%s node=%s error=%s", cluster.name, node_name, e
+                )
                 continue
 
         raise HTTPException(status_code=404, detail=f"节点 {node_name} 未找到")

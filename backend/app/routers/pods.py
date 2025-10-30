@@ -8,8 +8,11 @@ from ..auth import get_current_user, require_namespace_access, require_cluster_a
 from ..k8s_client import get_pods_info, get_pod_details, get_pod_logs, restart_pod, delete_pod, batch_delete_pods, batch_restart_pods
 from ..audit import log_action
 from pydantic import BaseModel
+from ..core.logging import get_logger
 
 router = APIRouter()
+
+logger = get_logger(__name__)
 
 
 class PodInfo(BaseModel):
@@ -96,7 +99,7 @@ async def get_pods(
             # 确保所有必需字段都存在
             all_pods.append(PodInfo(**pod))
       except Exception as e:
-        print(f"获取集群 {cluster.name} Pod信息失败: {e}")
+        logger.warning("获取集群Pod信息失败: cluster=%s error=%s", cluster.name, e)
         continue
 
     return all_pods
@@ -435,4 +438,3 @@ async def batch_restart_pods_endpoint(
         request=request
       )
     raise HTTPException(status_code=500, detail=f"批量重启 Pods 失败: {str(e)}")
-

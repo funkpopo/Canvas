@@ -6,8 +6,11 @@ from ..auth import get_current_user
 from ..k8s_client import get_cluster_stats, _client_pool
 from pydantic import BaseModel
 from typing import Dict, Any
+from ..core.logging import get_logger
 
 router = APIRouter()
+
+logger = get_logger(__name__)
 
 class DashboardStats(BaseModel):
     total_clusters: int
@@ -55,7 +58,7 @@ async def get_dashboard_stats(
                 total_services += stats.get('services', 0)
             except Exception as e:
                 # 如果某个集群连接失败，跳过但不影响其他集群
-                print(f"获取集群 {cluster.name} 统计信息失败: {e}")
+                logger.warning("获取集群统计信息失败: cluster=%s error=%s", cluster.name, e)
                 continue
 
         return DashboardStats(

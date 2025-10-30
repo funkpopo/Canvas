@@ -160,8 +160,8 @@ export const clusterApi = {
     return apiClient.delete<null>(`clusters/${id}`);
   },
 
-  async testConnection(id: number): Promise<ApiResponse<any>> {
-    return apiClient.post<any>(`clusters/${id}/test-connection`, {});
+  async testConnection(id: number): Promise<ApiResponse<unknown>> {
+    return apiClient.post<unknown>(`clusters/${id}/test-connection`, {});
   },
 };
 
@@ -284,6 +284,14 @@ export const storageApi = {
 };
 
 // 服务相关类型
+export interface ServicePort {
+  name?: string;
+  protocol?: string;
+  port: number;
+  target_port?: number | string;
+  node_port?: number;
+}
+
 export interface Service {
   id: string; // 用于前端UI的唯一标识符
   name: string;
@@ -291,9 +299,9 @@ export interface Service {
   type: string;
   cluster_ip: string;
   external_ip: string | null;
-  ports: any[];
-  selector: Record<string, any>;
-  labels: Record<string, any>;
+  ports: ServicePort[];
+  selector: Record<string, string>;
+  labels: Record<string, string>;
   age: string;
   cluster_name: string;
   cluster_id: number;
@@ -304,9 +312,9 @@ export interface ConfigMap {
   id: string; // 用于前端UI的唯一标识符
   name: string;
   namespace: string;
-  data: Record<string, any>;
-  labels: Record<string, any>;
-  annotations: Record<string, any>;
+  data: Record<string, string>;
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
   age: string;
   cluster_name: string;
   cluster_id: number;

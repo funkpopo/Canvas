@@ -5,13 +5,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from .database import create_tables, init_default_user
 from .routers import auth, clusters, stats, nodes, namespaces, pods, deployments, storage, services, configmaps, secrets, network_policies, resource_quotas, events, jobs, websocket, users, audit_logs, rbac, permissions
-from .logging_config import setup_logging
 from .exceptions import register_exception_handlers
+from .core.logging import setup_logging, get_logger
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
-    logger = logging.getLogger(__name__)
+    logger = get_logger(__name__)
 
     # 启动时执行
     logger.info("正在初始化数据库...")
@@ -47,7 +47,7 @@ async def lifespan(app: FastAPI):
     watcher_manager.stop_all_watchers()
     logger.info("所有Kubernetes监听器已停止")
 
-# 日志初始化需尽早执行
+# 日志初始化需尽早执行（支持彩色/JSON输出、文件轮转）
 setup_logging()
 
 # 创建FastAPI应用
