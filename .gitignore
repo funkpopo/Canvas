@@ -41,6 +41,8 @@ frontend/tsconfig.tsbuildinfo
 frontend/npm-debug.log*
 frontend/yarn-debug.log*
 frontend/yarn-error.log*
+backend/package-lock.json
+backend/node_modules/
 
 # IDE
 .vscode/
