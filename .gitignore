@@ -1,5 +1,9 @@
+# 数据库文件
 *.db
+*.db-shm
+*.db-wal
 
+# 任务管理文件
 todo.md
 
 # 环境变量文件
@@ -10,3 +14,53 @@ todo.md
 # 保留示例文件
 !.env.example
 !.env.prod
+
+# Python
+backend/.venv/
+backend/venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/*.pyc
+backend/*.pyo
+backend/*.pyd
+backend/.pytest_cache/
+backend/.mypy_cache/
+backend/.coverage
+backend/htmlcov/
+backend/*.egg-info/
+backend/dist/
+backend/build/
+
+# Node.js / Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/.cache/
+frontend/tsconfig.tsbuildinfo
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temporary files
+*.tmp
+*.temp
+.cache/

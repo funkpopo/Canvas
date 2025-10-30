@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir:*)",
+      "Bash(if [ -f \"backend/package-lock.json\" ])",
+      "Bash(then rm \"backend/package-lock.json\")",
+      "Bash(else echo \"backend/package-lock.json not found\")",
+      "Bash(fi)",
+      "Bash(if [ -f \"backend/canvas.db\" ])",
+      "Bash(then rm \"backend/canvas.db\")",
+      "Bash(else echo \"backend/canvas.db not found\")",
+      "Bash(if [ -f \"frontend/tsconfig.tsbuildinfo\" ])",
+      "Bash(then rm \"frontend/tsconfig.tsbuildinfo\")",
+      "Bash(else echo \"frontend/tsconfig.tsbuildinfo not found\")",
+      "Bash(if [ -f \".env.prod\" ])",
+      "Bash(then cat \".env.prod\")",
+      "Bash(else echo \"File does not exist\")"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

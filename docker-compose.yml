@@ -1,108 +1,51 @@
 version: '3.8'
 
+# 默认 Docker Compose 配置 (开发环境)
+# 开发环境: docker-compose up -d
+# 生产环境: docker-compose -f docker-compose.prod.yml up -d
+
 services:
-  # 环境变量文件 (生产环境使用.env.prod)
-  env_file: .env.prod
-  # 后端服务 - 生产环境
+  # 后端服务
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: canvas-backend-prod
+    container_name: canvas-backend
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
     environment:
-      - DATABASE_TYPE=${DATABASE_TYPE:-mysql}
-      - DATABASE_HOST=${DATABASE_HOST:-mysql}
-      - DATABASE_PORT=${DATABASE_PORT:-3306}
-      - DATABASE_NAME=${DATABASE_NAME:-canvas}
-      - DATABASE_USER=${DATABASE_USER:-canvas}
-      - DATABASE_PASSWORD=${DATABASE_PASSWORD:-canvas123}
-      - REDIS_ENABLED=${REDIS_ENABLED:-true}
-      - REDIS_HOST=${REDIS_HOST:-redis}
-      - REDIS_PORT=${REDIS_PORT:-6379}
+      - DATABASE_TYPE=${DATABASE_TYPE:-sqlite}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
-      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost}
+      - DEBUG=${DEBUG:-false}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000}
     volumes:
-      - ./backend/canvas.db:/app/canvas.db  # SQLite作为备份
+      - ./backend/canvas.db:/app/canvas.db
     networks:
       - canvas-network
-    depends_on:
-      mysql:
-        condition: service_healthy
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
 
-  # 前端服务 - 生产环境
+  # 前端服务
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: canvas-frontend-prod
+    container_name: canvas-frontend
+    env_file:
+      - .env
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://backend:8000/api/
-      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/}
+      - NODE_ENV=${NODE_ENV:-production}
     networks:
       - canvas-network
     depends_on:
-      backend:
-        condition: service_healthy
+      - backend
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  # MySQL数据库 - 生产环境
-  mysql:
-    image: mysql:8.0
-    container_name: canvas-mysql-prod
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
-      MYSQL_DATABASE: canvas
-      MYSQL_USER: canvas
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-canvas123}
-    volumes:
-      - mysql_data:/var/lib/mysql
-      - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
-      - ./docker/mysql/conf.d:/etc/mysql/conf.d
-    networks:
-      - canvas-network
-    command: --default-authentication-plugin=mysql_native_password
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  # Redis缓存 - 生产环境
-  redis:
-    image: redis:7-alpine
-    container_name: canvas-redis-prod
-    volumes:
-      - redis_data:/data
-    networks:
-      - canvas-network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-
-volumes:
-  mysql_data:
-    driver: local
-  redis_data:
-    driver: local
 
 networks:
   canvas-network:
     driver: bridge
+
