@@ -21,10 +21,12 @@ services:
       - DEBUG=${DEBUG:-false}
       - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000}
     volumes:
+      - ./backend:/app
       - ./backend/canvas.db:/app/canvas.db
     networks:
       - canvas-network
     restart: unless-stopped
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
   # 前端服务
   frontend:
@@ -38,7 +40,7 @@ services:
       - "3000:3000"
     environment:
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/}
-      - NODE_ENV=${NODE_ENV:-production}
+      - NODE_ENV=${NODE_ENV:-development}
     networks:
       - canvas-network
     depends_on:

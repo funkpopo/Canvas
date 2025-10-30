@@ -1,46 +1,54 @@
 import os
+import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from .database import create_tables, init_default_user
 from .routers import auth, clusters, stats, nodes, namespaces, pods, deployments, storage, services, configmaps, secrets, network_policies, resource_quotas, events, jobs, websocket, users, audit_logs, rbac, permissions
+from .logging_config import setup_logging
+from .exceptions import register_exception_handlers
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
+    logger = logging.getLogger(__name__)
+
     # 启动时执行
-    print("正在初始化数据库...")
+    logger.info("正在初始化数据库...")
     create_tables()
     init_default_user()
-    print("数据库初始化完成")
+    logger.info("数据库初始化完成")
 
     # 启动Kubernetes连接池清理线程
     from .k8s_client import _client_pool
     _client_pool.start_cleanup_thread()
-    print("Kubernetes连接池清理线程已启动")
+    logger.info("Kubernetes连接池清理线程已启动")
 
     # 启动WebSocket心跳检测
     from .websocket_manager import manager
     await manager.start_heartbeat_monitor()
-    print("WebSocket心跳检测已启动")
+    logger.info("WebSocket心跳检测已启动")
 
     yield
 
     # 关闭时执行
-    print("正在关闭应用...")
+    logger.info("正在关闭应用...")
 
     # 停止Kubernetes连接池清理线程
     _client_pool.stop_cleanup_thread()
-    print("Kubernetes连接池清理线程已停止")
+    logger.info("Kubernetes连接池清理线程已停止")
 
     # 停止WebSocket心跳检测
     await manager.stop_heartbeat_monitor()
-    print("WebSocket心跳检测已停止")
+    logger.info("WebSocket心跳检测已停止")
 
     # 停止所有Kubernetes监听器
     from .k8s_client import watcher_manager
     watcher_manager.stop_all_watchers()
-    print("所有Kubernetes监听器已停止")
+    logger.info("所有Kubernetes监听器已停止")
+
+# 日志初始化需尽早执行
+setup_logging()
 
 # 创建FastAPI应用
 app = FastAPI(
@@ -51,16 +59,13 @@ app = FastAPI(
 )
 
 # 配置CORS - 支持Docker环境
-allowed_origins = [
-    "http://localhost:3000",  # Next.js开发服务器地址
-    "http://frontend:3000",   # Docker前端服务地址
-]
-
-# 从环境变量获取额外允许的源
+allowed_origins = ["http://localhost:3000", "http://frontend:3000"]
+# 从环境变量获取额外允许的源，支持以逗号分隔
 extra_origins = os.getenv("CORS_ORIGINS", "")
 if extra_origins:
-    allowed_origins.extend(extra_origins.split(","))
+    allowed_origins.extend([o.strip() for o in extra_origins.split(",") if o.strip()])
 
+# 单次配置CORS，避免重复中间件
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
@@ -69,14 +74,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 添加WebSocket支持的CORS配置
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
-)
+# 注册全局异常处理
+register_exception_handlers(app)
 
 # 注册路由
 app.include_router(auth.router, prefix="/api/auth", tags=["authentication"])

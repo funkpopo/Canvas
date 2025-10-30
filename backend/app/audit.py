@@ -3,6 +3,9 @@ from fastapi import Request
 from typing import Optional
 from . import models
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def log_action(
@@ -50,7 +53,7 @@ def log_action(
         
         return audit_log
     except Exception as e:
-        print(f"审计日志记录失败: {e}")
+        logger.exception("审计日志记录失败: %s", e)
         db.rollback()
         return None
 

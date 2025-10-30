@@ -1,4 +1,6 @@
 from datetime import datetime, timedelta
+import os
+import logging
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 from fastapi import Depends, HTTPException, status
@@ -7,10 +9,19 @@ from .database import get_db
 from . import models
 from .schemas import TokenData
 
-# JWT配置
-SECRET_KEY = "your-secret-key-here-change-in-production"
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 1440  # 24小时
+# JWT配置（从环境变量加载，提供安全默认值）
+logger = logging.getLogger(__name__)
+DEFAULT_SECRET = "your-secret-key-here-change-in-production"
+SECRET_KEY = os.getenv("JWT_SECRET_KEY") or os.getenv("SECRET_KEY") or DEFAULT_SECRET
+ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
+# 兼容多种变量名
+ACCESS_TOKEN_EXPIRE_MINUTES = int(
+    os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES")
+    or os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440")
+)
+
+if SECRET_KEY == DEFAULT_SECRET:
+    logger.warning("Using default SECRET_KEY. Please set JWT_SECRET_KEY/SECRET_KEY in environment for production.")
 
 
 def create_access_token(data: dict, expires_delta: timedelta = None):

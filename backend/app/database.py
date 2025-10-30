@@ -2,6 +2,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import os
+import logging
 
 # 数据库配置 - 支持环境变量
 DATABASE_TYPE = os.getenv("DATABASE_TYPE", "sqlite")  # sqlite 或 mysql
@@ -50,12 +51,14 @@ def init_default_user():
     """初始化默认用户"""
     from .models import User
     db = SessionLocal()
+    logger = logging.getLogger(__name__)
     try:
         # 检查是否已存在admin用户
         user = db.query(User).filter(User.username == "admin").first()
         if not user:
             # 创建默认admin用户
-            hashed_password = User.get_password_hash("admin123")
+            default_password = os.getenv("DEFAULT_ADMIN_PASSWORD", "admin123")
+            hashed_password = User.get_password_hash(default_password)
             admin_user = User(
                 username="admin",
                 hashed_password=hashed_password,
@@ -64,17 +67,17 @@ def init_default_user():
             )
             db.add(admin_user)
             db.commit()
-            print("默认用户 'admin' 已创建，密码：admin123")
+            logger.warning("默认用户 'admin' 已创建。请尽快修改默认密码或通过环境变量 DEFAULT_ADMIN_PASSWORD 设定。")
         else:
             # 如果admin用户存在但role字段为空，更新为admin
             if not hasattr(user, 'role') or not user.role or user.role == "user":
                 user.role = "admin"
                 db.commit()
-                print("默认用户 'admin' 角色已更新为管理员")
+                logger.info("默认用户 'admin' 角色已更新为管理员")
             else:
-                print("默认用户 'admin' 已存在")
+                logger.info("默认用户 'admin' 已存在")
     except Exception as e:
-        print(f"初始化默认用户失败: {e}")
+        logger.exception("初始化默认用户失败: %s", e)
         db.rollback()
     finally:
         db.close()
