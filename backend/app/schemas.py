@@ -56,6 +56,12 @@ class User(UserBase):
 class Token(BaseModel):
     access_token: str
     token_type: str
+    refresh_token: Optional[str] = None
+    expires_in: Optional[int] = None  # 秒数
+
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
 
 
 class TokenData(BaseModel):
@@ -196,3 +202,128 @@ class NamespacePermissionGrantRequest(PermissionGrantRequest):
 
 class PermissionUpdateRequest(BaseModel):
     permission_level: str = Field(pattern="^(read|manage)$", description="权限等级：read（只读）或 manage（管理）")
+
+
+# ========== 会话管理 Schemas ==========
+
+class UserSessionResponse(BaseModel):
+    id: int
+    session_id: str
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
+    device_info: Optional[str] = None
+    is_active: bool
+    last_activity: datetime
+    created_at: datetime
+    expires_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class UserSessionListResponse(BaseModel):
+    total: int
+    sessions: List[UserSessionResponse]
+
+
+class SessionRevokeRequest(BaseModel):
+    session_ids: List[str] = Field(..., description="要撤销的会话ID列表")
+
+
+# ========== API密钥 Schemas ==========
+
+class APIKeyCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100, description="API密钥名称")
+    scopes: Optional[List[str]] = Field(default=None, description="权限范围")
+    expires_at: Optional[datetime] = Field(default=None, description="过期时间")
+
+
+class APIKeyResponse(BaseModel):
+    id: int
+    name: str
+    key_prefix: str
+    scopes: Optional[str] = None
+    is_active: bool
+    last_used: Optional[datetime] = None
+    expires_at: Optional[datetime] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class APIKeyCreateResponse(BaseModel):
+    """创建API密钥后的响应，包含完整密钥（仅显示一次）"""
+    id: int
+    name: str
+    api_key: str  # 完整密钥，仅在创建时返回
+    key_prefix: str
+    scopes: Optional[str] = None
+    expires_at: Optional[datetime] = None
+    created_at: datetime
+
+
+class APIKeyListResponse(BaseModel):
+    total: int
+    keys: List[APIKeyResponse]
+
+
+# ========== RBAC权限 Schemas ==========
+
+class PermissionBase(BaseModel):
+    name: str
+    resource: str
+    action: str
+    description: Optional[str] = None
+
+
+class PermissionCreate(PermissionBase):
+    pass
+
+
+class PermissionResponse(PermissionBase):
+    id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class RoleBase(BaseModel):
+    name: str
+    display_name: str
+    description: Optional[str] = None
+
+
+class RoleCreate(RoleBase):
+    permission_ids: Optional[List[int]] = Field(default=[], description="权限ID列表")
+
+
+class RoleUpdate(BaseModel):
+    display_name: Optional[str] = None
+    description: Optional[str] = None
+    permission_ids: Optional[List[int]] = None
+
+
+class RoleResponse(RoleBase):
+    id: int
+    is_system: bool
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class RoleWithPermissionsResponse(RoleResponse):
+    permissions: List[PermissionResponse]
+
+
+class RoleListResponse(BaseModel):
+    total: int
+    roles: List[RoleResponse]
+
+
+class UserRoleAssignment(BaseModel):
+    role_ids: List[int] = Field(..., description="要分配的角色ID列表")

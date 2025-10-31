@@ -1,9 +1,11 @@
 """
 Security utilities for Canvas application.
-集中管理安全相关功能：密码哈希、JWT令牌等
+集中管理安全相关功能：密码哈希、JWT令牌、Refresh Token等
 """
+import secrets
+import hashlib
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, Tuple
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 from .config import settings
@@ -55,9 +57,64 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
         expire = datetime.utcnow() + timedelta(
             minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
         )
-    to_encode.update({"exp": expire})
+    to_encode.update({"exp": expire, "type": "access"})
     encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt
+
+
+def create_refresh_token(user_id: int) -> Tuple[str, datetime]:
+    """创建刷新令牌
+
+    Args:
+        user_id: 用户ID
+
+    Returns:
+        Tuple[str, datetime]: (刷新令牌, 过期时间)
+    """
+    # 生成一个安全的随机令牌
+    token = secrets.token_urlsafe(64)
+    expires_at = datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+
+    return token, expires_at
+
+
+def create_session_id() -> str:
+    """创建会话ID
+
+    Returns:
+        str: 会话ID
+    """
+    return secrets.token_urlsafe(32)
+
+
+def create_api_key() -> Tuple[str, str, str]:
+    """创建API密钥
+
+    Returns:
+        Tuple[str, str, str]: (完整密钥, 密钥前缀, 密钥哈希)
+    """
+    # 生成API密钥: ck_前缀 + 64字节随机字符串
+    key = "ck_" + secrets.token_urlsafe(64)
+    # 前8个字符作为前缀，用于显示
+    prefix = key[:12]
+    # 使用SHA256哈希存储
+    key_hash = hashlib.sha256(key.encode()).hexdigest()
+
+    return key, prefix, key_hash
+
+
+def verify_api_key(api_key: str, stored_hash: str) -> bool:
+    """验证API密钥
+
+    Args:
+        api_key: 提供的API密钥
+        stored_hash: 存储的哈希值
+
+    Returns:
+        bool: 是否匹配
+    """
+    key_hash = hashlib.sha256(api_key.encode()).hexdigest()
+    return key_hash == stored_hash
 
 
 def verify_token(token: str) -> Optional[dict]:

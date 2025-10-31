@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, ForeignKey, Index
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from passlib.context import CryptContext
@@ -26,6 +26,53 @@ class User(Base):
     @staticmethod
     def get_password_hash(password: str) -> str:
         return pwd_context.hash(password)
+
+
+class RefreshToken(Base):
+    """刷新令牌表"""
+    __tablename__ = "refresh_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    token = Column(String, unique=True, index=True, nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    is_revoked = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+
+    # Relationships
+    user = relationship("User")
+
+    __table_args__ = (
+        Index("idx_user_token", "user_id", "token"),
+        Index("idx_expires_at", "expires_at"),
+    )
+
+
+class UserSession(Base):
+    """用户会话表"""
+    __tablename__ = "user_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    session_id = Column(String, unique=True, index=True, nullable=False)
+    refresh_token_id = Column(Integer, ForeignKey("refresh_tokens.id"), nullable=True)
+    ip_address = Column(String, nullable=True)
+    user_agent = Column(String, nullable=True)
+    device_info = Column(Text, nullable=True)  # JSON格式存储设备信息
+    is_active = Column(Boolean, default=True)
+    last_activity = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+
+    # Relationships
+    user = relationship("User")
+    refresh_token = relationship("RefreshToken")
+
+    __table_args__ = (
+        Index("idx_user_session", "user_id", "session_id"),
+        Index("idx_active_sessions", "user_id", "is_active"),
+    )
 
 
 class Cluster(Base):
@@ -105,6 +152,91 @@ class JobHistory(Base):
     cluster = relationship("Cluster")
     template = relationship("JobTemplate")
     creator = relationship("User")
+
+
+class APIKey(Base):
+    """API密钥表（用于程序调用）"""
+    __tablename__ = "api_keys"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    name = Column(String, nullable=False)  # API密钥名称，方便识别
+    key_hash = Column(String, unique=True, index=True, nullable=False)  # 密钥哈希值
+    key_prefix = Column(String, nullable=False)  # 密钥前缀，用于显示
+    scopes = Column(Text, nullable=True)  # JSON格式存储权限范围
+    is_active = Column(Boolean, default=True)
+    last_used = Column(DateTime(timezone=True), nullable=True)
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    user = relationship("User")
+
+    __table_args__ = (
+        Index("idx_user_keys", "user_id", "is_active"),
+    )
+
+
+class Permission(Base):
+    """权限表（用于RBAC）"""
+    __tablename__ = "permissions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True, nullable=False)  # 权限名称，如：cluster.read, pod.create
+    resource = Column(String, nullable=False)  # 资源类型，如：cluster, pod, deployment
+    action = Column(String, nullable=False)  # 操作类型，如：read, create, update, delete
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class Role(Base):
+    """角色表（扩展RBAC）"""
+    __tablename__ = "roles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True, nullable=False)
+    display_name = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    is_system = Column(Boolean, default=False)  # 系统内置角色不可删除
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+class RolePermission(Base):
+    """角色权限关联表"""
+    __tablename__ = "role_permissions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    role_id = Column(Integer, ForeignKey("roles.id"), nullable=False)
+    permission_id = Column(Integer, ForeignKey("permissions.id"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Relationships
+    role = relationship("Role")
+    permission = relationship("Permission")
+
+    __table_args__ = (
+        Index("idx_role_permission", "role_id", "permission_id", unique=True),
+    )
+
+
+class UserRole(Base):
+    """用户角色关联表"""
+    __tablename__ = "user_roles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    role_id = Column(Integer, ForeignKey("roles.id"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Relationships
+    user = relationship("User")
+    role = relationship("Role")
+
+    __table_args__ = (
+        Index("idx_user_role", "user_id", "role_id", unique=True),
+    )
 
 
 class UserClusterPermission(Base):

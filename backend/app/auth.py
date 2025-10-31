@@ -3,8 +3,9 @@ import os
 import logging
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Header
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from typing import Optional
 from .database import get_db
 from . import models
 from .schemas import TokenData
@@ -17,7 +18,7 @@ ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 # 兼容多种变量名
 ACCESS_TOKEN_EXPIRE_MINUTES = int(
     os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES")
-    or os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440")
+    or os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30")
 )
 
 if SECRET_KEY == DEFAULT_SECRET:
@@ -58,15 +59,41 @@ def authenticate_user(db: Session, username: str, password: str):
 
 security = HTTPBearer()
 
+
 def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    x_api_key: Optional[str] = Header(None),
     db: Session = Depends(get_db)
 ):
+    """获取当前用户，支持JWT Token和API Key两种认证方式"""
+
+    # 优先尝试API Key认证
+    if x_api_key:
+        from .services import auth_service
+        user = auth_service.verify_api_key(db, x_api_key)
+        if user:
+            return user
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="无效的API密钥",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+    # JWT Token认证
+    if not credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="未提供认证信息",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+
     token_data = verify_token(credentials.credentials, credentials_exception)
     user = db.query(models.User).filter(models.User.username == token_data.username).first()
     if user is None:

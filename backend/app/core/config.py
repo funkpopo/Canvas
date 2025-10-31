@@ -26,10 +26,12 @@ class Settings:
     JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", SECRET_KEY)
     SESSION_SECRET_KEY: str = os.getenv("SESSION_SECRET_KEY", SECRET_KEY)
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = int(
         os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", str(ACCESS_TOKEN_EXPIRE_MINUTES))
     )
+    REFRESH_TOKEN_EXPIRE_DAYS: int = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "30"))
+    SESSION_EXPIRE_DAYS: int = int(os.getenv("SESSION_EXPIRE_DAYS", "30"))
 
     # 数据库配置
     DATABASE_TYPE: str = os.getenv("DATABASE_TYPE", "sqlite")

@@ -15,7 +15,9 @@
       "Bash(if [ -f \".env.prod\" ])",
       "Bash(then cat \".env.prod\")",
       "Bash(else echo \"File does not exist\")",
-      "Bash(tree:*)"
+      "Bash(tree:*)",
+      "Bash(python -m migrations.add_auth_enhancements:*)",
+      "Bash(python -m backend.migrations.add_auth_enhancements:*)"
     ],
     "deny": [],
     "ask": []
