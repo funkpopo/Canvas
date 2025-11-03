@@ -9,7 +9,11 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowLeft, Activity, Loader2, RefreshCw, AlertCircle, Play, Trash2, FileText, Code } from "lucide-react";
+import { ArrowLeft, Activity, Loader2, RefreshCw, AlertCircle, Play, Trash2, FileText, Code, Server, LogOut } from "lucide-react";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { LanguageToggle } from "@/components/ui/language-toggle";
+import ClusterSelector from "@/components/ClusterSelector";
+import { useAuth } from "@/lib/auth-context";
 import { jobApi, JobDetails, JobPod } from "@/lib/api";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -25,7 +29,7 @@ interface JobCondition {
 
 export default function JobDetailsPage({ params }: { params: Promise<{ namespace: string; job: string }> }) {
   const resolvedParams = use(params);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const { isAuthenticated, isLoading: authLoading, logout } = useAuth();
   const [jobDetails, setJobDetails] = useState<JobDetails | null>(null);
   const [jobPods, setJobPods] = useState<JobPod[]>([]);
   const [yamlContent, setYamlContent] = useState<string>("");
@@ -44,14 +48,11 @@ export default function JobDetailsPage({ params }: { params: Promise<{ namespace
   const clusterId = searchParams.get('cluster_id');
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) {
+    if (!authLoading && !isAuthenticated) {
       router.push("/login");
       return;
     }
-
-    setIsAuthenticated(true);
-  }, [router]);
+  }, [isAuthenticated, authLoading, router]);
 
   useEffect(() => {
     if (isAuthenticated && clusterId) {
@@ -171,58 +172,110 @@ export default function JobDetailsPage({ params }: { params: Promise<{ namespace
 
   if (!isAuthenticated || !jobDetails) {
     return (
-      <div className="container mx-auto p-6">
-        <div className="flex items-center justify-center py-8">
-          <Loader2 className="h-8 w-8 animate-spin" />
-          <span className="ml-2">加载中...</span>
-        </div>
+      <div className="min-h-screen bg-background">
+        <header className="bg-card shadow-sm border-b">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex justify-between items-center h-16">
+              <div className="flex items-center">
+                <Server className="h-8 w-8 text-zinc-600" />
+                <h1 className="ml-2 text-xl font-semibold text-gray-900 dark:text-white">
+                  Canvas
+                </h1>
+              </div>
+              <div className="flex items-center space-x-4">
+                <ClusterSelector />
+                <LanguageToggle />
+                <ThemeToggle />
+                <Button variant="outline" onClick={logout}>
+                  <LogOut className="h-4 w-4 mr-2" />
+                  退出登录
+                </Button>
+              </div>
+            </div>
+          </div>
+        </header>
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-8 w-8 animate-spin" />
+            <span className="ml-2">加载中...</span>
+          </div>
+        </main>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      {/* 头部导航 */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <Link href={`/jobs?cluster_id=${clusterId}`}>
-            <Button variant="outline" size="sm">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              返回列表
-            </Button>
-          </Link>
-          <div>
-            <h1 className="text-3xl font-bold">{jobDetails.name}</h1>
-            <p className="text-muted-foreground">
-              命名空间: {jobDetails.namespace} | 集群: {jobDetails.cluster_name}
-            </p>
+    <div className="min-h-screen bg-background">
+      {/* Main Header */}
+      <header className="bg-card shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <div className="flex items-center">
+              <Server className="h-8 w-8 text-zinc-600" />
+              <h1 className="ml-2 text-xl font-semibold text-gray-900 dark:text-white">
+                Canvas
+              </h1>
+            </div>
+            <div className="flex items-center space-x-4">
+              <ClusterSelector />
+              <LanguageToggle />
+              <ThemeToggle />
+              <Button variant="outline" onClick={logout}>
+                <LogOut className="h-4 w-4 mr-2" />
+                退出登录
+              </Button>
+            </div>
           </div>
         </div>
-        <div className="flex space-x-2">
-          <Button onClick={fetchJobData} disabled={isLoading}>
-            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-            刷新
-          </Button>
-          <Button variant="outline" onClick={handleRestartJob} disabled={isOperationLoading}>
-            <Play className="h-4 w-4 mr-2" />
-            重启
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => setConfirmDialog({
-              open: true,
-              title: "删除Job",
-              description: `确定要删除Job "${jobDetails.name}" 吗？此操作不可撤销。`,
-              onConfirm: handleDeleteJob,
-            })}
-            disabled={isOperationLoading}
-          >
-            <Trash2 className="h-4 w-4 mr-2" />
-            删除
-          </Button>
+      </header>
+
+      {/* Sub-header with actions */}
+      <div className="bg-card shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between py-4">
+            <div className="flex items-center space-x-4">
+              <Link href={`/jobs?cluster_id=${clusterId}`}>
+                <Button variant="outline" size="sm">
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  返回列表
+                </Button>
+              </Link>
+              <div>
+                <h1 className="text-3xl font-bold">{jobDetails.name}</h1>
+                <p className="text-muted-foreground">
+                  命名空间: {jobDetails.namespace} | 集群: {jobDetails.cluster_name}
+                </p>
+              </div>
+            </div>
+            <div className="flex space-x-2">
+              <Button onClick={fetchJobData} disabled={isLoading}>
+                <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                刷新
+              </Button>
+              <Button variant="outline" onClick={handleRestartJob} disabled={isOperationLoading}>
+                <Play className="h-4 w-4 mr-2" />
+                重启
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setConfirmDialog({
+                  open: true,
+                  title: "删除Job",
+                  description: `确定要删除Job "${jobDetails.name}" 吗？此操作不可撤销。`,
+                  onConfirm: handleDeleteJob,
+                })}
+                disabled={isOperationLoading}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                删除
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
 
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
       {/* 状态卡片 */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
@@ -476,7 +529,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ namespace
         description={confirmDialog.description}
         onConfirm={confirmDialog.onConfirm}
       />
+      </main>
     </div>
   );
 }
-

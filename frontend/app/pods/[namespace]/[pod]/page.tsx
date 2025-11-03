@@ -7,7 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Activity, Cpu, MemoryStick, Loader2, RefreshCw, AlertCircle, Square } from "lucide-react";
+import { ArrowLeft, Activity, Cpu, MemoryStick, Loader2, RefreshCw, AlertCircle, Square, Server, LogOut } from "lucide-react";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { LanguageToggle } from "@/components/ui/language-toggle";
+import ClusterSelector from "@/components/ClusterSelector";
+import { useAuth } from "@/lib/auth-context";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -63,7 +67,7 @@ interface MetricsData {
 
 export default function PodDetailsPage({ params }: { params: Promise<{ namespace: string; pod: string }> }) {
   const resolvedParams = use(params);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const { isAuthenticated, isLoading: authLoading, logout } = useAuth();
   const [podDetails, setPodDetails] = useState<PodDetails | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [metricsData, setMetricsData] = useState<MetricsData[]>([]);
@@ -82,14 +86,11 @@ export default function PodDetailsPage({ params }: { params: Promise<{ namespace
   const clusterId = searchParams.get('cluster_id');
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) {
+    if (!authLoading && !isAuthenticated) {
       router.push("/login");
       return;
     }
-
-    setIsAuthenticated(true);
-  }, [router]);
+  }, [isAuthenticated, authLoading, router]);
 
   useEffect(() => {
     if (isAuthenticated && clusterId) {
@@ -254,13 +255,44 @@ export default function PodDetailsPage({ params }: { params: Promise<{ namespace
     }
   };
 
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
+
   if (!isAuthenticated) {
     return null;
   }
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
+      {/* Main Header */}
+      <header className="bg-card shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <div className="flex items-center">
+              <Server className="h-8 w-8 text-zinc-600" />
+              <h1 className="ml-2 text-xl font-semibold text-gray-900 dark:text-white">
+                Canvas
+              </h1>
+            </div>
+            <div className="flex items-center space-x-4">
+              <ClusterSelector />
+              <LanguageToggle />
+              <ThemeToggle />
+              <Button variant="outline" onClick={logout}>
+                <LogOut className="h-4 w-4 mr-2" />
+                退出登录
+              </Button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Sub-header with actions */}
       <header className="bg-card shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">

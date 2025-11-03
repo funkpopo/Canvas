@@ -10,7 +10,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { ArrowLeft, Activity, Loader2, RefreshCw, AlertCircle, RotateCcw, Trash2, Settings } from "lucide-react";
+import { ArrowLeft, Activity, Loader2, RefreshCw, AlertCircle, RotateCcw, Trash2, Settings, Server, LogOut } from "lucide-react";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { LanguageToggle } from "@/components/ui/language-toggle";
+import ClusterSelector from "@/components/ClusterSelector";
+import { useAuth } from "@/lib/auth-context";
 import DeploymentConfigTab from "@/components/DeploymentConfigTab";
 import DeploymentYamlTab from "@/components/DeploymentYamlTab";
 import DeploymentServicesTab from "@/components/DeploymentServicesTab";
@@ -65,7 +69,7 @@ interface DeploymentPod {
 
 export default function DeploymentDetailsPage({ params }: { params: Promise<{ namespace: string; deployment: string }> }) {
   const resolvedParams = use(params);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const { isAuthenticated, isLoading: authLoading, logout } = useAuth();
   const [deploymentDetails, setDeploymentDetails] = useState<DeploymentDetails | null>(null);
   const [deploymentPods, setDeploymentPods] = useState<DeploymentPod[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -84,14 +88,11 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
   const clusterId = searchParams.get('cluster_id');
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) {
+    if (!authLoading && !isAuthenticated) {
       router.push("/login");
       return;
     }
-
-    setIsAuthenticated(true);
-  }, [router]);
+  }, [isAuthenticated, authLoading, router]);
 
   useEffect(() => {
     if (isAuthenticated && clusterId) {
@@ -249,10 +250,19 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center h-16">
               <div className="flex items-center">
-                <Link href={`/namespaces/${resolvedParams.namespace}`} className="flex items-center">
-                  <ArrowLeft className="h-5 w-5 mr-2" />
-                  <span className="text-gray-600 dark:text-gray-400">返回命名空间详情</span>
-                </Link>
+                <Server className="h-8 w-8 text-zinc-600" />
+                <h1 className="ml-2 text-xl font-semibold text-gray-900 dark:text-white">
+                  Canvas
+                </h1>
+              </div>
+              <div className="flex items-center space-x-4">
+                <ClusterSelector />
+                <LanguageToggle />
+                <ThemeToggle />
+                <Button variant="outline" onClick={logout}>
+                  <LogOut className="h-4 w-4 mr-2" />
+                  退出登录
+                </Button>
               </div>
             </div>
           </div>
@@ -277,6 +287,14 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
     );
   }
 
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
+
   if (!isAuthenticated) {
     return null;
   }
@@ -284,6 +302,29 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
+      <header className="bg-card shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <div className="flex items-center">
+              <Server className="h-8 w-8 text-zinc-600" />
+              <h1 className="ml-2 text-xl font-semibold text-gray-900 dark:text-white">
+                Canvas
+              </h1>
+            </div>
+            <div className="flex items-center space-x-4">
+              <ClusterSelector />
+              <LanguageToggle />
+              <ThemeToggle />
+              <Button variant="outline" onClick={logout}>
+                <LogOut className="h-4 w-4 mr-2" />
+                退出登录
+              </Button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Sub-header with actions */}
       <header className="bg-card shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">

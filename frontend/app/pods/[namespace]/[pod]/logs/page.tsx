@@ -1,20 +1,27 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams, useSearchParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Download, RefreshCw, Terminal } from "lucide-react";
+import { Loader2, Download, RefreshCw, Terminal, Server, LogOut, ArrowLeft } from "lucide-react";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { LanguageToggle } from "@/components/ui/language-toggle";
+import ClusterSelector from "@/components/ClusterSelector";
+import { useAuth } from "@/lib/auth-context";
 import { useCluster } from "@/lib/cluster-context";
 
 export default function PodLogsPage() {
   const params = useParams();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const namespace = params.namespace as string;
   const podName = params.pod as string;
   const clusterId = searchParams.get('cluster_id');
   const { activeCluster } = useCluster();
+  const { isAuthenticated, isLoading: authLoading, logout } = useAuth();
 
   const [logs, setLogs] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -23,19 +30,26 @@ export default function PodLogsPage() {
   const [availableContainers, setAvailableContainers] = useState<string[]>([]);
 
   useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      router.push("/login");
+      return;
+    }
+  }, [isAuthenticated, authLoading, router]);
+
+  useEffect(() => {
     // 若URL缺少 cluster_id，回退到当前激活集群
     const effectiveClusterId = clusterId || activeCluster?.id?.toString();
-    if (namespace && podName && effectiveClusterId) {
+    if (isAuthenticated && namespace && podName && effectiveClusterId) {
       fetchPodDetails();
     }
-  }, [namespace, podName, clusterId, activeCluster]);
+  }, [isAuthenticated, namespace, podName, clusterId, activeCluster]);
 
   useEffect(() => {
     const effectiveClusterId = clusterId || activeCluster?.id?.toString();
-    if (namespace && podName && effectiveClusterId) {
+    if (isAuthenticated && namespace && podName && effectiveClusterId) {
       fetchLogs();
     }
-  }, [namespace, podName, clusterId, activeCluster, selectedContainer, tailLines]);
+  }, [isAuthenticated, namespace, podName, clusterId, activeCluster, selectedContainer, tailLines]);
 
   const fetchPodDetails = async () => {
     try {
@@ -137,13 +151,63 @@ export default function PodLogsPage() {
     ));
   };
 
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return null;
+  }
+
   return (
-    <div className="min-h-screen bg-background p-6">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-background">
+      {/* Main Header */}
+      <header className="bg-card shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <div className="flex items-center">
+              <Server className="h-8 w-8 text-zinc-600" />
+              <h1 className="ml-2 text-xl font-semibold text-gray-900 dark:text-white">
+                Canvas
+              </h1>
+            </div>
+            <div className="flex items-center space-x-4">
+              <ClusterSelector />
+              <LanguageToggle />
+              <ThemeToggle />
+              <Button variant="outline" onClick={logout}>
+                <LogOut className="h-4 w-4 mr-2" />
+                退出登录
+              </Button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Sub-header */}
+      <header className="bg-card shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <div className="flex items-center">
+              <Link href={`/pods/${namespace}/${podName}?cluster_id=${clusterId || activeCluster?.id}`} className="flex items-center">
+                <ArrowLeft className="h-5 w-5 mr-2" />
+                <span className="text-gray-600 dark:text-gray-400">返回Pod详情</span>
+              </Link>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+          <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
             Pod日志: {podName}
-          </h1>
+          </h2>
           <p className="text-gray-600 dark:text-gray-400">
             命名空间: {namespace}
           </p>
@@ -234,7 +298,7 @@ export default function PodLogsPage() {
             </div>
           </CardContent>
         </Card>
-      </div>
+      </main>
     </div>
   );
 }

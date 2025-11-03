@@ -68,8 +68,8 @@ async def list_statefulsets(
     log_action(
         db=db, user_id=current_user.id, action="LIST_STATEFULSETS",
         resource_type="statefulset", resource_name=namespace,
-        cluster_id=cluster_id, ip_address=request.client.host,
-        status="SUCCESS", details=f"获取命名空间 {namespace} 的StatefulSets"
+        cluster_id=cluster_id, request=request,
+        details={"namespace": namespace, "count": len(statefulsets)}
     )
 
     return statefulsets
@@ -96,8 +96,8 @@ async def get_statefulset(
     log_action(
         db=db, user_id=current_user.id, action="GET_STATEFULSET",
         resource_type="statefulset", resource_name=f"{namespace}/{name}",
-        cluster_id=cluster_id, ip_address=request.client.host,
-        status="SUCCESS", details=f"获取StatefulSet详情"
+        cluster_id=cluster_id, request=request,
+        details={"namespace": namespace, "name": name}
     )
 
     return statefulset
@@ -123,9 +123,8 @@ async def scale_statefulset_handler(
     log_action(
         db=db, user_id=current_user.id, action="SCALE_STATEFULSET",
         resource_type="statefulset", resource_name=f"{namespace}/{name}",
-        cluster_id=cluster_id, ip_address=request.client.host,
-        status="SUCCESS" if success else "FAILED",
-        details=f"扩缩容至 {scale_request.replicas} 个副本"
+        cluster_id=cluster_id, request=request, success=success,
+        details={"namespace": namespace, "name": name, "replicas": scale_request.replicas}
     )
 
     if not success:
@@ -153,9 +152,8 @@ async def delete_statefulset_handler(
     log_action(
         db=db, user_id=current_user.id, action="DELETE_STATEFULSET",
         resource_type="statefulset", resource_name=f"{namespace}/{name}",
-        cluster_id=cluster_id, ip_address=request.client.host,
-        status="SUCCESS" if success else "FAILED",
-        details=f"删除StatefulSet"
+        cluster_id=cluster_id, request=request, success=success,
+        details={"namespace": namespace, "name": name}
     )
 
     if not success:

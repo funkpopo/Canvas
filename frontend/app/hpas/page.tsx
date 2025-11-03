@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,7 +9,12 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowLeft, Loader2, RefreshCw, Search, Trash2, TrendingUp } from "lucide-react";
+import { ArrowLeft, Loader2, RefreshCw, Search, Trash2, TrendingUp, Server, LogOut } from "lucide-react";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { LanguageToggle } from "@/components/ui/language-toggle";
+import ClusterSelector from "@/components/ClusterSelector";
+import { useAuth } from "@/lib/auth-context";
+import { useCluster } from "@/lib/cluster-context";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 
@@ -33,7 +38,8 @@ interface Namespace {
 }
 
 function HPAsContent() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const { isAuthenticated, isLoading: authLoading, logout } = useAuth();
+  const { activeCluster } = useCluster();
   const [hpas, setHPAs] = useState<HPA[]>([]);
   const [namespaces, setNamespaces] = useState<Namespace[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -48,17 +54,14 @@ function HPAsContent() {
   });
 
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const clusterId = searchParams.get('cluster_id');
+  const clusterId = activeCluster?.id.toString();
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) {
+    if (!authLoading && !isAuthenticated) {
       router.push("/login");
       return;
     }
-    setIsAuthenticated(true);
-  }, [router]);
+  }, [isAuthenticated, authLoading, router]);
 
   useEffect(() => {
     if (isAuthenticated && clusterId) {
@@ -83,6 +86,7 @@ function HPAsContent() {
       if (response.ok) {
         const data = await response.json();
         setNamespaces(data);
+        // 自动选择第一个命名空间
         if (data.length > 0 && !selectedNamespace) {
           setSelectedNamespace(data[0].name);
         }
@@ -152,12 +156,85 @@ function HPAsContent() {
     hpa.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
+
   if (!isAuthenticated) {
-    return <div>验证中...</div>;
+    return null;
+  }
+
+  if (!clusterId) {
+    return (
+      <div className="min-h-screen bg-background">
+        <header className="bg-card shadow-sm border-b">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex justify-between items-center h-16">
+              <div className="flex items-center">
+                <Server className="h-8 w-8 text-zinc-600" />
+                <h1 className="ml-2 text-xl font-semibold text-gray-900 dark:text-white">
+                  Canvas
+                </h1>
+              </div>
+              <div className="flex items-center space-x-4">
+                <ClusterSelector />
+                <LanguageToggle />
+                <ThemeToggle />
+                <Button variant="outline" onClick={logout}>
+                  <LogOut className="h-4 w-4 mr-2" />
+                  退出登录
+                </Button>
+              </div>
+            </div>
+          </div>
+        </header>
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-12">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                请选择集群
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-4">
+                请先从顶部选择一个集群来查看HPA资源
+              </p>
+            </CardContent>
+          </Card>
+        </main>
+      </div>
+    );
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="min-h-screen bg-background">
+      {/* Main Header */}
+      <header className="bg-card shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <div className="flex items-center">
+              <Server className="h-8 w-8 text-zinc-600" />
+              <h1 className="ml-2 text-xl font-semibold text-gray-900 dark:text-white">
+                Canvas
+              </h1>
+            </div>
+            <div className="flex items-center space-x-4">
+              <ClusterSelector />
+              <LanguageToggle />
+              <ThemeToggle />
+              <Button variant="outline" onClick={logout}>
+                <LogOut className="h-4 w-4 mr-2" />
+                退出登录
+              </Button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
           <Link href="/">
@@ -291,6 +368,7 @@ function HPAsContent() {
         description={confirmDialog.description}
         onConfirm={confirmDialog.onConfirm}
       />
+      </main>
     </div>
   );
 }

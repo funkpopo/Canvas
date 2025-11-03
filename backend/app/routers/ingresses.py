@@ -58,8 +58,8 @@ async def list_ingresses(
     log_action(
         db=db, user_id=current_user.id, action="LIST_INGRESSES",
         resource_type="ingress", resource_name=namespace,
-        cluster_id=cluster_id, ip_address=request.client.host,
-        status="SUCCESS", details=f"获取命名空间 {namespace} 的Ingresses"
+        cluster_id=cluster_id, request=request,
+        details={"namespace": namespace, "count": len(ingresses)}
     )
 
     return ingresses
@@ -86,8 +86,8 @@ async def get_ingress(
     log_action(
         db=db, user_id=current_user.id, action="GET_INGRESS",
         resource_type="ingress", resource_name=f"{namespace}/{name}",
-        cluster_id=cluster_id, ip_address=request.client.host,
-        status="SUCCESS", details=f"获取Ingress详情"
+        cluster_id=cluster_id, request=request,
+        details={"namespace": namespace, "name": name}
     )
 
     return ingress
@@ -112,9 +112,8 @@ async def delete_ingress_handler(
     log_action(
         db=db, user_id=current_user.id, action="DELETE_INGRESS",
         resource_type="ingress", resource_name=f"{namespace}/{name}",
-        cluster_id=cluster_id, ip_address=request.client.host,
-        status="SUCCESS" if success else "FAILED",
-        details=f"删除Ingress"
+        cluster_id=cluster_id, request=request, success=success,
+        details={"namespace": namespace, "name": name}
     )
 
     if not success:

@@ -64,8 +64,8 @@ async def list_hpas(
     log_action(
         db=db, user_id=current_user.id, action="LIST_HPAS",
         resource_type="hpa", resource_name=namespace,
-        cluster_id=cluster_id, ip_address=request.client.host,
-        status="SUCCESS", details=f"获取命名空间 {namespace} 的HPAs"
+        cluster_id=cluster_id, request=request,
+        details={"namespace": namespace, "count": len(hpas)}
     )
 
     return hpas
@@ -92,8 +92,8 @@ async def get_hpa(
     log_action(
         db=db, user_id=current_user.id, action="GET_HPA",
         resource_type="hpa", resource_name=f"{namespace}/{name}",
-        cluster_id=cluster_id, ip_address=request.client.host,
-        status="SUCCESS", details=f"获取HPA详情"
+        cluster_id=cluster_id, request=request,
+        details={"namespace": namespace, "name": name}
     )
 
     return hpa
@@ -118,9 +118,8 @@ async def delete_hpa_handler(
     log_action(
         db=db, user_id=current_user.id, action="DELETE_HPA",
         resource_type="hpa", resource_name=f"{namespace}/{name}",
-        cluster_id=cluster_id, ip_address=request.client.host,
-        status="SUCCESS" if success else "FAILED",
-        details=f"删除HPA"
+        cluster_id=cluster_id, request=request, success=success,
+        details={"namespace": namespace, "name": name}
     )
 
     if not success:

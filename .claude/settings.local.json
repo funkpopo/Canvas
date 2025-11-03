@@ -31,7 +31,9 @@
       "Bash(if [ -f \".env\" ])",
       "Bash(then cat \".env\")",
       "Bash(then echo \"Database exists\")",
-      "Bash(else echo \"Database does not exist\")"
+      "Bash(else echo \"Database does not exist\")",
+      "Bash(npm run build:*)",
+      "Bash(npx tsc:*)"
     ],
     "deny": [],
     "ask": []

@@ -65,8 +65,8 @@ async def list_cronjobs(
     log_action(
         db=db, user_id=current_user.id, action="LIST_CRONJOBS",
         resource_type="cronjob", resource_name=namespace,
-        cluster_id=cluster_id, ip_address=request.client.host,
-        status="SUCCESS", details=f"获取命名空间 {namespace} 的CronJobs"
+        cluster_id=cluster_id, request=request,
+        details={"namespace": namespace, "count": len(cronjobs)}
     )
 
     return cronjobs
@@ -93,8 +93,8 @@ async def get_cronjob(
     log_action(
         db=db, user_id=current_user.id, action="GET_CRONJOB",
         resource_type="cronjob", resource_name=f"{namespace}/{name}",
-        cluster_id=cluster_id, ip_address=request.client.host,
-        status="SUCCESS", details=f"获取CronJob详情"
+        cluster_id=cluster_id, request=request,
+        details={"namespace": namespace, "name": name}
     )
 
     return cronjob
@@ -119,9 +119,8 @@ async def delete_cronjob_handler(
     log_action(
         db=db, user_id=current_user.id, action="DELETE_CRONJOB",
         resource_type="cronjob", resource_name=f"{namespace}/{name}",
-        cluster_id=cluster_id, ip_address=request.client.host,
-        status="SUCCESS" if success else "FAILED",
-        details=f"删除CronJob"
+        cluster_id=cluster_id, request=request, success=success,
+        details={"namespace": namespace, "name": name}
     )
 
     if not success:

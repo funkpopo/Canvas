@@ -16,6 +16,7 @@ interface Cluster {
 interface ClusterContextType {
   clusters: Cluster[];
   activeCluster: Cluster | null;
+  selectedCluster: number | null; // 当前选中集群的ID
   setActiveCluster: (cluster: Cluster | null) => Promise<void>;
   refreshClusters: () => Promise<void>;
   toggleClusterActive: (clusterId: number) => Promise<boolean>;
@@ -43,6 +44,9 @@ export function ClusterProvider({ children }: { children: ReactNode }) {
 
   // 获取当前集群（兼容旧的activeCluster命名）
   const currentCluster = activeCluster;
+
+  // 获取当前选中的集群ID（用于兼容性）
+  const selectedCluster = activeCluster?.id ?? null;
 
   const fetchClusters = async () => {
     try {
@@ -180,6 +184,7 @@ export function ClusterProvider({ children }: { children: ReactNode }) {
       value={{
         clusters,
         activeCluster,
+        selectedCluster,
         setActiveCluster,
         refreshClusters,
         toggleClusterActive,

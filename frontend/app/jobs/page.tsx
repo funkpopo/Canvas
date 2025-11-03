@@ -17,6 +17,7 @@ import { ArrowLeft, Activity, Loader2, RefreshCw, AlertCircle, Play, Trash2, Plu
 import { jobApi, Job } from "@/lib/api";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { useCluster } from "@/lib/cluster-context";
 
 interface Namespace {
   name: string;
@@ -45,7 +46,12 @@ function JobsContent() {
 
   const router = useRouter();
   const searchParams = useSearchParams();
-  const clusterId = searchParams.get('cluster_id');
+  const { selectedCluster, clusters } = useCluster();
+  const clusterIdFromUrl = searchParams.get('cluster_id');
+  const clusterId = clusterIdFromUrl || (selectedCluster ? String(selectedCluster) : null);
+
+  // 获取集群信息
+  const currentCluster = clusters.find(c => c.id === parseInt(clusterId || '0'));
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -245,6 +251,32 @@ function JobsContent() {
     return <div>验证中...</div>;
   }
 
+  if (!clusterId) {
+    return (
+      <div className="container mx-auto p-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center text-yellow-600">
+              <AlertCircle className="h-5 w-5 mr-2" />
+              未选择集群
+            </CardTitle>
+            <CardDescription>
+              请先从首页选择一个集群，或者确保 URL 中包含 cluster_id 参数
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Link href="/">
+              <Button>
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                返回首页选择集群
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -257,7 +289,14 @@ function JobsContent() {
           </Link>
           <div>
             <h1 className="text-3xl font-bold">Jobs管理</h1>
-            <p className="text-muted-foreground">管理工作负载中的一次性任务</p>
+            <p className="text-muted-foreground">
+              管理工作负载中的一次性任务
+              {currentCluster && (
+                <span className="ml-2">
+                  • 集群: <span className="font-semibold text-foreground">{currentCluster.name}</span>
+                </span>
+              )}
+            </p>
           </div>
         </div>
         <div className="flex space-x-2">

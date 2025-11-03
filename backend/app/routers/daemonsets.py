@@ -64,8 +64,8 @@ async def list_daemonsets(
     log_action(
         db=db, user_id=current_user.id, action="LIST_DAEMONSETS",
         resource_type="daemonset", resource_name=namespace,
-        cluster_id=cluster_id, ip_address=request.client.host,
-        status="SUCCESS", details=f"获取命名空间 {namespace} 的DaemonSets"
+        cluster_id=cluster_id, request=request,
+        details={"namespace": namespace, "count": len(daemonsets)}
     )
 
     return daemonsets
@@ -92,8 +92,8 @@ async def get_daemonset(
     log_action(
         db=db, user_id=current_user.id, action="GET_DAEMONSET",
         resource_type="daemonset", resource_name=f"{namespace}/{name}",
-        cluster_id=cluster_id, ip_address=request.client.host,
-        status="SUCCESS", details=f"获取DaemonSet详情"
+        cluster_id=cluster_id, request=request,
+        details={"namespace": namespace, "name": name}
     )
 
     return daemonset
@@ -118,9 +118,8 @@ async def delete_daemonset_handler(
     log_action(
         db=db, user_id=current_user.id, action="DELETE_DAEMONSET",
         resource_type="daemonset", resource_name=f"{namespace}/{name}",
-        cluster_id=cluster_id, ip_address=request.client.host,
-        status="SUCCESS" if success else "FAILED",
-        details=f"删除DaemonSet"
+        cluster_id=cluster_id, request=request, success=success,
+        details={"namespace": namespace, "name": name}
     )
 
     if not success:
