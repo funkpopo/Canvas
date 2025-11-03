@@ -307,6 +307,60 @@ export default function Home() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Kubernetes资源管理增强 */}
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle>工作负载管理</CardTitle>
+            <CardDescription>管理有状态应用、守护进程、定时任务等</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <Button variant="outline" className="h-20 flex-col" asChild>
+                <Link href="/deployments">
+                  <Activity className="h-6 w-6 mb-2" />
+                  Deployments
+                </Link>
+              </Button>
+              <Button variant="outline" className="h-20 flex-col" asChild>
+                <Link href="/statefulsets">
+                  <Database className="h-6 w-6 mb-2" />
+                  StatefulSets
+                </Link>
+              </Button>
+              <Button variant="outline" className="h-20 flex-col" asChild>
+                <Link href="/daemonsets">
+                  <Server className="h-6 w-6 mb-2" />
+                  DaemonSets
+                </Link>
+              </Button>
+              <Button variant="outline" className="h-20 flex-col" asChild>
+                <Link href="/jobs">
+                  <Settings2 className="h-6 w-6 mb-2" />
+                  Jobs
+                </Link>
+              </Button>
+              <Button variant="outline" className="h-20 flex-col" asChild>
+                <Link href="/cronjobs">
+                  <Activity className="h-6 w-6 mb-2" />
+                  CronJobs
+                </Link>
+              </Button>
+              <Button variant="outline" className="h-20 flex-col" asChild>
+                <Link href="/hpas">
+                  <Cpu className="h-6 w-6 mb-2" />
+                  HPAs
+                </Link>
+              </Button>
+              <Button variant="outline" className="h-20 flex-col" asChild>
+                <Link href="/ingress">
+                  <Shield className="h-6 w-6 mb-2" />
+                  Ingress
+                </Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </main>
     </div>
   );

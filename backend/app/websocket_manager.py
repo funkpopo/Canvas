@@ -79,14 +79,18 @@ class ConnectionManager:
                 # 清理房间成员身份
                 await self._leave_all_rooms(connection_id)
 
-                # 关闭连接
-                websocket = self.active_connections[connection_id]
-                await websocket.close()
+                # 清理数据先于关闭连接，避免重复发送消息
+                websocket = self.active_connections.pop(connection_id, None)
+                self.connection_metadata.pop(connection_id, None)
 
-                # 清理数据
-                del self.active_connections[connection_id]
-                if connection_id in self.connection_metadata:
-                    del self.connection_metadata[connection_id]
+                # 最后关闭连接
+                if websocket:
+                    try:
+                        await websocket.close()
+                    except RuntimeError as e:
+                        # 忽略已关闭的连接错误
+                        if "Cannot call" not in str(e):
+                            raise
 
                 logger.info(f"WebSocket connection closed: {connection_id}")
 
@@ -206,7 +210,10 @@ class ConnectionManager:
             return
 
         try:
-            websocket = self.active_connections[connection_id]
+            websocket = self.active_connections.get(connection_id)
+            if not websocket:
+                return
+
             message_data = message.dict()
             message_data['timestamp'] = message_data['timestamp'].isoformat()
 
@@ -216,6 +223,15 @@ class ConnectionManager:
             if connection_id in self.connection_metadata:
                 self.connection_metadata[connection_id]['last_heartbeat'] = datetime.utcnow()
 
+        except RuntimeError as e:
+            # 连接已关闭，静默清理
+            if "Cannot call" in str(e):
+                logger.debug(f"Connection {connection_id} already closed, cleaning up")
+                self.active_connections.pop(connection_id, None)
+                self.connection_metadata.pop(connection_id, None)
+            else:
+                logger.error(f"Failed to send message to {connection_id}: {e}")
+                await self.disconnect(connection_id)
         except Exception as e:
             logger.error(f"Failed to send message to {connection_id}: {e}")
             # 连接可能已断开，清理连接
@@ -282,14 +298,16 @@ class ConnectionManager:
                     await self.disconnect(connection_id)
 
                 # 发送心跳消息给活跃连接
-                for connection_id in list(self.active_connections.keys()):
-                    try:
-                        await self.send_personal_message(
-                            connection_id,
-                            WebSocketMessage(type="ping", data={"timestamp": current_time.isoformat()})
-                        )
-                    except Exception as e:
-                        logger.error(f"Failed to send heartbeat to {connection_id}: {e}")
+                active_connection_ids = list(self.active_connections.keys())
+                for connection_id in active_connection_ids:
+                    if connection_id in self.active_connections:  # 再次检查，避免并发修改
+                        try:
+                            await self.send_personal_message(
+                                connection_id,
+                                WebSocketMessage(type="ping", data={"timestamp": current_time.isoformat()})
+                            )
+                        except Exception as e:
+                            logger.debug(f"Failed to send heartbeat to {connection_id}: {e}")
 
             except asyncio.CancelledError:
                 break
