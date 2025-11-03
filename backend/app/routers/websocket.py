@@ -30,22 +30,30 @@ class SubscriptionRequest(BaseModel):
 @router.websocket("/ws")
 async def websocket_endpoint(
     websocket: WebSocket,
-    token: str = Query(..., description="JWT认证令牌"),
-    db = Depends(get_db)
+    token: str = Query(..., description="JWT认证令牌")
 ):
     """
     WebSocket连接端点
     支持实时资源更新订阅
     """
     connection_id = None
+    db = None
 
     try:
+        # 手动获取数据库会话
+        db = next(get_db())
+
         # 验证token并获取用户信息
         try:
             user = await get_current_user_ws(token, db)
         except Exception as e:
             logger.warning(f"WebSocket authentication failed: {e}")
-            await websocket.close(code=1008, reason="Authentication failed")
+            # Accept the connection first before closing to send proper close code
+            try:
+                await websocket.accept()
+            except Exception:
+                pass
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Could not validate credentials")
             return
 
         # 生成连接ID
@@ -107,6 +115,10 @@ async def websocket_endpoint(
         # 清理连接
         if connection_id:
             await manager.disconnect(connection_id)
+
+        # 关闭数据库会话
+        if db:
+            db.close()
 
 async def handle_subscription(connection_id: str, message_data: dict, user: User, db):
     """处理订阅请求"""

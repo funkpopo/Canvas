@@ -5017,11 +5017,11 @@ def get_cluster_role_bindings(cluster: Cluster):
     api_client = _client_pool.get_client(cluster)
     if not api_client:
         return None
-    
+
     try:
         rbac_v1 = client.RbacAuthorizationV1Api(api_client)
         bindings_list = rbac_v1.list_cluster_role_binding()
-        
+
         bindings = []
         for binding in bindings_list.items:
             bindings.append({
@@ -5044,10 +5044,689 @@ def get_cluster_role_bindings(cluster: Cluster):
                 ],
                 "creation_timestamp": binding.metadata.creation_timestamp.isoformat() if binding.metadata.creation_timestamp else None
             })
-        
+
         return bindings
     except ApiException as e:
         logger.warning("获取ClusterRoleBindings失败: %s", e)
         return None
     finally:
         _client_pool.return_client(cluster, api_client)
+
+
+# ========== StatefulSet管理 ==========
+
+def get_namespace_statefulsets(cluster: Cluster, namespace: str) -> List[Dict[str, Any]]:
+    """获取命名空间中的StatefulSets"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return []
+
+    try:
+        apps_v1 = client.AppsV1Api(client_instance)
+        statefulsets = apps_v1.list_namespaced_stateful_set(namespace)
+
+        sts_list = []
+        for sts in statefulsets.items:
+            from datetime import datetime
+            age = "Unknown"
+            if sts.metadata.creation_timestamp:
+                created = sts.metadata.creation_timestamp.replace(tzinfo=None)
+                now = datetime.now()
+                delta = now - created
+                if delta.days > 0:
+                    age = f"{delta.days}d"
+                elif delta.seconds // 3600 > 0:
+                    age = f"{delta.seconds // 3600}h"
+                elif delta.seconds // 60 > 0:
+                    age = f"{delta.seconds // 60}m"
+                else:
+                    age = f"{delta.seconds}s"
+
+            sts_list.append({
+                "name": sts.metadata.name,
+                "namespace": namespace,
+                "replicas": sts.spec.replicas or 0,
+                "ready_replicas": sts.status.ready_replicas or 0,
+                "current_replicas": sts.status.current_replicas or 0,
+                "updated_replicas": sts.status.updated_replicas or 0,
+                "age": age,
+                "labels": dict(sts.metadata.labels) if sts.metadata.labels else {},
+                "cluster_id": cluster.id,
+                "cluster_name": cluster.name
+            })
+
+        return sts_list
+    except Exception as e:
+        logger.exception("获取StatefulSets失败: %s", e)
+        return []
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def get_statefulset_details(cluster: Cluster, namespace: str, name: str) -> Optional[Dict[str, Any]]:
+    """获取StatefulSet详细信息"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return None
+
+    try:
+        apps_v1 = client.AppsV1Api(client_instance)
+        sts = apps_v1.read_namespaced_stateful_set(name, namespace)
+
+        from datetime import datetime
+        age = "Unknown"
+        creation_timestamp = "Unknown"
+        if sts.metadata.creation_timestamp:
+            created = sts.metadata.creation_timestamp.replace(tzinfo=None)
+            creation_timestamp = str(created)
+            now = datetime.now()
+            delta = now - created
+            if delta.days > 0:
+                age = f"{delta.days}d"
+            elif delta.seconds // 3600 > 0:
+                age = f"{delta.seconds // 3600}h"
+            elif delta.seconds // 60 > 0:
+                age = f"{delta.seconds // 60}m"
+            else:
+                age = f"{delta.seconds}s"
+
+        return {
+            "name": sts.metadata.name,
+            "namespace": namespace,
+            "replicas": sts.spec.replicas or 0,
+            "ready_replicas": sts.status.ready_replicas or 0,
+            "current_replicas": sts.status.current_replicas or 0,
+            "updated_replicas": sts.status.updated_replicas or 0,
+            "service_name": sts.spec.service_name,
+            "age": age,
+            "creation_timestamp": creation_timestamp,
+            "labels": dict(sts.metadata.labels) if sts.metadata.labels else {},
+            "annotations": dict(sts.metadata.annotations) if sts.metadata.annotations else {},
+            "selector": dict(sts.spec.selector.match_labels) if sts.spec.selector.match_labels else {},
+            "cluster_id": cluster.id,
+            "cluster_name": cluster.name
+        }
+    except Exception as e:
+        logger.exception("获取StatefulSet详情失败: %s", e)
+        return None
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def scale_statefulset(cluster: Cluster, namespace: str, name: str, replicas: int) -> bool:
+    """扩缩容StatefulSet"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        apps_v1 = client.AppsV1Api(client_instance)
+        scale = client.V1Scale(spec=client.V1ScaleSpec(replicas=replicas))
+        apps_v1.patch_namespaced_stateful_set_scale(name, namespace, scale)
+        return True
+    except Exception as e:
+        logger.exception("扩缩容StatefulSet失败: %s", e)
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def delete_statefulset(cluster: Cluster, namespace: str, name: str) -> bool:
+    """删除StatefulSet"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        apps_v1 = client.AppsV1Api(client_instance)
+        apps_v1.delete_namespaced_stateful_set(name, namespace)
+        return True
+    except Exception as e:
+        logger.exception("删除StatefulSet失败: %s", e)
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+# ========== DaemonSet管理 ==========
+
+def get_namespace_daemonsets(cluster: Cluster, namespace: str) -> List[Dict[str, Any]]:
+    """获取命名空间中的DaemonSets"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return []
+
+    try:
+        apps_v1 = client.AppsV1Api(client_instance)
+        daemonsets = apps_v1.list_namespaced_daemon_set(namespace)
+
+        ds_list = []
+        for ds in daemonsets.items:
+            from datetime import datetime
+            age = "Unknown"
+            if ds.metadata.creation_timestamp:
+                created = ds.metadata.creation_timestamp.replace(tzinfo=None)
+                now = datetime.now()
+                delta = now - created
+                if delta.days > 0:
+                    age = f"{delta.days}d"
+                elif delta.seconds // 3600 > 0:
+                    age = f"{delta.seconds // 3600}h"
+                elif delta.seconds // 60 > 0:
+                    age = f"{delta.seconds // 60}m"
+                else:
+                    age = f"{delta.seconds}s"
+
+            ds_list.append({
+                "name": ds.metadata.name,
+                "namespace": namespace,
+                "desired": ds.status.desired_number_scheduled or 0,
+                "current": ds.status.current_number_scheduled or 0,
+                "ready": ds.status.number_ready or 0,
+                "updated": ds.status.updated_number_scheduled or 0,
+                "available": ds.status.number_available or 0,
+                "age": age,
+                "labels": dict(ds.metadata.labels) if ds.metadata.labels else {},
+                "cluster_id": cluster.id,
+                "cluster_name": cluster.name
+            })
+
+        return ds_list
+    except Exception as e:
+        logger.exception("获取DaemonSets失败: %s", e)
+        return []
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def get_daemonset_details(cluster: Cluster, namespace: str, name: str) -> Optional[Dict[str, Any]]:
+    """获取DaemonSet详细信息"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return None
+
+    try:
+        apps_v1 = client.AppsV1Api(client_instance)
+        ds = apps_v1.read_namespaced_daemon_set(name, namespace)
+
+        from datetime import datetime
+        age = "Unknown"
+        creation_timestamp = "Unknown"
+        if ds.metadata.creation_timestamp:
+            created = ds.metadata.creation_timestamp.replace(tzinfo=None)
+            creation_timestamp = str(created)
+            now = datetime.now()
+            delta = now - created
+            if delta.days > 0:
+                age = f"{delta.days}d"
+            elif delta.seconds // 3600 > 0:
+                age = f"{delta.seconds // 3600}h"
+            elif delta.seconds // 60 > 0:
+                age = f"{delta.seconds // 60}m"
+            else:
+                age = f"{delta.seconds}s"
+
+        return {
+            "name": ds.metadata.name,
+            "namespace": namespace,
+            "desired": ds.status.desired_number_scheduled or 0,
+            "current": ds.status.current_number_scheduled or 0,
+            "ready": ds.status.number_ready or 0,
+            "updated": ds.status.updated_number_scheduled or 0,
+            "available": ds.status.number_available or 0,
+            "age": age,
+            "creation_timestamp": creation_timestamp,
+            "labels": dict(ds.metadata.labels) if ds.metadata.labels else {},
+            "annotations": dict(ds.metadata.annotations) if ds.metadata.annotations else {},
+            "selector": dict(ds.spec.selector.match_labels) if ds.spec.selector.match_labels else {},
+            "cluster_id": cluster.id,
+            "cluster_name": cluster.name
+        }
+    except Exception as e:
+        logger.exception("获取DaemonSet详情失败: %s", e)
+        return None
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def delete_daemonset(cluster: Cluster, namespace: str, name: str) -> bool:
+    """删除DaemonSet"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        apps_v1 = client.AppsV1Api(client_instance)
+        apps_v1.delete_namespaced_daemon_set(name, namespace)
+        return True
+    except Exception as e:
+        logger.exception("删除DaemonSet失败: %s", e)
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+# ========== HorizontalPodAutoscaler管理 ==========
+
+def get_namespace_hpas(cluster: Cluster, namespace: str) -> List[Dict[str, Any]]:
+    """获取命名空间中的HPAs"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return []
+
+    try:
+        autoscaling_v2 = client.AutoscalingV2Api(client_instance)
+        hpas = autoscaling_v2.list_namespaced_horizontal_pod_autoscaler(namespace)
+
+        hpa_list = []
+        for hpa in hpas.items:
+            from datetime import datetime
+            age = "Unknown"
+            if hpa.metadata.creation_timestamp:
+                created = hpa.metadata.creation_timestamp.replace(tzinfo=None)
+                now = datetime.now()
+                delta = now - created
+                if delta.days > 0:
+                    age = f"{delta.days}d"
+                elif delta.seconds // 3600 > 0:
+                    age = f"{delta.seconds // 3600}h"
+                elif delta.seconds // 60 > 0:
+                    age = f"{delta.seconds // 60}m"
+                else:
+                    age = f"{delta.seconds}s"
+
+            hpa_list.append({
+                "name": hpa.metadata.name,
+                "namespace": namespace,
+                "target_ref": f"{hpa.spec.scale_target_ref.kind}/{hpa.spec.scale_target_ref.name}",
+                "min_replicas": hpa.spec.min_replicas or 1,
+                "max_replicas": hpa.spec.max_replicas,
+                "current_replicas": hpa.status.current_replicas or 0,
+                "desired_replicas": hpa.status.desired_replicas or 0,
+                "age": age,
+                "labels": dict(hpa.metadata.labels) if hpa.metadata.labels else {},
+                "cluster_id": cluster.id,
+                "cluster_name": cluster.name
+            })
+
+        return hpa_list
+    except Exception as e:
+        logger.exception("获取HPAs失败: %s", e)
+        return []
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def get_hpa_details(cluster: Cluster, namespace: str, name: str) -> Optional[Dict[str, Any]]:
+    """获取HPA详细信息"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return None
+
+    try:
+        autoscaling_v2 = client.AutoscalingV2Api(client_instance)
+        hpa = autoscaling_v2.read_namespaced_horizontal_pod_autoscaler(name, namespace)
+
+        from datetime import datetime
+        age = "Unknown"
+        creation_timestamp = "Unknown"
+        if hpa.metadata.creation_timestamp:
+            created = hpa.metadata.creation_timestamp.replace(tzinfo=None)
+            creation_timestamp = str(created)
+            now = datetime.now()
+            delta = now - created
+            if delta.days > 0:
+                age = f"{delta.days}d"
+            elif delta.seconds // 3600 > 0:
+                age = f"{delta.seconds // 3600}h"
+            elif delta.seconds // 60 > 0:
+                age = f"{delta.seconds // 60}m"
+            else:
+                age = f"{delta.seconds}s"
+
+        metrics = []
+        if hpa.spec.metrics:
+            for metric in hpa.spec.metrics:
+                metrics.append({
+                    "type": metric.type,
+                    "resource": metric.resource.name if metric.resource else None
+                })
+
+        return {
+            "name": hpa.metadata.name,
+            "namespace": namespace,
+            "target_ref": {
+                "kind": hpa.spec.scale_target_ref.kind,
+                "name": hpa.spec.scale_target_ref.name
+            },
+            "min_replicas": hpa.spec.min_replicas or 1,
+            "max_replicas": hpa.spec.max_replicas,
+            "current_replicas": hpa.status.current_replicas or 0,
+            "desired_replicas": hpa.status.desired_replicas or 0,
+            "metrics": metrics,
+            "age": age,
+            "creation_timestamp": creation_timestamp,
+            "labels": dict(hpa.metadata.labels) if hpa.metadata.labels else {},
+            "annotations": dict(hpa.metadata.annotations) if hpa.metadata.annotations else {},
+            "cluster_id": cluster.id,
+            "cluster_name": cluster.name
+        }
+    except Exception as e:
+        logger.exception("获取HPA详情失败: %s", e)
+        return None
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def delete_hpa(cluster: Cluster, namespace: str, name: str) -> bool:
+    """删除HPA"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        autoscaling_v2 = client.AutoscalingV2Api(client_instance)
+        autoscaling_v2.delete_namespaced_horizontal_pod_autoscaler(name, namespace)
+        return True
+    except Exception as e:
+        logger.exception("删除HPA失败: %s", e)
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+# ========== CronJob管理 ==========
+
+def get_namespace_cronjobs(cluster: Cluster, namespace: str) -> List[Dict[str, Any]]:
+    """获取命名空间中的CronJobs"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return []
+
+    try:
+        batch_v1 = client.BatchV1Api(client_instance)
+        cronjobs = batch_v1.list_namespaced_cron_job(namespace)
+
+        cj_list = []
+        for cj in cronjobs.items:
+            from datetime import datetime
+            age = "Unknown"
+            if cj.metadata.creation_timestamp:
+                created = cj.metadata.creation_timestamp.replace(tzinfo=None)
+                now = datetime.now()
+                delta = now - created
+                if delta.days > 0:
+                    age = f"{delta.days}d"
+                elif delta.seconds // 3600 > 0:
+                    age = f"{delta.seconds // 3600}h"
+                elif delta.seconds // 60 > 0:
+                    age = f"{delta.seconds // 60}m"
+                else:
+                    age = f"{delta.seconds}s"
+
+            last_schedule_time = None
+            if cj.status and cj.status.last_schedule_time:
+                last_schedule_time = str(cj.status.last_schedule_time)
+
+            cj_list.append({
+                "name": cj.metadata.name,
+                "namespace": namespace,
+                "schedule": cj.spec.schedule,
+                "suspend": cj.spec.suspend or False,
+                "active": len(cj.status.active) if cj.status and cj.status.active else 0,
+                "last_schedule_time": last_schedule_time,
+                "age": age,
+                "labels": dict(cj.metadata.labels) if cj.metadata.labels else {},
+                "cluster_id": cluster.id,
+                "cluster_name": cluster.name
+            })
+
+        return cj_list
+    except Exception as e:
+        logger.exception("获取CronJobs失败: %s", e)
+        return []
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def get_cronjob_details(cluster: Cluster, namespace: str, name: str) -> Optional[Dict[str, Any]]:
+    """获取CronJob详细信息"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return None
+
+    try:
+        batch_v1 = client.BatchV1Api(client_instance)
+        cj = batch_v1.read_namespaced_cron_job(name, namespace)
+
+        from datetime import datetime
+        age = "Unknown"
+        creation_timestamp = "Unknown"
+        if cj.metadata.creation_timestamp:
+            created = cj.metadata.creation_timestamp.replace(tzinfo=None)
+            creation_timestamp = str(created)
+            now = datetime.now()
+            delta = now - created
+            if delta.days > 0:
+                age = f"{delta.days}d"
+            elif delta.seconds // 3600 > 0:
+                age = f"{delta.seconds // 3600}h"
+            elif delta.seconds // 60 > 0:
+                age = f"{delta.seconds // 60}m"
+            else:
+                age = f"{delta.seconds}s"
+
+        last_schedule_time = None
+        if cj.status and cj.status.last_schedule_time:
+            last_schedule_time = str(cj.status.last_schedule_time)
+
+        active_jobs = []
+        if cj.status and cj.status.active:
+            for job_ref in cj.status.active:
+                active_jobs.append(job_ref.name)
+
+        return {
+            "name": cj.metadata.name,
+            "namespace": namespace,
+            "schedule": cj.spec.schedule,
+            "suspend": cj.spec.suspend or False,
+            "concurrency_policy": cj.spec.concurrency_policy or "Allow",
+            "starting_deadline_seconds": cj.spec.starting_deadline_seconds,
+            "successful_jobs_history_limit": cj.spec.successful_jobs_history_limit or 3,
+            "failed_jobs_history_limit": cj.spec.failed_jobs_history_limit or 1,
+            "active_jobs": active_jobs,
+            "last_schedule_time": last_schedule_time,
+            "age": age,
+            "creation_timestamp": creation_timestamp,
+            "labels": dict(cj.metadata.labels) if cj.metadata.labels else {},
+            "annotations": dict(cj.metadata.annotations) if cj.metadata.annotations else {},
+            "cluster_id": cluster.id,
+            "cluster_name": cluster.name
+        }
+    except Exception as e:
+        logger.exception("获取CronJob详情失败: %s", e)
+        return None
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def delete_cronjob(cluster: Cluster, namespace: str, name: str) -> bool:
+    """删除CronJob"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        batch_v1 = client.BatchV1Api(client_instance)
+        batch_v1.delete_namespaced_cron_job(name, namespace)
+        return True
+    except Exception as e:
+        logger.exception("删除CronJob失败: %s", e)
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+# ========== Ingress管理 ==========
+
+def get_namespace_ingresses(cluster: Cluster, namespace: str) -> List[Dict[str, Any]]:
+    """获取命名空间中的Ingresses"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return []
+
+    try:
+        networking_v1 = client.NetworkingV1Api(client_instance)
+        ingresses = networking_v1.list_namespaced_ingress(namespace)
+
+        ing_list = []
+        for ing in ingresses.items:
+            from datetime import datetime
+            age = "Unknown"
+            if ing.metadata.creation_timestamp:
+                created = ing.metadata.creation_timestamp.replace(tzinfo=None)
+                now = datetime.now()
+                delta = now - created
+                if delta.days > 0:
+                    age = f"{delta.days}d"
+                elif delta.seconds // 3600 > 0:
+                    age = f"{delta.seconds // 3600}h"
+                elif delta.seconds // 60 > 0:
+                    age = f"{delta.seconds // 60}m"
+                else:
+                    age = f"{delta.seconds}s"
+
+            hosts = []
+            if ing.spec.rules:
+                for rule in ing.spec.rules:
+                    if rule.host:
+                        hosts.append(rule.host)
+
+            addresses = []
+            if ing.status and ing.status.load_balancer and ing.status.load_balancer.ingress:
+                for lb_ing in ing.status.load_balancer.ingress:
+                    if lb_ing.ip:
+                        addresses.append(lb_ing.ip)
+                    elif lb_ing.hostname:
+                        addresses.append(lb_ing.hostname)
+
+            ing_list.append({
+                "name": ing.metadata.name,
+                "namespace": namespace,
+                "hosts": hosts,
+                "addresses": addresses,
+                "age": age,
+                "labels": dict(ing.metadata.labels) if ing.metadata.labels else {},
+                "cluster_id": cluster.id,
+                "cluster_name": cluster.name
+            })
+
+        return ing_list
+    except Exception as e:
+        logger.exception("获取Ingresses失败: %s", e)
+        return []
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def get_ingress_details(cluster: Cluster, namespace: str, name: str) -> Optional[Dict[str, Any]]:
+    """获取Ingress详细信息"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return None
+
+    try:
+        networking_v1 = client.NetworkingV1Api(client_instance)
+        ing = networking_v1.read_namespaced_ingress(name, namespace)
+
+        from datetime import datetime
+        age = "Unknown"
+        creation_timestamp = "Unknown"
+        if ing.metadata.creation_timestamp:
+            created = ing.metadata.creation_timestamp.replace(tzinfo=None)
+            creation_timestamp = str(created)
+            now = datetime.now()
+            delta = now - created
+            if delta.days > 0:
+                age = f"{delta.days}d"
+            elif delta.seconds // 3600 > 0:
+                age = f"{delta.seconds // 3600}h"
+            elif delta.seconds // 60 > 0:
+                age = f"{delta.seconds // 60}m"
+            else:
+                age = f"{delta.seconds}s"
+
+        rules = []
+        if ing.spec.rules:
+            for rule in ing.spec.rules:
+                rule_info = {"host": rule.host or "*"}
+                if rule.http and rule.http.paths:
+                    rule_info["paths"] = [{
+                        "path": path.path or "/",
+                        "path_type": path.path_type,
+                        "backend": {
+                            "service_name": path.backend.service.name if path.backend.service else None,
+                            "service_port": path.backend.service.port.number if path.backend.service and path.backend.service.port else None
+                        }
+                    } for path in rule.http.paths]
+                rules.append(rule_info)
+
+        tls = []
+        if ing.spec.tls:
+            for tls_entry in ing.spec.tls:
+                tls.append({
+                    "hosts": tls_entry.hosts or [],
+                    "secret_name": tls_entry.secret_name
+                })
+
+        return {
+            "name": ing.metadata.name,
+            "namespace": namespace,
+            "ingress_class_name": ing.spec.ingress_class_name,
+            "rules": rules,
+            "tls": tls,
+            "age": age,
+            "creation_timestamp": creation_timestamp,
+            "labels": dict(ing.metadata.labels) if ing.metadata.labels else {},
+            "annotations": dict(ing.metadata.annotations) if ing.metadata.annotations else {},
+            "cluster_id": cluster.id,
+            "cluster_name": cluster.name
+        }
+    except Exception as e:
+        logger.exception("获取Ingress详情失败: %s", e)
+        return None
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def delete_ingress(cluster: Cluster, namespace: str, name: str) -> bool:
+    """删除Ingress"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        networking_v1 = client.NetworkingV1Api(client_instance)
+        networking_v1.delete_namespaced_ingress(name, namespace)
+        return True
+    except Exception as e:
+        logger.exception("删除Ingress失败: %s", e)
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()

@@ -106,16 +106,22 @@ async def get_current_user_ws(token: str, db: Session):
     WebSocket认证函数
     直接接收token字符串而不是HTTPAuthorizationCredentials
     """
-    credentials_exception = Exception("Could not validate WebSocket credentials")
-
     try:
-        token_data = verify_token(token, credentials_exception)
-        user = db.query(models.User).filter(models.User.username == token_data.username).first()
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise Exception("Could not validate WebSocket credentials")
+
+        user = db.query(models.User).filter(models.User.username == username).first()
         if user is None:
-            raise credentials_exception
+            raise Exception("Could not validate WebSocket credentials")
         return user
-    except Exception:
-        raise credentials_exception
+    except JWTError as e:
+        logger.error(f"JWT decode error in WebSocket auth: {e}")
+        raise Exception("Could not validate WebSocket credentials")
+    except Exception as e:
+        logger.error(f"WebSocket authentication error: {e}")
+        raise Exception("Could not validate WebSocket credentials")
 
 
 # ========== 权限验证 ==========

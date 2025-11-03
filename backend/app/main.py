@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from .database import create_tables, init_default_user
-from .routers import auth, clusters, stats, nodes, namespaces, pods, deployments, storage, services, configmaps, secrets, network_policies, resource_quotas, events, jobs, websocket, users, audit_logs, rbac, permissions, app_rbac
+from .routers import auth, clusters, stats, nodes, namespaces, pods, deployments, storage, services, configmaps, secrets, network_policies, resource_quotas, events, jobs, websocket, users, audit_logs, rbac, permissions, app_rbac, statefulsets, daemonsets, hpas, cronjobs, ingresses
 from .exceptions import register_exception_handlers
 from .core.logging import setup_logging, get_logger
 
@@ -98,6 +98,11 @@ app.include_router(network_policies.router, prefix="/api/network-policies", tags
 app.include_router(resource_quotas.router, prefix="/api/resource-quotas", tags=["resource-quotas"])
 app.include_router(events.router, prefix="/api/events", tags=["events"])
 app.include_router(jobs.router, prefix="/api/jobs", tags=["jobs"])
+app.include_router(statefulsets.router, prefix="/api/statefulsets", tags=["statefulsets"])
+app.include_router(daemonsets.router, prefix="/api/daemonsets", tags=["daemonsets"])
+app.include_router(hpas.router, prefix="/api/hpas", tags=["hpas"])
+app.include_router(cronjobs.router, prefix="/api/cronjobs", tags=["cronjobs"])
+app.include_router(ingresses.router, prefix="/api/ingresses", tags=["ingresses"])
 app.include_router(websocket.router, prefix="/api", tags=["websocket"])
 
 

@@ -17,7 +17,21 @@
       "Bash(else echo \"File does not exist\")",
       "Bash(tree:*)",
       "Bash(python -m migrations.add_auth_enhancements:*)",
-      "Bash(python -m backend.migrations.add_auth_enhancements:*)"
+      "Bash(python -m backend.migrations.add_auth_enhancements:*)",
+      "Bash(nul)",
+      "Bash(findstr:*)",
+      "Bash(python -m py_compile:*)",
+      "Bash(python:*)",
+      "Bash(python3:*)",
+      "Bash(echo:*)",
+      "Bash(netstat:*)",
+      "Bash(tasklist:*)",
+      "Bash(if [ -f \"backend/.env\" ])",
+      "Bash(then cat \"backend/.env\")",
+      "Bash(if [ -f \".env\" ])",
+      "Bash(then cat \".env\")",
+      "Bash(then echo \"Database exists\")",
+      "Bash(else echo \"Database does not exist\")"
     ],
     "deny": [],
     "ask": []
