@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { LanguageToggle } from "@/components/ui/language-toggle";
-import { LogOut, Server, FolderPen, Activity, Settings, Database, Loader2, Settings2, Cpu, Shield, Lock, AlertCircle, Wifi, WifiOff, AlertTriangle, User as UserIcon, MemoryStick } from "lucide-react";
+import { LogOut, Server, FolderPen, Activity, Settings, Database, Loader2, Settings2, Cpu, Shield, Lock, AlertCircle, Wifi, WifiOff, AlertTriangle, User as UserIcon, MemoryStick, Bell } from "lucide-react";
 import ClusterSelector from "@/components/ClusterSelector";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/lib/auth-context";
@@ -496,6 +496,12 @@ export default function Home() {
                 <Link href="/rbac">
                   <Shield className="h-6 w-6 mb-2" />
                   RBAC权限
+                </Link>
+              </Button>
+              <Button variant="outline" className="h-20 flex-col" asChild>
+                <Link href="/alerts">
+                  <Bell className="h-6 w-6 mb-2" />
+                  告警管理
                 </Link>
               </Button>
             </div>

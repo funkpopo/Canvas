@@ -1,10 +1,11 @@
 import os
 import logging
+import asyncio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from .database import create_tables, init_default_user
-from .routers import auth, clusters, stats, nodes, namespaces, pods, deployments, storage, services, configmaps, secrets, network_policies, resource_quotas, events, jobs, websocket, users, audit_logs, rbac, permissions, app_rbac, statefulsets, daemonsets, hpas, cronjobs, ingresses, limit_ranges, pdbs, metrics
+from .routers import auth, clusters, stats, nodes, namespaces, pods, deployments, storage, services, configmaps, secrets, network_policies, resource_quotas, events, jobs, websocket, users, audit_logs, rbac, permissions, app_rbac, statefulsets, daemonsets, hpas, cronjobs, ingresses, limit_ranges, pdbs, metrics, alerts
 from .exceptions import register_exception_handlers
 from .core.logging import setup_logging, get_logger
 
@@ -29,10 +30,19 @@ async def lifespan(app: FastAPI):
     await manager.start_heartbeat_monitor()
     logger.info("WebSocket心跳检测已启动")
 
+    # 启动告警检查器
+    from .services.alert_checker import alert_checker
+    asyncio.create_task(alert_checker.start())
+    logger.info("告警检查器已启动")
+
     yield
 
     # 关闭时执行
     logger.info("正在关闭应用...")
+
+    # 停止告警检查器
+    await alert_checker.stop()
+    logger.info("告警检查器已停止")
 
     # 停止Kubernetes连接池清理线程
     _client_pool.stop_cleanup_thread()
@@ -106,6 +116,7 @@ app.include_router(ingresses.router, prefix="/api/ingresses", tags=["ingresses"]
 app.include_router(limit_ranges.router, prefix="/api/limit-ranges", tags=["limit-ranges"])
 app.include_router(pdbs.router, prefix="/api/pdbs", tags=["pdbs"])
 app.include_router(metrics.router, prefix="/api/metrics", tags=["metrics"])
+app.include_router(alerts.router, prefix="/api/alerts", tags=["alerts"])
 app.include_router(websocket.router, prefix="/api", tags=["websocket"])
 
 

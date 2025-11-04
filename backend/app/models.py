@@ -278,3 +278,57 @@ class UserNamespacePermission(Base):
     __table_args__ = (
         {"schema": None},  # 确保没有schema前缀
     )
+
+
+class AlertRule(Base):
+    """告警规则表"""
+    __tablename__ = "alert_rules"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    cluster_id = Column(Integer, ForeignKey("clusters.id"), nullable=False)
+    rule_type = Column(String, nullable=False)  # resource_usage, pod_restart, node_unavailable
+    severity = Column(String, nullable=False, default="warning")  # info, warning, critical
+    enabled = Column(Boolean, default=True)
+    threshold_config = Column(Text, nullable=False)  # JSON格式存储阈值配置
+    notification_channels = Column(Text, nullable=True)  # JSON格式存储通知渠道
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    cluster = relationship("Cluster")
+    creator = relationship("User")
+
+    __table_args__ = (
+        Index("idx_cluster_enabled", "cluster_id", "enabled"),
+    )
+
+
+class AlertEvent(Base):
+    """告警事件表"""
+    __tablename__ = "alert_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    rule_id = Column(Integer, ForeignKey("alert_rules.id"), nullable=False)
+    cluster_id = Column(Integer, ForeignKey("clusters.id"), nullable=False)
+    resource_type = Column(String, nullable=False)  # node, pod, namespace
+    resource_name = Column(String, nullable=False)
+    namespace = Column(String, nullable=True)
+    severity = Column(String, nullable=False)
+    message = Column(Text, nullable=False)
+    details = Column(Text, nullable=True)  # JSON格式存储详细信息
+    status = Column(String, nullable=False, default="firing")  # firing, resolved
+    first_triggered_at = Column(DateTime(timezone=True), server_default=func.now())
+    last_triggered_at = Column(DateTime(timezone=True), server_default=func.now())
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+    notification_sent = Column(Boolean, default=False)
+
+    # Relationships
+    rule = relationship("AlertRule")
+    cluster = relationship("Cluster")
+
+    __table_args__ = (
+        Index("idx_status_cluster", "status", "cluster_id"),
+        Index("idx_rule_status", "rule_id", "status"),
+    )
