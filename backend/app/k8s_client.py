@@ -5580,6 +5580,276 @@ def delete_cronjob(cluster: Cluster, namespace: str, name: str) -> bool:
             client_instance.close()
 
 
+# ========== LimitRange管理 ==========
+
+def get_namespace_limit_ranges(cluster: Cluster, namespace: str) -> List[Dict[str, Any]]:
+    """获取命名空间中的LimitRanges"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return []
+
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+        limit_ranges = core_v1.list_namespaced_limit_range(namespace)
+
+        lr_list = []
+        for lr in limit_ranges.items:
+            from datetime import datetime
+            age = "Unknown"
+            if lr.metadata.creation_timestamp:
+                created = lr.metadata.creation_timestamp.replace(tzinfo=None)
+                now = datetime.now()
+                delta = now - created
+                if delta.days > 0:
+                    age = f"{delta.days}d"
+                elif delta.seconds // 3600 > 0:
+                    age = f"{delta.seconds // 3600}h"
+                elif delta.seconds // 60 > 0:
+                    age = f"{delta.seconds // 60}m"
+                else:
+                    age = f"{delta.seconds}s"
+
+            limits = []
+            if lr.spec.limits:
+                for limit in lr.spec.limits:
+                    limits.append({
+                        "type": limit.type,
+                        "max": dict(limit.max) if limit.max else {},
+                        "min": dict(limit.min) if limit.min else {},
+                        "default": dict(limit.default) if limit.default else {},
+                        "default_request": dict(limit.default_request) if limit.default_request else {}
+                    })
+
+            lr_list.append({
+                "name": lr.metadata.name,
+                "namespace": namespace,
+                "limits": limits,
+                "age": age,
+                "labels": dict(lr.metadata.labels) if lr.metadata.labels else {},
+                "cluster_id": cluster.id,
+                "cluster_name": cluster.name
+            })
+
+        return lr_list
+    except Exception as e:
+        logger.exception("获取LimitRanges失败: %s", e)
+        return []
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def get_limit_range_details(cluster: Cluster, namespace: str, name: str) -> Optional[Dict[str, Any]]:
+    """获取LimitRange详细信息"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return None
+
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+        lr = core_v1.read_namespaced_limit_range(name, namespace)
+
+        from datetime import datetime
+        age = "Unknown"
+        creation_timestamp = "Unknown"
+        if lr.metadata.creation_timestamp:
+            created = lr.metadata.creation_timestamp.replace(tzinfo=None)
+            creation_timestamp = str(created)
+            now = datetime.now()
+            delta = now - created
+            if delta.days > 0:
+                age = f"{delta.days}d"
+            elif delta.seconds // 3600 > 0:
+                age = f"{delta.seconds // 3600}h"
+            elif delta.seconds // 60 > 0:
+                age = f"{delta.seconds // 60}m"
+            else:
+                age = f"{delta.seconds}s"
+
+        limits = []
+        if lr.spec.limits:
+            for limit in lr.spec.limits:
+                limits.append({
+                    "type": limit.type,
+                    "max": dict(limit.max) if limit.max else {},
+                    "min": dict(limit.min) if limit.min else {},
+                    "default": dict(limit.default) if limit.default else {},
+                    "default_request": dict(limit.default_request) if limit.default_request else {}
+                })
+
+        return {
+            "name": lr.metadata.name,
+            "namespace": namespace,
+            "limits": limits,
+            "age": age,
+            "creation_timestamp": creation_timestamp,
+            "labels": dict(lr.metadata.labels) if lr.metadata.labels else {},
+            "annotations": dict(lr.metadata.annotations) if lr.metadata.annotations else {},
+            "cluster_id": cluster.id,
+            "cluster_name": cluster.name
+        }
+    except Exception as e:
+        logger.exception("获取LimitRange详情失败: %s", e)
+        return None
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def delete_limit_range(cluster: Cluster, namespace: str, name: str) -> bool:
+    """删除LimitRange"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+        core_v1.delete_namespaced_limit_range(name, namespace)
+        return True
+    except Exception as e:
+        logger.exception("删除LimitRange失败: %s", e)
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+# ========== PodDisruptionBudget管理 ==========
+
+def get_namespace_pdbs(cluster: Cluster, namespace: str) -> List[Dict[str, Any]]:
+    """获取命名空间中的PodDisruptionBudgets"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return []
+
+    try:
+        policy_v1 = client.PolicyV1Api(client_instance)
+        pdbs = policy_v1.list_namespaced_pod_disruption_budget(namespace)
+
+        pdb_list = []
+        for pdb in pdbs.items:
+            from datetime import datetime
+            age = "Unknown"
+            if pdb.metadata.creation_timestamp:
+                created = pdb.metadata.creation_timestamp.replace(tzinfo=None)
+                now = datetime.now()
+                delta = now - created
+                if delta.days > 0:
+                    age = f"{delta.days}d"
+                elif delta.seconds // 3600 > 0:
+                    age = f"{delta.seconds // 3600}h"
+                elif delta.seconds // 60 > 0:
+                    age = f"{delta.seconds // 60}m"
+                else:
+                    age = f"{delta.seconds}s"
+
+            min_available = None
+            max_unavailable = None
+            if pdb.spec.min_available:
+                min_available = str(pdb.spec.min_available)
+            if pdb.spec.max_unavailable:
+                max_unavailable = str(pdb.spec.max_unavailable)
+
+            pdb_list.append({
+                "name": pdb.metadata.name,
+                "namespace": namespace,
+                "min_available": min_available,
+                "max_unavailable": max_unavailable,
+                "current_healthy": pdb.status.current_healthy if pdb.status else 0,
+                "desired_healthy": pdb.status.desired_healthy if pdb.status else 0,
+                "disruptions_allowed": pdb.status.disruptions_allowed if pdb.status else 0,
+                "age": age,
+                "labels": dict(pdb.metadata.labels) if pdb.metadata.labels else {},
+                "cluster_id": cluster.id,
+                "cluster_name": cluster.name
+            })
+
+        return pdb_list
+    except Exception as e:
+        logger.exception("获取PodDisruptionBudgets失败: %s", e)
+        return []
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def get_pdb_details(cluster: Cluster, namespace: str, name: str) -> Optional[Dict[str, Any]]:
+    """获取PodDisruptionBudget详细信息"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return None
+
+    try:
+        policy_v1 = client.PolicyV1Api(client_instance)
+        pdb = policy_v1.read_namespaced_pod_disruption_budget(name, namespace)
+
+        from datetime import datetime
+        age = "Unknown"
+        creation_timestamp = "Unknown"
+        if pdb.metadata.creation_timestamp:
+            created = pdb.metadata.creation_timestamp.replace(tzinfo=None)
+            creation_timestamp = str(created)
+            now = datetime.now()
+            delta = now - created
+            if delta.days > 0:
+                age = f"{delta.days}d"
+            elif delta.seconds // 3600 > 0:
+                age = f"{delta.seconds // 3600}h"
+            elif delta.seconds // 60 > 0:
+                age = f"{delta.seconds // 60}m"
+            else:
+                age = f"{delta.seconds}s"
+
+        min_available = None
+        max_unavailable = None
+        if pdb.spec.min_available:
+            min_available = str(pdb.spec.min_available)
+        if pdb.spec.max_unavailable:
+            max_unavailable = str(pdb.spec.max_unavailable)
+
+        return {
+            "name": pdb.metadata.name,
+            "namespace": namespace,
+            "min_available": min_available,
+            "max_unavailable": max_unavailable,
+            "selector": dict(pdb.spec.selector.match_labels) if pdb.spec.selector and pdb.spec.selector.match_labels else {},
+            "current_healthy": pdb.status.current_healthy if pdb.status else 0,
+            "desired_healthy": pdb.status.desired_healthy if pdb.status else 0,
+            "disruptions_allowed": pdb.status.disruptions_allowed if pdb.status else 0,
+            "expected_pods": pdb.status.expected_pods if pdb.status else 0,
+            "age": age,
+            "creation_timestamp": creation_timestamp,
+            "labels": dict(pdb.metadata.labels) if pdb.metadata.labels else {},
+            "annotations": dict(pdb.metadata.annotations) if pdb.metadata.annotations else {},
+            "cluster_id": cluster.id,
+            "cluster_name": cluster.name
+        }
+    except Exception as e:
+        logger.exception("获取PodDisruptionBudget详情失败: %s", e)
+        return None
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def delete_pdb(cluster: Cluster, namespace: str, name: str) -> bool:
+    """删除PodDisruptionBudget"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        policy_v1 = client.PolicyV1Api(client_instance)
+        policy_v1.delete_namespaced_pod_disruption_budget(name, namespace)
+        return True
+    except Exception as e:
+        logger.exception("删除PodDisruptionBudget失败: %s", e)
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
 # ========== Ingress管理 ==========
 
 def get_namespace_ingresses(cluster: Cluster, namespace: str) -> List[Dict[str, Any]]:
