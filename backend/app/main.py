@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from .database import create_tables, init_default_user
-from .routers import auth, clusters, stats, nodes, namespaces, pods, deployments, storage, services, configmaps, secrets, network_policies, resource_quotas, events, jobs, websocket, users, audit_logs, rbac, permissions, app_rbac, statefulsets, daemonsets, hpas, cronjobs, ingresses, limit_ranges, pdbs
+from .routers import auth, clusters, stats, nodes, namespaces, pods, deployments, storage, services, configmaps, secrets, network_policies, resource_quotas, events, jobs, websocket, users, audit_logs, rbac, permissions, app_rbac, statefulsets, daemonsets, hpas, cronjobs, ingresses, limit_ranges, pdbs, metrics
 from .exceptions import register_exception_handlers
 from .core.logging import setup_logging, get_logger
 
@@ -105,6 +105,7 @@ app.include_router(cronjobs.router, prefix="/api/cronjobs", tags=["cronjobs"])
 app.include_router(ingresses.router, prefix="/api/ingresses", tags=["ingresses"])
 app.include_router(limit_ranges.router, prefix="/api/limit-ranges", tags=["limit-ranges"])
 app.include_router(pdbs.router, prefix="/api/pdbs", tags=["pdbs"])
+app.include_router(metrics.router, prefix="/api/metrics", tags=["metrics"])
 app.include_router(websocket.router, prefix="/api", tags=["websocket"])
 
 

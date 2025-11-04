@@ -7,8 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { LanguageToggle } from "@/components/ui/language-toggle";
-import { LogOut, Server, FolderPen, Activity, Settings, Database, Loader2, Settings2, Cpu, Shield, Lock, AlertCircle, Wifi, WifiOff, AlertTriangle, User as UserIcon } from "lucide-react";
+import { LogOut, Server, FolderPen, Activity, Settings, Database, Loader2, Settings2, Cpu, Shield, Lock, AlertCircle, Wifi, WifiOff, AlertTriangle, User as UserIcon, MemoryStick } from "lucide-react";
 import ClusterSelector from "@/components/ClusterSelector";
+import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/lib/auth-context";
 import { useCluster } from "@/lib/cluster-context";
 import { useTranslations } from "@/hooks/use-translations";
@@ -23,15 +24,38 @@ interface DashboardStats {
   total_services: number;
 }
 
+interface ClusterMetrics {
+  cluster_id: number;
+  cluster_name: string;
+  cpu_usage: string;
+  memory_usage: string;
+  pod_count: number;
+  node_count: number;
+  timestamp: string;
+}
+
+interface NodeMetrics {
+  name: string;
+  cpu_usage: string;
+  memory_usage: string;
+  cpu_percentage: number;
+  memory_percentage: number;
+  timestamp: string;
+}
+
 export default function Home() {
   const t = useTranslations("dashboard");
   const tCommon = useTranslations("common");
 
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [isLoadingStats, setIsLoadingStats] = useState(true);
+  const [clusterMetrics, setClusterMetrics] = useState<ClusterMetrics | null>(null);
+  const [nodeMetrics, setNodeMetrics] = useState<NodeMetrics[]>([]);
+  const [metricsAvailable, setMetricsAvailable] = useState(false);
+  const [isLoadingMetrics, setIsLoadingMetrics] = useState(false);
   const router = useRouter();
   const { isAuthenticated, isLoading, logout } = useAuth();
-  const { wsConnected, wsConnecting, wsError } = useCluster();
+  const { wsConnected, wsConnecting, wsError, activeCluster } = useCluster();
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -43,6 +67,16 @@ export default function Home() {
       fetchDashboardStats();
     }
   }, [isAuthenticated, isLoading, router]);
+
+  useEffect(() => {
+    if (activeCluster) {
+      checkMetricsAndFetch();
+    } else {
+      setMetricsAvailable(false);
+      setClusterMetrics(null);
+      setNodeMetrics([]);
+    }
+  }, [activeCluster]);
 
   const fetchDashboardStats = async () => {
     try {
@@ -63,6 +97,67 @@ export default function Home() {
       console.error("获取统计数据出错:", error);
     } finally {
       setIsLoadingStats(false);
+    }
+  };
+
+  const checkMetricsAndFetch = async () => {
+    if (!activeCluster) return;
+
+    setIsLoadingMetrics(true);
+    try {
+      const token = localStorage.getItem("token");
+
+      // 检查metrics-server是否可用
+      const healthResponse = await fetch(
+        `http://localhost:8000/api/metrics/clusters/${activeCluster}/metrics/health`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (healthResponse.ok) {
+        const healthData = await healthResponse.json();
+        setMetricsAvailable(healthData.available);
+
+        if (healthData.available) {
+          // 获取集群指标
+          const clusterResponse = await fetch(
+            `http://localhost:8000/api/metrics/clusters/${activeCluster}/metrics`,
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            }
+          );
+
+          if (clusterResponse.ok) {
+            const clusterData = await clusterResponse.json();
+            setClusterMetrics(clusterData);
+          }
+
+          // 获取节点指标
+          const nodeResponse = await fetch(
+            `http://localhost:8000/api/metrics/clusters/${activeCluster}/nodes/metrics`,
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            }
+          );
+
+          if (nodeResponse.ok) {
+            const nodeData = await nodeResponse.json();
+            setNodeMetrics(nodeData);
+          }
+        }
+      }
+    } catch (error) {
+      console.error("获取metrics失败:", error);
+      setMetricsAvailable(false);
+    } finally {
+      setIsLoadingMetrics(false);
     }
   };
 
@@ -211,6 +306,105 @@ export default function Home() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Metrics Section - Only show if metrics-server is available */}
+        {metricsAvailable && activeCluster && (
+          <Card className="mb-8">
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <Activity className="h-5 w-5 mr-2" />
+                集群实时监控
+              </CardTitle>
+              <CardDescription>
+                当前集群的资源使用情况 ({clusterMetrics?.cluster_name})
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isLoadingMetrics ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                  <span>加载监控数据...</span>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* Cluster Overview */}
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardDescription>集群CPU使用</CardDescription>
+                        <CardTitle className="text-2xl">{clusterMetrics?.cpu_usage} 核</CardTitle>
+                      </CardHeader>
+                    </Card>
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardDescription>集群内存使用</CardDescription>
+                        <CardTitle className="text-2xl">{clusterMetrics?.memory_usage}</CardTitle>
+                      </CardHeader>
+                    </Card>
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardDescription>节点数量</CardDescription>
+                        <CardTitle className="text-2xl">{clusterMetrics?.node_count}</CardTitle>
+                      </CardHeader>
+                    </Card>
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardDescription>Pod数量</CardDescription>
+                        <CardTitle className="text-2xl">{clusterMetrics?.pod_count}</CardTitle>
+                      </CardHeader>
+                    </Card>
+                  </div>
+
+                  {/* Node Metrics */}
+                  {nodeMetrics.length > 0 && (
+                    <div>
+                      <h3 className="text-lg font-semibold mb-3 flex items-center">
+                        <Server className="h-5 w-5 mr-2" />
+                        节点资源使用
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {nodeMetrics.map((node) => (
+                          <Card key={node.name}>
+                            <CardHeader className="pb-3">
+                              <CardTitle className="text-base">{node.name}</CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                              <div>
+                                <div className="flex justify-between mb-2">
+                                  <span className="text-sm font-medium flex items-center">
+                                    <Cpu className="h-4 w-4 mr-1" />
+                                    CPU使用率
+                                  </span>
+                                  <span className="text-sm text-muted-foreground">
+                                    {node.cpu_usage} 核 ({node.cpu_percentage.toFixed(1)}%)
+                                  </span>
+                                </div>
+                                <Progress value={node.cpu_percentage} />
+                              </div>
+
+                              <div>
+                                <div className="flex justify-between mb-2">
+                                  <span className="text-sm font-medium flex items-center">
+                                    <MemoryStick className="h-4 w-4 mr-1" />
+                                    内存使用率
+                                  </span>
+                                  <span className="text-sm text-muted-foreground">
+                                    {node.memory_usage} ({node.memory_percentage.toFixed(1)}%)
+                                  </span>
+                                </div>
+                                <Progress value={node.memory_percentage} />
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Quick Actions */}
         <Card>

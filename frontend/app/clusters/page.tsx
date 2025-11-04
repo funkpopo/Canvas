@@ -6,12 +6,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { LanguageToggle } from "@/components/ui/language-toggle";
-import { Plus, Edit, Trash2, TestTube, ArrowLeft, Loader2, Power, PowerOff } from "lucide-react";
+import { Plus, Edit, Trash2, TestTube, ArrowLeft, Loader2, Power, PowerOff, Activity } from "lucide-react";
 import Link from "next/link";
 import AuthGuard from "@/components/AuthGuard";
 import { clusterApi } from "@/lib/api";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { MetricsServerInstallDialog } from "@/components/MetricsServerInstallDialog";
 import { useTranslations } from "@/hooks/use-translations";
 
 interface Cluster {
@@ -28,6 +29,12 @@ function ClustersPageContent() {
 
   const [clusters, setClusters] = useState<Cluster[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [metricsStatus, setMetricsStatus] = useState<Record<number, boolean>>({});
+  const [installDialog, setInstallDialog] = useState<{ open: boolean; clusterId: number; clusterName: string }>({
+    open: false,
+    clusterId: 0,
+    clusterName: ""
+  });
   const [confirmDialog, setConfirmDialog] = useState({
     open: false,
     title: "",
@@ -38,6 +45,42 @@ function ClustersPageContent() {
   useEffect(() => {
     fetchClusters();
   }, []);
+
+  useEffect(() => {
+    if (clusters.length > 0) {
+      checkMetricsStatus();
+    }
+  }, [clusters]);
+
+  const checkMetricsStatus = async () => {
+    const token = localStorage.getItem("token");
+    const statusMap: Record<number, boolean> = {};
+
+    for (const cluster of clusters) {
+      try {
+        const response = await fetch(
+          `http://localhost:8000/api/metrics/clusters/${cluster.id}/metrics/health`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          statusMap[cluster.id] = data.available === true;
+        } else {
+          statusMap[cluster.id] = false;
+        }
+      } catch (error) {
+        console.error(`检查集群 ${cluster.id} metrics状态失败:`, error);
+        statusMap[cluster.id] = false;
+      }
+    }
+
+    setMetricsStatus(statusMap);
+  };
 
   const fetchClusters = async () => {
     try {
@@ -233,6 +276,20 @@ function ClustersPageContent() {
                         <TestTube className="h-4 w-4 mr-1" />
                         {t("testConnection")}
                       </Button>
+                      {!metricsStatus[cluster.id] && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setInstallDialog({
+                            open: true,
+                            clusterId: cluster.id,
+                            clusterName: cluster.name
+                          })}
+                        >
+                          <Activity className="h-4 w-4 mr-1" />
+                          安装监控
+                        </Button>
+                      )}
                       <Button
                         size="sm"
                         variant="outline"
@@ -266,6 +323,14 @@ function ClustersPageContent() {
         description={confirmDialog.description}
         onConfirm={confirmDialog.onConfirm}
         variant="destructive"
+      />
+
+      <MetricsServerInstallDialog
+        open={installDialog.open}
+        onOpenChange={(open) => setInstallDialog(prev => ({ ...prev, open }))}
+        clusterId={installDialog.clusterId}
+        clusterName={installDialog.clusterName}
+        onSuccess={checkMetricsStatus}
       />
     </div>
   );
