@@ -5,6 +5,7 @@ from ..database import get_db
 from ..models import Cluster
 from ..schemas import ClusterCreate, ClusterUpdate, ClusterResponse
 from ..auth import get_current_user, require_cluster_management, require_read_only
+from ..cache import cache_manager, CLUSTER_LIST_TTL, invalidate_cache
 
 router = APIRouter()
 
@@ -33,11 +34,14 @@ async def create_cluster(
     )
     db.add(db_cluster)
     db.commit()
-    # 若新建为激活，则取消其它激活，确保唯一
+    # 若新建为激活,则取消其它激活,确保唯一
     if db_cluster.is_active:
         db.query(Cluster).filter(Cluster.id != db_cluster.id).update({Cluster.is_active: False})
         db.commit()
     db.refresh(db_cluster)
+
+    # 使集群列表缓存失效
+    invalidate_cache("cluster_list:*")
 
     # 如果集群被激活，在后台线程中启动监听器
     if db_cluster.is_active:
@@ -55,7 +59,18 @@ async def get_clusters(
     db: Session = Depends(get_db),
     current_user: dict = Depends(require_read_only),
 ):
+    # 尝试从缓存获取
+    cache_key = f"cluster_list:skip:{skip}:limit:{limit}"
+    cached_clusters = cache_manager.get(cache_key)
+    if cached_clusters is not None:
+        return cached_clusters
+
+    # 从数据库查询
     clusters = db.query(Cluster).offset(skip).limit(limit).all()
+
+    # 缓存结果
+    cache_manager.set(cache_key, clusters, CLUSTER_LIST_TTL)
+
     return clusters
 
 
@@ -98,6 +113,9 @@ async def update_cluster(
     db.commit()
     db.refresh(cluster)
 
+    # 使集群列表缓存失效
+    invalidate_cache("cluster_list:*")
+
     # 处理监听器状态变化
     from ..k8s_client import watcher_manager, start_watcher_async
 
@@ -124,6 +142,9 @@ async def delete_cluster(
     # 删除前停止监听器
     from ..k8s_client import watcher_manager
     watcher_manager.stop_watcher(cluster_id)
+
+    # 使集群列表缓存失效
+    invalidate_cache("cluster_list:*")
 
     db.delete(cluster)
     db.commit()

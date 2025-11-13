@@ -20,13 +20,13 @@ logger = get_logger(__name__)
 class KubernetesClientPool:
     """Kubernetes客户端连接池管理器"""
 
-    def __init__(self, max_connections_per_cluster: int = 5, connection_timeout: int = 300):
+    def __init__(self, max_connections_per_cluster: int = 10, connection_timeout: int = 600):
         """
         初始化连接池管理器
 
         Args:
-            max_connections_per_cluster: 每个集群的最大连接数
-            connection_timeout: 连接超时时间（秒）
+            max_connections_per_cluster: 每个集群的最大连接数 (提升到10)
+            connection_timeout: 连接超时时间（秒，提升到10分钟）
         """
         self.max_connections_per_cluster = max_connections_per_cluster
         self.connection_timeout = connection_timeout
@@ -40,6 +40,9 @@ class KubernetesClientPool:
         # 清理线程
         self._cleanup_thread = None
         self._stop_cleanup = threading.Event()
+
+        # 启动清理线程
+        self.start_cleanup_thread()
 
     def get_client(self, cluster: Cluster) -> Optional[client.ApiClient]:
         """

@@ -110,6 +110,12 @@ class AuditLog(Base):
     user = relationship("User")
     cluster = relationship("Cluster")
 
+    __table_args__ = (
+        Index("idx_audit_user_created", "user_id", "created_at"),
+        Index("idx_audit_cluster_created", "cluster_id", "created_at"),
+        Index("idx_audit_resource", "resource_type", "resource_name"),
+    )
+
 
 class JobTemplate(Base):
     __tablename__ = "job_templates"
@@ -152,6 +158,11 @@ class JobHistory(Base):
     cluster = relationship("Cluster")
     template = relationship("JobTemplate")
     creator = relationship("User")
+
+    __table_args__ = (
+        Index("idx_jobhistory_cluster_status", "cluster_id", "status"),
+        Index("idx_jobhistory_created", "created_at"),
+    )
 
 
 class APIKey(Base):

@@ -16,14 +16,23 @@ if DATABASE_TYPE.lower() == "mysql":
     DATABASE_URL = f"mysql+pymysql://{DATABASE_USER}:{DATABASE_PASSWORD}@{DATABASE_HOST}:{DATABASE_PORT}/{DATABASE_NAME}"
     engine = create_engine(
         DATABASE_URL,
-        pool_pre_ping=True,
-        pool_recycle=300
+        pool_pre_ping=True,  # 检测连接是否有效
+        pool_recycle=3600,  # 1小时回收连接，避免MySQL超时
+        pool_size=50,  # 增加连接池大小以支持更多并发
+        max_overflow=100,  # 允许额外创建的连接数
+        pool_timeout=30,  # 连接池获取连接的超时时间
+        echo=False,  # 生产环境关闭SQL日志
+        echo_pool=False,  # 关闭连接池日志
+        pool_use_lifo=True  # 使用后进先出策略，提高连接复用
     )
 else:  # 默认SQLite
     DATABASE_URL = "sqlite:///./canvas.db"
     engine = create_engine(
         DATABASE_URL,
-        connect_args={"check_same_thread": False}  # SQLite需要这个参数
+        connect_args={"check_same_thread": False},  # SQLite需要这个参数
+        pool_size=20,  # 增加SQLite连接池
+        max_overflow=40,  # 增加溢出连接数
+        pool_pre_ping=True
     )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
