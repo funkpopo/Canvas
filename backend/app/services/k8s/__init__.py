@@ -1,19 +1,29 @@
 """
-Kubernetes客户端模块 - 兼容性包装器
+Kubernetes服务模块
+提供所有Kubernetes资源操作的统一入口
 
-此文件保留为向后兼容目的。
-所有功能已重构并移动到 app.services.k8s 模块中。
-
-建议在新代码中直接使用:
-    from app.services.k8s import <function_name>
-
-此文件从 services.k8s 重新导出所有公共接口，
-以便现有代码无需修改即可继续工作。
+该模块将原有的 k8s_client.py 拆分为多个子模块，按功能分类：
+- client_pool: 连接池管理
+- utils: 工具函数
+- base_operations: 集群/节点基础操作
+- namespace_operations: 命名空间操作
+- pod_operations: Pod操作
+- deployment_ops: Deployment操作
+- service_operations: Service操作
+- config_operations: ConfigMap和Secret操作
+- storage_operations: 存储操作（StorageClass、PV、PVC）
+- job_operations: Job操作
+- workload_operations: 其他工作负载（StatefulSet、DaemonSet、CronJob）
+- network_operations: 网络操作（NetworkPolicy、Ingress）
+- quota_operations: 配额操作（ResourceQuota、LimitRange）
+- rbac_operations: RBAC操作（Role、RoleBinding、ServiceAccount）
+- policy_operations: 策略操作（HPA、PDB）
+- monitoring_operations: 监控操作（Metrics）
+- resource_watcher: 资源监听器
 """
 
-# 从新模块重新导出所有功能
-from .services.k8s import (
-    # 工具函数
+# ========== 工具函数 ==========
+from .utils import (
     calculate_age,
     parse_cpu,
     parse_memory,
@@ -21,30 +31,38 @@ from .services.k8s import (
     safe_dict,
     safe_list,
     format_timestamp,
+)
 
-    # 连接池管理
+# ========== 连接池管理 ==========
+from .client_pool import (
     KubernetesClientPool,
     KubernetesClientContext,
     create_k8s_client,
     return_k8s_client,
     test_cluster_connection,
     get_client_pool,
+)
 
-    # 集群/节点基础操作
+# ========== 集群/节点基础操作 ==========
+from .base_operations import (
     get_cluster_stats,
     get_nodes_info,
     get_node_details,
     get_cluster_events,
+)
 
-    # 命名空间操作
+# ========== 命名空间操作 ==========
+from .namespace_operations import (
     get_namespaces_info,
     get_mock_namespaces,
     create_namespace,
     delete_namespace,
     get_namespace_resources,
     get_namespace_crds,
+)
 
-    # Pod操作
+# ========== Pod操作 ==========
+from .pod_operations import (
     get_pods_info,
     get_pod_details,
     get_pod_logs,
@@ -52,8 +70,10 @@ from .services.k8s import (
     delete_pod,
     batch_delete_pods,
     batch_restart_pods,
+)
 
-    # Deployment操作
+# ========== Deployment操作 ==========
+from .deployment_ops import (
     get_namespace_deployments,
     get_deployment_details,
     get_deployment_pods,
@@ -64,15 +84,20 @@ from .services.k8s import (
     update_deployment,
     get_deployment_yaml,
     update_deployment_yaml,
+)
 
-    # Service操作
+# ========== Service操作 ==========
+from .service_operations import (
     get_namespace_services,
     get_service_details,
     create_service,
     update_service,
     delete_service,
+)
 
-    # ConfigMap操作
+# ========== ConfigMap和Secret操作 ==========
+from .config_operations import (
+    # ConfigMap
     get_namespace_configmaps,
     get_configmap_details,
     create_configmap,
@@ -80,8 +105,7 @@ from .services.k8s import (
     get_configmap_yaml,
     create_configmap_from_yaml,
     update_configmap_yaml,
-
-    # Secret操作
+    # Secret
     get_namespace_secrets,
     get_secret_details,
     create_secret,
@@ -89,24 +113,32 @@ from .services.k8s import (
     get_secret_yaml,
     create_secret_yaml,
     update_secret_yaml,
+)
 
-    # 存储操作
+# ========== 存储操作 ==========
+from .storage_operations import (
+    # StorageClass
     get_storage_classes,
     create_storage_class,
     delete_storage_class,
+    # PersistentVolume
     get_persistent_volumes,
     get_pv_details,
     create_pv,
     delete_pv,
+    # PersistentVolumeClaim
     get_persistent_volume_claims,
     get_namespace_pvcs,
     get_pvc_details,
     create_pvc,
     delete_pvc,
+    # Volume文件操作
     browse_volume_files,
     read_volume_file,
+)
 
-    # Job操作
+# ========== Job操作 ==========
+from .job_operations import (
     get_namespace_jobs,
     get_job_details,
     create_job,
@@ -116,77 +148,101 @@ from .services.k8s import (
     get_job_yaml,
     update_job_yaml,
     monitor_job_status_changes,
+)
 
-    # 工作负载操作
+# ========== 其他工作负载操作 ==========
+from .workload_operations import (
+    # StatefulSet
     get_namespace_statefulsets,
     get_statefulset_details,
     scale_statefulset,
     delete_statefulset,
+    # DaemonSet
     get_namespace_daemonsets,
     get_daemonset_details,
     delete_daemonset,
+    # CronJob
     get_namespace_cronjobs,
     get_cronjob_details,
     delete_cronjob,
+)
 
-    # 网络操作
+# ========== 网络操作 ==========
+from .network_operations import (
+    # NetworkPolicy
     get_namespace_network_policies,
     get_network_policy_details,
     create_network_policy,
     update_network_policy,
     delete_network_policy,
+    # Ingress
     get_namespace_ingresses,
     get_ingress_details,
     delete_ingress,
+)
 
-    # 配额操作
+# ========== 配额操作 ==========
+from .quota_operations import (
+    # ResourceQuota
     get_namespace_resource_quotas,
     get_resource_quota_details,
     create_resource_quota,
     update_resource_quota,
     delete_resource_quota,
+    # LimitRange
     get_namespace_limit_ranges,
     get_limit_range_details,
     delete_limit_range,
+)
 
-    # RBAC操作
+# ========== RBAC操作 ==========
+from .rbac_operations import (
+    # Role
     get_roles,
     get_role,
     delete_role,
+    # RoleBinding
     get_role_bindings,
     get_role_binding,
     delete_role_binding,
+    # ServiceAccount
     get_service_accounts,
     get_service_account,
     delete_service_account,
+    # ClusterRole
     get_cluster_roles,
     get_cluster_role_bindings,
+)
 
-    # 策略操作
+# ========== 策略操作 ==========
+from .policy_operations import (
+    # HPA
     get_namespace_hpas,
     get_hpa_details,
     delete_hpa,
+    # PDB
     get_namespace_pdbs,
     get_pdb_details,
     delete_pdb,
+)
 
-    # 监控操作
+# ========== 监控操作 ==========
+from .monitoring_operations import (
     check_metrics_server_available,
     get_cluster_metrics,
     get_node_metrics,
     get_pod_metrics,
     get_namespace_metrics,
     install_metrics_server,
+)
 
-    # 资源监听器
+# ========== 资源监听器 ==========
+from .resource_watcher import (
     KubernetesResourceWatcher,
     KubernetesWatcherManager,
     watcher_manager,
     start_watcher_async,
 )
-
-# 为了向后兼容，暴露_client_pool变量
-_client_pool = get_client_pool()
 
 
 # 导出所有公共接口
@@ -207,7 +263,6 @@ __all__ = [
     'return_k8s_client',
     'test_cluster_connection',
     'get_client_pool',
-    '_client_pool',
 
     # 集群/节点基础操作
     'get_cluster_stats',
