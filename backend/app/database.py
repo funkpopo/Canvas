@@ -1,37 +1,29 @@
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-import os
 import logging
 
-# 数据库配置 - 支持环境变量
-DATABASE_TYPE = os.getenv("DATABASE_TYPE", "sqlite")  # sqlite 或 mysql
-DATABASE_HOST = os.getenv("DATABASE_HOST", "localhost")
-DATABASE_PORT = os.getenv("DATABASE_PORT", "3306")
-DATABASE_NAME = os.getenv("DATABASE_NAME", "canvas")
-DATABASE_USER = os.getenv("DATABASE_USER", "canvas")
-DATABASE_PASSWORD = os.getenv("DATABASE_PASSWORD", "canvas123")
+from .core.config import settings
 
-if DATABASE_TYPE.lower() == "mysql":
-    DATABASE_URL = f"mysql+pymysql://{DATABASE_USER}:{DATABASE_PASSWORD}@{DATABASE_HOST}:{DATABASE_PORT}/{DATABASE_NAME}"
+# 使用统一配置创建数据库引擎
+if settings.DATABASE_TYPE.lower() == "mysql":
     engine = create_engine(
-        DATABASE_URL,
-        pool_pre_ping=True,  # 检测连接是否有效
-        pool_recycle=3600,  # 1小时回收连接，避免MySQL超时
-        pool_size=50,  # 增加连接池大小以支持更多并发
-        max_overflow=100,  # 允许额外创建的连接数
-        pool_timeout=30,  # 连接池获取连接的超时时间
-        echo=False,  # 生产环境关闭SQL日志
-        echo_pool=False,  # 关闭连接池日志
-        pool_use_lifo=True  # 使用后进先出策略，提高连接复用
+        settings.database_url,
+        pool_pre_ping=settings.DB_POOL_PRE_PING,
+        pool_recycle=settings.DB_POOL_RECYCLE,
+        pool_size=settings.DB_POOL_SIZE,
+        max_overflow=settings.DB_MAX_OVERFLOW,
+        pool_timeout=settings.DB_POOL_TIMEOUT,
+        echo=settings.LOG_SQL_QUERIES,
+        echo_pool=False,
+        pool_use_lifo=True
     )
 else:  # 默认SQLite
-    DATABASE_URL = "sqlite:///./canvas.db"
     engine = create_engine(
-        DATABASE_URL,
-        connect_args={"check_same_thread": False},  # SQLite需要这个参数
-        pool_size=20,  # 增加SQLite连接池
-        max_overflow=40,  # 增加溢出连接数
+        settings.database_url,
+        connect_args={"check_same_thread": False},
+        pool_size=settings.SQLITE_POOL_SIZE,
+        max_overflow=settings.SQLITE_MAX_OVERFLOW,
         pool_pre_ping=True
     )
 
