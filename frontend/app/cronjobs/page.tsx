@@ -13,6 +13,7 @@ import { ArrowLeft, Loader2, RefreshCw, Search, Trash2, Clock, Pause, Play, Aler
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useCluster } from "@/lib/cluster-context";
+import { cronjobApi, namespaceApi } from "@/lib/api";
 
 interface CronJob {
   name: string;
@@ -79,18 +80,14 @@ function CronJobsContent() {
 
   const fetchNamespaces = async () => {
     try {
-      const response = await fetch(`http://localhost:8000/api/namespaces?cluster_id=${clusterId}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setNamespaces(data);
-        if (data.length > 0 && !selectedNamespace) {
-          setSelectedNamespace(data[0].name);
+      const response = await namespaceApi.getNamespaces(parseInt(clusterId!));
+      if (response.data) {
+        setNamespaces(response.data);
+        if (response.data.length > 0 && !selectedNamespace) {
+          setSelectedNamespace(response.data[0].name);
         }
+      } else if (response.error) {
+        toast.error('获取命名空间失败: ' + response.error);
       }
     } catch (error) {
       console.error('获取命名空间失败:', error);
@@ -103,20 +100,11 @@ function CronJobsContent() {
 
     setIsLoading(true);
     try {
-      const response = await fetch(
-        `http://localhost:8000/api/cronjobs/clusters/${clusterId}/namespaces/${selectedNamespace}/cronjobs`,
-        {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          },
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        setCronJobs(data);
-      } else {
-        toast.error('获取CronJobs失败');
+      const response = await cronjobApi.getCronJobs(parseInt(clusterId!), selectedNamespace);
+      if (response.data) {
+        setCronJobs(response.data);
+      } else if (response.error) {
+        toast.error('获取CronJobs失败: ' + response.error);
       }
     } catch (error) {
       console.error('获取CronJobs失败:', error);
@@ -129,21 +117,12 @@ function CronJobsContent() {
   const handleDelete = async (name: string) => {
     setIsOperationLoading(true);
     try {
-      const response = await fetch(
-        `http://localhost:8000/api/cronjobs/clusters/${clusterId}/namespaces/${selectedNamespace}/cronjobs/${name}`,
-        {
-          method: "DELETE",
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          },
-        }
-      );
-
-      if (response.ok) {
+      const response = await cronjobApi.deleteCronJob(parseInt(clusterId!), selectedNamespace, name);
+      if (response.data !== undefined) {
         toast.success('CronJob删除成功');
         fetchCronJobs();
-      } else {
-        toast.error('删除失败');
+      } else if (response.error) {
+        toast.error('删除失败: ' + response.error);
       }
     } catch (error) {
       console.error('删除失败:', error);

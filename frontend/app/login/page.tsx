@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { AlertCircle } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
+import { loginApi } from "@/lib/api";
 
 export default function LoginPage() {
   const [username, setUsername] = useState("");
@@ -31,21 +32,13 @@ export default function LoginPage() {
     setError("");
 
     try {
-      const response = await fetch("http://localhost:8000/api/auth/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ username, password }),
-      });
+      const result = await loginApi.login(username, password);
 
-      if (response.ok) {
-        const data = await response.json();
-        login(data.access_token);
+      if (result.data) {
+        login(result.data.access_token);
         router.push("/");
       } else {
-        const errorData = await response.json();
-        setError(errorData.detail || "登录失败");
+        setError(result.error || "登录失败");
       }
     } catch {
       setError("网络错误，请检查后端服务");

@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Loader2, Plus, FileText, Search } from "lucide-react";
-import { jobApi, JobTemplate } from "@/lib/api";
+import { jobApi, namespaceApi, JobTemplate } from "@/lib/api";
 import { toast } from "sonner";
 
 interface Namespace {
@@ -54,18 +54,14 @@ function CreateJobContent() {
 
   const fetchNamespaces = async () => {
     try {
-      const response = await fetch(`http://localhost:8000/api/namespaces?cluster_id=${clusterId}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setNamespaces(data);
-        if (data.length > 0 && !selectedNamespace) {
-          setSelectedNamespace(data[0].name);
+      const response = await namespaceApi.getNamespaces(parseInt(clusterId!));
+      if (response.data) {
+        setNamespaces(response.data);
+        if (response.data.length > 0 && !selectedNamespace) {
+          setSelectedNamespace(response.data[0].name);
         }
+      } else if (response.error) {
+        toast.error('获取命名空间失败: ' + response.error);
       }
     } catch (error) {
       console.error('获取命名空间失败:', error);

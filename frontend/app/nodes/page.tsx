@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Server, Cpu, MemoryStick, HardDrive, Loader2 } from "lucide-react";
 import AuthGuard from "@/components/AuthGuard";
+import { nodeApi } from "@/lib/api";
 
 interface NodeInfo {
   name: string;
@@ -36,16 +37,10 @@ function NodesPageContent() {
 
   const fetchNodes = async () => {
     try {
-      const token = localStorage.getItem("token");
-      const response = await fetch("http://localhost:8000/api/nodes", {
-        headers: {
-          "Authorization": `Bearer ${token}`,
-        },
-      });
+      const result = await nodeApi.getNodes();
 
-      if (response.ok) {
-        const data = await response.json();
-        setNodes(data);
+      if (result.data) {
+        setNodes(result.data as unknown as NodeInfo[]);
       } else {
         console.error("获取节点列表失败");
       }

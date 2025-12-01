@@ -13,7 +13,7 @@ import { LanguageToggle } from "@/components/ui/language-toggle";
 import ClusterSelector from "@/components/ClusterSelector";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
-import { jobApi, Job } from "@/lib/api";
+import { jobApi, Job, namespaceApi, storageApi } from "@/lib/api";
 
 interface NamespaceResources {
   cpu_requests: string;
@@ -169,82 +169,55 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
   const fetchNamespaceData = async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem("token");
-
       if (activeTab === "overview") {
         // 获取资源使用情况
-        const resourcesResponse = await fetch(
-          `http://localhost:8000/api/namespaces/${resolvedParams.namespace}/resources?cluster_id=${clusterId}`,
-          {
-            headers: {
-              "Authorization": `Bearer ${token}`,
-            },
-          }
+        const result = await namespaceApi.getNamespaceResources(
+          parseInt(clusterId!),
+          resolvedParams.namespace
         );
 
-        if (resourcesResponse.ok) {
-          const resourcesData = await resourcesResponse.json();
-          setResources(resourcesData);
+        if (result.data) {
+          setResources(result.data as unknown as NamespaceResources);
         }
       } else if (activeTab === "deployments") {
         // 获取部署
-        const deploymentsResponse = await fetch(
-          `http://localhost:8000/api/namespaces/${resolvedParams.namespace}/deployments?cluster_id=${clusterId}`,
-          {
-            headers: {
-              "Authorization": `Bearer ${token}`,
-            },
-          }
+        const result = await namespaceApi.getNamespaceDeployments(
+          parseInt(clusterId!),
+          resolvedParams.namespace
         );
 
-        if (deploymentsResponse.ok) {
-          const deploymentsData = await deploymentsResponse.json();
-          setDeployments(deploymentsData);
+        if (result.data) {
+          setDeployments(result.data as unknown as Deployment[]);
         }
       } else if (activeTab === "services") {
         // 获取服务
-        const servicesResponse = await fetch(
-          `http://localhost:8000/api/namespaces/${resolvedParams.namespace}/services?cluster_id=${clusterId}`,
-          {
-            headers: {
-              "Authorization": `Bearer ${token}`,
-            },
-          }
+        const result = await namespaceApi.getNamespaceServices(
+          parseInt(clusterId!),
+          resolvedParams.namespace
         );
 
-        if (servicesResponse.ok) {
-          const servicesData = await servicesResponse.json();
-          setServices(servicesData);
+        if (result.data) {
+          setServices(result.data as unknown as Service[]);
         }
       } else if (activeTab === "pvcs") {
         // 获取PVC
-        const pvcsResponse = await fetch(
-          `http://localhost:8000/api/storage/claims?cluster_id=${clusterId}&namespace=${resolvedParams.namespace}`,
-          {
-            headers: {
-              "Authorization": `Bearer ${token}`,
-            },
-          }
+        const result = await storageApi.getPersistentVolumeClaims(
+          parseInt(clusterId!),
+          resolvedParams.namespace
         );
 
-        if (pvcsResponse.ok) {
-          const pvcsData = await pvcsResponse.json();
-          setPvcs(pvcsData);
+        if (result.data) {
+          setPvcs(result.data as unknown as PVC[]);
         }
       } else if (activeTab === "crds") {
         // 获取CRD
-        const crdsResponse = await fetch(
-          `http://localhost:8000/api/namespaces/${resolvedParams.namespace}/crds?cluster_id=${clusterId}`,
-          {
-            headers: {
-              "Authorization": `Bearer ${token}`,
-            },
-          }
+        const result = await namespaceApi.getNamespaceCrds(
+          parseInt(clusterId!),
+          resolvedParams.namespace
         );
 
-        if (crdsResponse.ok) {
-          const crdsData = await crdsResponse.json();
-          setCrds(crdsData);
+        if (result.data) {
+          setCrds(result.data as unknown as CRD[]);
         }
       } else if (activeTab === "jobs") {
         // 获取Jobs

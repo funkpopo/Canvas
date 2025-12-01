@@ -15,6 +15,7 @@ import ClusterSelector from "@/components/ClusterSelector";
 import AuthGuard from "@/components/AuthGuard";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { namespaceApi } from "@/lib/api";
 
 interface NamespaceInfo {
   name: string;
@@ -52,29 +53,14 @@ function NamespacesPageContent() {
 
   const fetchNamespaces = async () => {
     try {
-      const token = localStorage.getItem("token");
-      console.log("Token exists:", !!token);
       console.log("Active cluster:", activeCluster);
 
-      const url = new URL("http://localhost:8000/api/namespaces");
-      if (activeCluster) {
-        url.searchParams.set('cluster_id', activeCluster.id.toString());
-        console.log("Request URL with cluster_id:", url.toString());
-      } else {
-        console.log("Request URL without cluster_id:", url.toString());
-      }
+      const result = await namespaceApi.getNamespaces(activeCluster?.id);
 
-      const response = await fetch(url.toString(), {
-        headers: {
-          "Authorization": `Bearer ${token}`,
-        },
-      });
+      console.log("Response result:", result);
 
-      console.log("Response status:", response.status);
-      console.log("Response ok:", response.ok);
-
-      if (response.ok) {
-        const data = await response.json();
+      if (result.data) {
+        const data = result.data as unknown as NamespaceInfo[];
         console.log("Raw data from API:", data);
         console.log("Data length:", data.length);
 
@@ -91,9 +77,7 @@ function NamespacesPageContent() {
         console.log("Final namespaces to display:", filteredNamespaces);
         setNamespaces(filteredNamespaces);
       } else {
-        console.error("获取命名空间列表失败, status:", response.status);
-        const errorText = await response.text();
-        console.error("Error response:", errorText);
+        console.error("获取命名空间列表失败");
         setNamespaces([]);
       }
     } catch (error) {
@@ -111,26 +95,17 @@ function NamespacesPageContent() {
 
     setIsCreating(true);
     try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(`http://localhost:8000/api/namespaces?cluster_id=${activeCluster.id}`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name: newNamespaceName.trim(),
-        }),
+      const result = await namespaceApi.createNamespace(activeCluster.id, {
+        name: newNamespaceName.trim(),
       });
 
-      if (response.ok) {
+      if (result.data) {
         setIsCreateDialogOpen(false);
         setNewNamespaceName("");
         fetchNamespaces();
         toast.success("命名空间创建成功");
       } else {
-        const error = await response.json();
-        toast.error(`创建命名空间失败: ${error.detail}`);
+        toast.error(`创建命名空间失败: ${result.error}`);
       }
     } catch (error) {
       console.error("创建命名空间出错:", error);
@@ -158,18 +133,9 @@ function NamespacesPageContent() {
 
   const performDeleteNamespace = async (namespace: NamespaceInfo) => {
     try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(
-        `http://localhost:8000/api/namespaces/${namespace.name}?cluster_id=${namespace.cluster_id}`,
-        {
-          method: "DELETE",
-          headers: {
-            "Authorization": `Bearer ${token}`,
-          },
-        }
-      );
+      const result = await namespaceApi.deleteNamespace(namespace.cluster_id, namespace.name);
 
-      if (response.ok) {
+      if (!result.error) {
         fetchNamespaces();
         toast.success("命名空间删除成功");
       } else {

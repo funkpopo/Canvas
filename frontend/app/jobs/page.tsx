@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ArrowLeft, Activity, Loader2, RefreshCw, AlertCircle, Play, Trash2, Plus, Search, Filter, History, Trash } from "lucide-react";
-import { jobApi, Job } from "@/lib/api";
+import { jobApi, namespaceApi, Job } from "@/lib/api";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useCluster } from "@/lib/cluster-context";
@@ -77,18 +77,14 @@ function JobsContent() {
 
   const fetchNamespaces = async () => {
     try {
-      const response = await fetch(`http://localhost:8000/api/namespaces?cluster_id=${clusterId}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setNamespaces(data);
-        if (data.length > 0 && !selectedNamespace) {
-          setSelectedNamespace(data[0].name);
+      const response = await namespaceApi.getNamespaces(parseInt(clusterId!));
+      if (response.data) {
+        setNamespaces(response.data);
+        if (response.data.length > 0 && !selectedNamespace) {
+          setSelectedNamespace(response.data[0].name);
         }
+      } else if (response.error) {
+        toast.error('获取命名空间失败: ' + response.error);
       }
     } catch (error) {
       console.error('获取命名空间失败:', error);

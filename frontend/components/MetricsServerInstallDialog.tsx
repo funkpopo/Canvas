@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { metricsApi } from "@/lib/api";
 
 interface MetricsServerInstallDialogProps {
   open: boolean;
@@ -31,31 +32,19 @@ export function MetricsServerInstallDialog({
   const handleInstall = async () => {
     setIsInstalling(true);
     try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(
-        `http://localhost:8000/api/metrics/clusters/${clusterId}/metrics-server/install`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            image,
-            insecure_tls: insecureTls,
-          }),
-        }
-      );
+      const result = await metricsApi.installMetricsServer(clusterId, {
+        image,
+        insecure_tls: insecureTls,
+      });
 
-      if (response.ok) {
+      if (result.data) {
         toast.success("metrics-server 安装成功！");
         onOpenChange(false);
         if (onSuccess) {
           onSuccess();
         }
       } else {
-        const data = await response.json();
-        toast.error(`安装失败: ${data.detail || "未知错误"}`);
+        toast.error(`安装失败: ${result.error || "未知错误"}`);
       }
     } catch (error) {
       console.error("安装metrics-server失败:", error);

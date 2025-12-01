@@ -16,6 +16,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useResourceUpdates } from "@/hooks/useWebSocket";
 import { useTranslations } from "@/hooks/use-translations";
 import { BatchOperations, ItemCheckbox } from "@/components/BatchOperations";
+import { podApi } from "@/lib/api";
 
 interface PodInfo {
   id: string;
@@ -83,33 +84,21 @@ function PodsPageContent() {
   const fetchPods = async () => {
     try {
       setIsLoading(true);
-      const token = localStorage.getItem("token");
-      const url = new URL("http://localhost:8000/api/pods");
+      const result = await podApi.getPods(
+        activeCluster?.id,
+        selectedNamespace || undefined
+      );
 
-      if (activeCluster) {
-        url.searchParams.set('cluster_id', activeCluster.id.toString());
-      }
-      if (selectedNamespace) {
-        url.searchParams.set('namespace', selectedNamespace);
-      }
-
-      const response = await fetch(url.toString(), {
-        headers: {
-          "Authorization": `Bearer ${token}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
+      if (result.data) {
         // 为每个pod添加唯一ID
-        const podsWithIds = data.map((pod: PodInfo) => ({
+        const podsWithIds = (result.data as unknown as PodInfo[]).map((pod: PodInfo) => ({
           ...pod,
           id: `${pod.cluster_id}-${pod.namespace}-${pod.name}`
         }));
         setPods(podsWithIds);
 
         // 提取可用的命名空间列表
-        const namespaces = Array.from(new Set(data.map((pod: PodInfo) => pod.namespace))) as string[];
+        const namespaces = Array.from(new Set(podsWithIds.map((pod: PodInfo) => pod.namespace))) as string[];
         setAvailableNamespaces(namespaces);
       } else {
         console.error("获取Pod列表失败");
@@ -142,21 +131,9 @@ function PodsPageContent() {
 
   const performDeletePod = async (pod: PodInfo) => {
     try {
-      const token = localStorage.getItem("token");
-      const url = new URL(`http://localhost:8000/api/pods/${pod.namespace}/${pod.name}`);
-      url.searchParams.set('cluster_id', pod.cluster_id.toString());
-      if (confirmDialog.forceOption) {
-        url.searchParams.set('force', 'true');
-      }
+      const result = await podApi.deletePod(pod.cluster_id, pod.namespace, pod.name);
 
-      const response = await fetch(url.toString(), {
-        method: "DELETE",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-        },
-      });
-
-      if (response.ok) {
+      if (!result.error) {
         const deleteType = confirmDialog.forceOption ? "强制" : "正常";
         toast.success(`Pod${deleteType}删除成功`);
         fetchPods();
@@ -171,26 +148,17 @@ function PodsPageContent() {
 
   const handleBatchDelete = async (selectedPodsData: PodInfo[]) => {
     try {
-      const token = localStorage.getItem("token");
-      const response = await fetch("http://localhost:8000/api/pods/batch-delete", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          cluster_id: selectedPodsData[0]?.cluster_id,
-          pods: selectedPodsData.map(pod => ({ namespace: pod.namespace, name: pod.name })),
-          force: false,
-        }),
-      });
+      const result = await podApi.batchDeletePods(
+        selectedPodsData[0]?.cluster_id,
+        selectedPodsData.map(pod => ({ namespace: pod.namespace, name: pod.name }))
+      );
 
-      if (response.ok) {
-        const result = await response.json();
-        if (result.failure_count > 0) {
-          toast.error(`批量删除完成，成功: ${result.success_count}, 失败: ${result.failure_count}`);
+      if (result.data) {
+        const data = result.data as { success_count: number; failure_count: number };
+        if (data.failure_count > 0) {
+          toast.error(`批量删除完成，成功: ${data.success_count}, 失败: ${data.failure_count}`);
         } else {
-          toast.success(`批量删除成功，共删除 ${result.success_count} 个Pod`);
+          toast.success(`批量删除成功，共删除 ${data.success_count} 个Pod`);
         }
         fetchPods();
       } else {
@@ -205,25 +173,17 @@ function PodsPageContent() {
 
   const handleBatchRestart = async (selectedPodsData: PodInfo[]) => {
     try {
-      const token = localStorage.getItem("token");
-      const response = await fetch("http://localhost:8000/api/pods/batch-restart", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          cluster_id: selectedPodsData[0]?.cluster_id,
-          pods: selectedPodsData.map(pod => ({ namespace: pod.namespace, name: pod.name })),
-        }),
-      });
+      const result = await podApi.batchRestartPods(
+        selectedPodsData[0]?.cluster_id,
+        selectedPodsData.map(pod => ({ namespace: pod.namespace, name: pod.name }))
+      );
 
-      if (response.ok) {
-        const result = await response.json();
-        if (result.failure_count > 0) {
-          toast.error(`批量重启完成，成功: ${result.success_count}, 失败: ${result.failure_count}`);
+      if (result.data) {
+        const data = result.data as { success_count: number; failure_count: number };
+        if (data.failure_count > 0) {
+          toast.error(`批量重启完成，成功: ${data.success_count}, 失败: ${data.failure_count}`);
         } else {
-          toast.success(`批量重启成功，共重启 ${result.success_count} 个Pod`);
+          toast.success(`批量重启成功，共重启 ${data.success_count} 个Pod`);
         }
         fetchPods();
       } else {

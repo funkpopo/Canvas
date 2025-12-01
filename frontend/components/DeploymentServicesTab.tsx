@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Loader2, ExternalLink, Edit } from "lucide-react";
 import ServiceEditor from "./ServiceEditor";
+import { deploymentApi } from "@/lib/api";
 
 interface DeploymentServicesTabProps {
   namespace: string;
@@ -40,19 +41,14 @@ export default function DeploymentServicesTab({ namespace, deployment, clusterId
 
     setIsLoading(true);
     try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(
-        `http://localhost:8000/api/deployments/${namespace}/${deployment}/services?cluster_id=${clusterId}`,
-        {
-          headers: {
-            "Authorization": `Bearer ${token}`,
-          },
-        }
+      const result = await deploymentApi.getDeploymentServices(
+        parseInt(clusterId),
+        namespace,
+        deployment
       );
 
-      if (response.ok) {
-        const data = await response.json();
-        setServices(data);
+      if (result.data) {
+        setServices(result.data as unknown as Service[]);
       }
     } catch (error) {
       console.error("获取服务列表出错:", error);

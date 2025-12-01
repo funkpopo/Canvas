@@ -9,7 +9,7 @@ import { LanguageToggle } from "@/components/ui/language-toggle";
 import { Plus, Edit, Trash2, TestTube, ArrowLeft, Loader2, Power, PowerOff, Activity } from "lucide-react";
 import Link from "next/link";
 import AuthGuard from "@/components/AuthGuard";
-import { clusterApi } from "@/lib/api";
+import { clusterApi, metricsApi } from "@/lib/api";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { MetricsServerInstallDialog } from "@/components/MetricsServerInstallDialog";
@@ -53,23 +53,13 @@ function ClustersPageContent() {
   }, [clusters]);
 
   const checkMetricsStatus = async () => {
-    const token = localStorage.getItem("token");
     const statusMap: Record<number, boolean> = {};
 
     for (const cluster of clusters) {
       try {
-        const response = await fetch(
-          `http://localhost:8000/api/metrics/clusters/${cluster.id}/metrics/health`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        );
-
-        if (response.ok) {
-          const data = await response.json();
-          statusMap[cluster.id] = data.available === true;
+        const response = await metricsApi.getClusterHealth(cluster.id);
+        if (response.data) {
+          statusMap[cluster.id] = response.data.available === true;
         } else {
           statusMap[cluster.id] = false;
         }

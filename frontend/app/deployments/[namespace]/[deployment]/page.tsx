@@ -21,6 +21,7 @@ import DeploymentServicesTab from "@/components/DeploymentServicesTab";
 import DeploymentScalingTab from "@/components/DeploymentScalingTab";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { deploymentApi } from "@/lib/api";
 
 interface DeploymentDetails {
   name: string;
@@ -103,38 +104,28 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
   const fetchDeploymentData = async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem("token");
-
       if (activeTab === "overview") {
         // 获取部署详情
-        const detailsResponse = await fetch(
-          `http://localhost:8000/api/deployments/${resolvedParams.namespace}/${resolvedParams.deployment}?cluster_id=${clusterId}`,
-          {
-            headers: {
-              "Authorization": `Bearer ${token}`,
-            },
-          }
+        const result = await deploymentApi.getDeployment(
+          parseInt(clusterId!),
+          resolvedParams.namespace,
+          resolvedParams.deployment
         );
 
-        if (detailsResponse.ok) {
-          const detailsData = await detailsResponse.json();
-          setDeploymentDetails(detailsData);
-          setNewReplicas(detailsData.replicas);
+        if (result.data) {
+          setDeploymentDetails(result.data as unknown as DeploymentDetails);
+          setNewReplicas((result.data as unknown as DeploymentDetails).replicas);
         }
       } else if (activeTab === "pods") {
         // 获取部署管理的Pods
-        const podsResponse = await fetch(
-          `http://localhost:8000/api/deployments/${resolvedParams.namespace}/${resolvedParams.deployment}/pods?cluster_id=${clusterId}`,
-          {
-            headers: {
-              "Authorization": `Bearer ${token}`,
-            },
-          }
+        const result = await deploymentApi.getDeploymentPods(
+          parseInt(clusterId!),
+          resolvedParams.namespace,
+          resolvedParams.deployment
         );
 
-        if (podsResponse.ok) {
-          const podsData = await podsResponse.json();
-          setDeploymentPods(podsData);
+        if (result.data) {
+          setDeploymentPods(result.data as unknown as DeploymentPod[]);
         }
       }
     } catch (error) {
@@ -149,20 +140,14 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
 
     setIsOperationLoading(true);
     try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(
-        `http://localhost:8000/api/deployments/${resolvedParams.namespace}/${resolvedParams.deployment}/scale?cluster_id=${clusterId}`,
-        {
-          method: "PUT",
-          headers: {
-            "Authorization": `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ replicas: newReplicas }),
-        }
+      const result = await deploymentApi.scaleDeployment(
+        parseInt(clusterId!),
+        resolvedParams.namespace,
+        resolvedParams.deployment,
+        newReplicas
       );
 
-      if (response.ok) {
+      if (result.data) {
         setIsScaleDialogOpen(false);
         await fetchDeploymentData(); // 刷新数据
       } else {
@@ -180,18 +165,13 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
 
     setIsOperationLoading(true);
     try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(
-        `http://localhost:8000/api/deployments/${resolvedParams.namespace}/${resolvedParams.deployment}/restart?cluster_id=${clusterId}`,
-        {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${token}`,
-          },
-        }
+      const result = await deploymentApi.restartDeployment(
+        parseInt(clusterId!),
+        resolvedParams.namespace,
+        resolvedParams.deployment
       );
 
-      if (response.ok) {
+      if (result.data) {
         await fetchDeploymentData(); // 刷新数据
       } else {
         console.error("重启失败");
@@ -217,18 +197,13 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
   const performDelete = async () => {
     setIsOperationLoading(true);
     try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(
-        `http://localhost:8000/api/deployments/${resolvedParams.namespace}/${resolvedParams.deployment}?cluster_id=${clusterId}`,
-        {
-          method: "DELETE",
-          headers: {
-            "Authorization": `Bearer ${token}`,
-          },
-        }
+      const result = await deploymentApi.deleteDeployment(
+        parseInt(clusterId!),
+        resolvedParams.namespace,
+        resolvedParams.deployment
       );
 
-      if (response.ok) {
+      if (!result.error) {
         toast.success("部署删除成功");
         router.push(`/namespaces/${resolvedParams.namespace}?cluster_id=${clusterId}`);
       } else {

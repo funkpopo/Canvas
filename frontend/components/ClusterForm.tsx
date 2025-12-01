@@ -11,6 +11,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AlertCircle, Upload, Loader2 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { clusterApi } from "@/lib/api";
 
 interface ClusterFormData {
   name: string;
@@ -79,29 +80,21 @@ export default function ClusterForm({ initialData, isEdit = false, clusterId }: 
         router.push("/login");
         return;
       }
-      const url = isEdit && clusterId
-        ? `http://localhost:8000/api/clusters/${clusterId}/`
-        : "http://localhost:8000/api/clusters/";
 
-      const method = isEdit ? "PUT" : "POST";
+      let result;
+      if (isEdit && clusterId) {
+        result = await clusterApi.updateCluster(clusterId, formData as unknown as Record<string, unknown>);
+      } else {
+        result = await clusterApi.createCluster(formData as unknown as Record<string, unknown>);
+      }
 
-      const response = await fetch(url, {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-        },
-        body: JSON.stringify(formData),
-      });
-
-      if (response.ok) {
+      if (result.data) {
         router.push("/clusters");
       } else {
-        const errorData = await response.json();
-        if (response.status === 401 && errorData.detail?.includes("credentials")) {
+        if (result.error?.includes("credentials")) {
           setError("登录已过期，请重新登录后重试");
         } else {
-          setError(errorData.detail || "操作失败");
+          setError(result.error || "操作失败");
         }
       }
     } catch (error) {

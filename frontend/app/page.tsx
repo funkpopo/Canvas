@@ -13,6 +13,7 @@ import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/lib/auth-context";
 import { useCluster } from "@/lib/cluster-context";
 import { useTranslations } from "@/hooks/use-translations";
+import { statsApi, metricsApi } from "@/lib/api";
 
 interface DashboardStats {
   total_clusters: number;
@@ -80,18 +81,11 @@ export default function Home() {
 
   const fetchDashboardStats = async () => {
     try {
-      const token = localStorage.getItem("token");
-      const response = await fetch("http://localhost:8000/api/stats/dashboard", {
-        headers: {
-          "Authorization": `Bearer ${token}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setStats(data);
+      const response = await statsApi.getDashboardStats();
+      if (response.data) {
+        setStats(response.data);
       } else {
-        console.error("获取统计数据失败");
+        console.error("获取统计数据失败:", response.error);
       }
     } catch (error) {
       console.error("获取统计数据出错:", error);
@@ -105,51 +99,23 @@ export default function Home() {
 
     setIsLoadingMetrics(true);
     try {
-      const token = localStorage.getItem("token");
-
       // 检查metrics-server是否可用
-      const healthResponse = await fetch(
-        `http://localhost:8000/api/metrics/clusters/${activeCluster}/metrics/health`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+      const healthResponse = await metricsApi.getClusterHealth(activeCluster.id);
 
-      if (healthResponse.ok) {
-        const healthData = await healthResponse.json();
-        setMetricsAvailable(healthData.available);
+      if (healthResponse.data) {
+        setMetricsAvailable(healthResponse.data.available);
 
-        if (healthData.available) {
+        if (healthResponse.data.available) {
           // 获取集群指标
-          const clusterResponse = await fetch(
-            `http://localhost:8000/api/metrics/clusters/${activeCluster}/metrics`,
-            {
-              headers: {
-                Authorization: `Bearer ${token}`,
-              },
-            }
-          );
-
-          if (clusterResponse.ok) {
-            const clusterData = await clusterResponse.json();
-            setClusterMetrics(clusterData);
+          const clusterResponse = await metricsApi.getClusterMetrics(activeCluster.id);
+          if (clusterResponse.data) {
+            setClusterMetrics(clusterResponse.data);
           }
 
           // 获取节点指标
-          const nodeResponse = await fetch(
-            `http://localhost:8000/api/metrics/clusters/${activeCluster}/nodes/metrics`,
-            {
-              headers: {
-                Authorization: `Bearer ${token}`,
-              },
-            }
-          );
-
-          if (nodeResponse.ok) {
-            const nodeData = await nodeResponse.json();
-            setNodeMetrics(nodeData);
+          const nodeResponse = await metricsApi.getNodeMetrics(activeCluster.id);
+          if (nodeResponse.data) {
+            setNodeMetrics(nodeResponse.data);
           }
         }
       }

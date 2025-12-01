@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Scale, TrendingUp, Activity, Users } from "lucide-react";
 import { toast } from "sonner";
+import { deploymentApi } from "@/lib/api";
 
 interface DeploymentScalingTabProps {
   deploymentDetails: any;
@@ -31,20 +32,14 @@ export default function DeploymentScalingTab({ deploymentDetails, clusterId, onS
 
     setIsScaling(true);
     try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(
-        `http://localhost:8000/api/deployments/${deploymentDetails.namespace}/${deploymentDetails.name}/scale?cluster_id=${clusterId}`,
-        {
-          method: "PUT",
-          headers: {
-            "Authorization": `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ replicas: targetReplicas }),
-        }
+      const result = await deploymentApi.scaleDeployment(
+        parseInt(clusterId),
+        deploymentDetails.namespace,
+        deploymentDetails.name,
+        targetReplicas
       );
 
-      if (response.ok) {
+      if (result.data) {
         toast.success(`副本数已调整为 ${targetReplicas}`);
         setReplicas(targetReplicas);
         onScale();

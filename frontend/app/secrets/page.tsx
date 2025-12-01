@@ -17,7 +17,7 @@ import ClusterSelector from "@/components/ClusterSelector";
 import YamlEditor from "@/components/YamlEditor";
 import { useAuth } from "@/lib/auth-context";
 import { useCluster } from "@/lib/cluster-context";
-import { secretApi } from "@/lib/api";
+import { secretApi, namespaceApi } from "@/lib/api";
 import { toast } from "sonner";
 
 interface Secret {
@@ -80,16 +80,10 @@ export default function SecretsManagement() {
   const fetchNamespaces = async () => {
     if (!selectedClusterId) return;
     try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(`http://localhost:8000/api/namespaces?cluster_id=${selectedClusterId}`, {
-        headers: {
-          "Authorization": `Bearer ${token}`,
-        },
-      });
+      const result = await namespaceApi.getNamespaces(selectedClusterId);
 
-      if (response.ok) {
-        const data = await response.json();
-        const namespaceNames = data.map((ns: any) => ns.name);
+      if (result.data) {
+        const namespaceNames = (result.data as any[]).map((ns: any) => ns.name);
         setNamespaces(namespaceNames);
       } else {
         console.error("获取命名空间列表失败");

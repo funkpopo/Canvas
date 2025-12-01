@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Loader2, Activity, Search, ArrowLeft } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useCluster } from "@/lib/cluster-context";
+import { deploymentApi } from "@/lib/api";
 
 interface Deployment {
   name: string;
@@ -64,21 +65,13 @@ export default function DeploymentsPage() {
   const fetchDeployments = async () => {
     try {
       setIsLoading(true);
-      const token = localStorage.getItem("token");
-      const url = selectedCluster
-        ? `http://localhost:8000/api/deployments?cluster_id=${selectedCluster}`
-        : "http://localhost:8000/api/deployments";
+      const result = await deploymentApi.getDeployments(
+        selectedCluster ? Number(selectedCluster) : undefined
+      );
 
-      const response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setDeployments(data);
-        setFilteredDeployments(data);
+      if (result.data) {
+        setDeployments(result.data as unknown as Deployment[]);
+        setFilteredDeployments(result.data as unknown as Deployment[]);
       } else {
         console.error("获取 Deployments 失败");
       }

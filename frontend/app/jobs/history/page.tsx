@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ArrowLeft, Loader2, RefreshCw, Search, Filter, Calendar } from "lucide-react";
-import { jobApi, JobHistory } from "@/lib/api";
+import { jobApi, clusterApi, namespaceApi, JobHistory } from "@/lib/api";
 import { toast } from "sonner";
 
 interface Cluster {
@@ -65,15 +65,11 @@ function JobHistoryContent() {
 
   const fetchClusters = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/clusters', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setClusters(data);
+      const response = await clusterApi.getClusters();
+      if (response.data) {
+        setClusters(response.data);
+      } else if (response.error) {
+        toast.error('获取集群失败: ' + response.error);
       }
     } catch (error) {
       console.error('获取集群失败:', error);
@@ -85,15 +81,11 @@ function JobHistoryContent() {
     if (!clusterFilter || clusterFilter === "all") return;
 
     try {
-      const response = await fetch(`http://localhost:8000/api/namespaces?cluster_id=${clusterFilter}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setNamespaces(data);
+      const response = await namespaceApi.getNamespaces(parseInt(clusterFilter));
+      if (response.data) {
+        setNamespaces(response.data);
+      } else if (response.error) {
+        toast.error('获取命名空间失败: ' + response.error);
       }
     } catch (error) {
       console.error('获取命名空间失败:', error);

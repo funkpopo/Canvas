@@ -15,6 +15,7 @@ import { ArrowLeft, Loader2, RefreshCw, Search, Trash2, Settings, AlertCircle } 
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useCluster } from "@/lib/cluster-context";
+import { statefulsetApi, namespaceApi } from "@/lib/api";
 
 interface StatefulSet {
   name: string;
@@ -84,18 +85,14 @@ function StatefulSetsContent() {
 
   const fetchNamespaces = async () => {
     try {
-      const response = await fetch(`http://localhost:8000/api/namespaces?cluster_id=${clusterId}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setNamespaces(data);
-        if (data.length > 0 && !selectedNamespace) {
-          setSelectedNamespace(data[0].name);
+      const response = await namespaceApi.getNamespaces(parseInt(clusterId!));
+      if (response.data) {
+        setNamespaces(response.data);
+        if (response.data.length > 0 && !selectedNamespace) {
+          setSelectedNamespace(response.data[0].name);
         }
+      } else if (response.error) {
+        toast.error('获取命名空间失败: ' + response.error);
       }
     } catch (error) {
       console.error('获取命名空间失败:', error);
@@ -108,20 +105,11 @@ function StatefulSetsContent() {
 
     setIsLoading(true);
     try {
-      const response = await fetch(
-        `http://localhost:8000/api/statefulsets/clusters/${clusterId}/namespaces/${selectedNamespace}/statefulsets`,
-        {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          },
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        setStatefulSets(data);
-      } else {
-        toast.error('获取StatefulSets失败');
+      const response = await statefulsetApi.getStatefulSets(parseInt(clusterId!), selectedNamespace);
+      if (response.data) {
+        setStatefulSets(response.data);
+      } else if (response.error) {
+        toast.error('获取StatefulSets失败: ' + response.error);
       }
     } catch (error) {
       console.error('获取StatefulSets失败:', error);
@@ -136,25 +124,19 @@ function StatefulSetsContent() {
 
     setIsOperationLoading(true);
     try {
-      const response = await fetch(
-        `http://localhost:8000/api/statefulsets/clusters/${clusterId}/namespaces/${selectedNamespace}/statefulsets/${scaleTarget.name}/scale`,
-        {
-          method: "POST",
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ replicas: newReplicas }),
-        }
+      const response = await statefulsetApi.scaleStatefulSet(
+        parseInt(clusterId!),
+        selectedNamespace,
+        scaleTarget.name,
+        newReplicas
       );
-
-      if (response.ok) {
+      if (response.data) {
         toast.success('扩缩容成功');
         setIsScaleDialogOpen(false);
         setScaleTarget(null);
         fetchStatefulSets();
-      } else {
-        toast.error('扩缩容失败');
+      } else if (response.error) {
+        toast.error('扩缩容失败: ' + response.error);
       }
     } catch (error) {
       console.error('扩缩容失败:', error);
@@ -167,21 +149,12 @@ function StatefulSetsContent() {
   const handleDelete = async (name: string) => {
     setIsOperationLoading(true);
     try {
-      const response = await fetch(
-        `http://localhost:8000/api/statefulsets/clusters/${clusterId}/namespaces/${selectedNamespace}/statefulsets/${name}`,
-        {
-          method: "DELETE",
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          },
-        }
-      );
-
-      if (response.ok) {
+      const response = await statefulsetApi.deleteStatefulSet(parseInt(clusterId!), selectedNamespace, name);
+      if (response.data !== undefined) {
         toast.success('StatefulSet删除成功');
         fetchStatefulSets();
-      } else {
-        toast.error('删除失败');
+      } else if (response.error) {
+        toast.error('删除失败: ' + response.error);
       }
     } catch (error) {
       console.error('删除失败:', error);

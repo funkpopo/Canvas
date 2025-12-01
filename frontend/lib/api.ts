@@ -1,11 +1,6 @@
 // API 工具函数
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/';
-
-// 构建完整的API URL
-const buildUrl = (endpoint: string): string => {
-  return `${API_BASE_URL}${endpoint}`.replace(/\/+/g, '/');
-};
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/';
 
 // Token验证相关函数
 export const authApi = {
@@ -165,10 +160,21 @@ export const clusterApi = {
   },
 };
 
+// 统计相关类型
+interface DashboardStats {
+  total_clusters: number;
+  active_clusters: number;
+  total_nodes: number;
+  total_namespaces: number;
+  total_pods: number;
+  running_pods: number;
+  total_services: number;
+}
+
 // 统计相关 API
 export const statsApi = {
-  async getDashboardStats() {
-    return apiClient.get('/stats/dashboard');
+  async getDashboardStats(): Promise<ApiResponse<DashboardStats>> {
+    return apiClient.get<DashboardStats>('/stats/dashboard');
   },
 };
 
@@ -1074,7 +1080,7 @@ export const auditLogApi = {
     if (params?.success !== undefined) queryParams.append('success', params.success.toString());
     if (params?.start_date) queryParams.append('start_date', params.start_date);
     if (params?.end_date) queryParams.append('end_date', params.end_date);
-    
+
     const query = queryParams.toString() ? `?${queryParams.toString()}` : '';
     return apiClient.get<{ total: number; logs: AuditLog[] }>(`/audit-logs/${query}`);
   },
@@ -1086,8 +1092,537 @@ export const auditLogApi = {
     const queryParams = new URLSearchParams();
     if (params?.start_date) queryParams.append('start_date', params.start_date);
     if (params?.end_date) queryParams.append('end_date', params.end_date);
-    
+
     const query = queryParams.toString() ? `?${queryParams.toString()}` : '';
     return apiClient.get<AuditStats>(`/audit-logs/stats/summary${query}`);
+  },
+};
+
+// ===== Namespace 相关类型定义 =====
+export interface Namespace {
+  name: string;
+  status: string;
+  age: string;
+  labels: Record<string, string>;
+  annotations: Record<string, string>;
+  cluster_id: number;
+  cluster_name: string;
+}
+
+export interface NamespaceResources {
+  pods: number;
+  deployments: number;
+  services: number;
+  configmaps: number;
+  secrets: number;
+  pvcs: number;
+}
+
+// ===== Namespace API =====
+export const namespaceApi = {
+  async getNamespaces(clusterId?: number): Promise<ApiResponse<Namespace[]>> {
+    const params = clusterId ? `?cluster_id=${clusterId}` : '';
+    return apiClient.get<Namespace[]>(`/namespaces${params}`);
+  },
+
+  async getNamespace(clusterId: number, namespace: string): Promise<ApiResponse<Namespace>> {
+    return apiClient.get<Namespace>(`/namespaces/${namespace}?cluster_id=${clusterId}`);
+  },
+
+  async createNamespace(clusterId: number, namespaceData: { name: string; labels?: Record<string, string> }): Promise<ApiResponse<Namespace>> {
+    return apiClient.post<Namespace>(`/namespaces?cluster_id=${clusterId}`, namespaceData);
+  },
+
+  async deleteNamespace(clusterId: number, namespace: string): Promise<ApiResponse<null>> {
+    return apiClient.delete<null>(`/namespaces/${namespace}?cluster_id=${clusterId}`);
+  },
+
+  async getNamespaceResources(clusterId: number, namespace: string): Promise<ApiResponse<NamespaceResources>> {
+    return apiClient.get<NamespaceResources>(`/namespaces/${namespace}/resources?cluster_id=${clusterId}`);
+  },
+
+  async getNamespaceDeployments(clusterId: number, namespace: string): Promise<ApiResponse<any[]>> {
+    return apiClient.get<any[]>(`/namespaces/${namespace}/deployments?cluster_id=${clusterId}`);
+  },
+
+  async getNamespaceServices(clusterId: number, namespace: string): Promise<ApiResponse<any[]>> {
+    return apiClient.get<any[]>(`/namespaces/${namespace}/services?cluster_id=${clusterId}`);
+  },
+
+  async getNamespaceCrds(clusterId: number, namespace: string): Promise<ApiResponse<any[]>> {
+    return apiClient.get<any[]>(`/namespaces/${namespace}/crds?cluster_id=${clusterId}`);
+  },
+};
+
+// ===== Pod 相关类型定义 =====
+export interface Pod {
+  name: string;
+  namespace: string;
+  status: string;
+  ready: string;
+  restarts: number;
+  age: string;
+  ip: string;
+  node: string;
+  labels: Record<string, string>;
+  cluster_id: number;
+  cluster_name: string;
+}
+
+export interface PodDetails extends Pod {
+  containers: Array<{
+    name: string;
+    image: string;
+    ready: boolean;
+    restart_count: number;
+    state: string;
+  }>;
+  conditions: Array<{
+    type: string;
+    status: string;
+    reason?: string;
+    message?: string;
+  }>;
+  volumes: Array<{
+    name: string;
+    type: string;
+  }>;
+}
+
+// ===== Pod API =====
+export const podApi = {
+  async getPods(clusterId?: number, namespace?: string): Promise<ApiResponse<Pod[]>> {
+    const params = new URLSearchParams();
+    if (clusterId) params.append('cluster_id', clusterId.toString());
+    if (namespace) params.append('namespace', namespace);
+    const query = params.toString() ? `?${params.toString()}` : '';
+    return apiClient.get<Pod[]>(`/pods${query}`);
+  },
+
+  async getPod(clusterId: number, namespace: string, podName: string): Promise<ApiResponse<PodDetails>> {
+    return apiClient.get<PodDetails>(`/pods/${namespace}/${podName}?cluster_id=${clusterId}`);
+  },
+
+  async deletePod(clusterId: number, namespace: string, podName: string): Promise<ApiResponse<null>> {
+    return apiClient.delete<null>(`/pods/${namespace}/${podName}?cluster_id=${clusterId}`);
+  },
+
+  async batchDeletePods(clusterId: number, pods: Array<{ namespace: string; name: string }>): Promise<ApiResponse<any>> {
+    return apiClient.post<any>('/pods/batch-delete', { cluster_id: clusterId, pods });
+  },
+
+  async batchRestartPods(clusterId: number, pods: Array<{ namespace: string; name: string }>): Promise<ApiResponse<any>> {
+    return apiClient.post<any>('/pods/batch-restart', { cluster_id: clusterId, pods });
+  },
+};
+
+// ===== Node 相关类型定义 =====
+export interface Node {
+  name: string;
+  status: string;
+  roles: string[];
+  age: string;
+  version: string;
+  internal_ip: string;
+  external_ip: string;
+  os_image: string;
+  kernel_version: string;
+  container_runtime: string;
+  cpu_capacity: string;
+  memory_capacity: string;
+  pod_capacity: string;
+  labels: Record<string, string>;
+  taints: Array<{ key: string; value: string; effect: string }>;
+  cluster_id: number;
+  cluster_name: string;
+}
+
+// ===== Node API =====
+export const nodeApi = {
+  async getNodes(clusterId?: number): Promise<ApiResponse<Node[]>> {
+    const params = clusterId ? `?cluster_id=${clusterId}` : '';
+    return apiClient.get<Node[]>(`/nodes${params}`);
+  },
+
+  async getNode(clusterId: number, nodeName: string): Promise<ApiResponse<Node>> {
+    return apiClient.get<Node>(`/nodes/${nodeName}?cluster_id=${clusterId}`);
+  },
+};
+
+// ===== Deployment 相关类型定义 =====
+export interface Deployment {
+  name: string;
+  namespace: string;
+  replicas: number;
+  ready_replicas: number;
+  available_replicas: number;
+  unavailable_replicas: number;
+  age: string;
+  labels: Record<string, string>;
+  selector: Record<string, string>;
+  strategy: string;
+  cluster_id: number;
+  cluster_name: string;
+}
+
+export interface DeploymentDetails extends Deployment {
+  containers: Array<{
+    name: string;
+    image: string;
+    ports: Array<{ containerPort: number; protocol: string }>;
+    resources: {
+      limits?: { cpu?: string; memory?: string };
+      requests?: { cpu?: string; memory?: string };
+    };
+    env: Array<{ name: string; value?: string; valueFrom?: any }>;
+  }>;
+  conditions: Array<{
+    type: string;
+    status: string;
+    reason?: string;
+    message?: string;
+    lastUpdateTime?: string;
+    lastTransitionTime?: string;
+  }>;
+}
+
+// ===== Deployment API =====
+export const deploymentApi = {
+  async getDeployments(clusterId?: number, namespace?: string): Promise<ApiResponse<Deployment[]>> {
+    const params = new URLSearchParams();
+    if (clusterId) params.append('cluster_id', clusterId.toString());
+    if (namespace) params.append('namespace', namespace);
+    const query = params.toString() ? `?${params.toString()}` : '';
+    return apiClient.get<Deployment[]>(`/deployments${query}`);
+  },
+
+  async getDeployment(clusterId: number, namespace: string, deploymentName: string): Promise<ApiResponse<DeploymentDetails>> {
+    return apiClient.get<DeploymentDetails>(`/deployments/${namespace}/${deploymentName}?cluster_id=${clusterId}`);
+  },
+
+  async getDeploymentPods(clusterId: number, namespace: string, deploymentName: string): Promise<ApiResponse<Pod[]>> {
+    return apiClient.get<Pod[]>(`/deployments/${namespace}/${deploymentName}/pods?cluster_id=${clusterId}`);
+  },
+
+  async scaleDeployment(clusterId: number, namespace: string, deploymentName: string, replicas: number): Promise<ApiResponse<any>> {
+    return apiClient.post<any>(`/deployments/${namespace}/${deploymentName}/scale?cluster_id=${clusterId}`, { replicas });
+  },
+
+  async restartDeployment(clusterId: number, namespace: string, deploymentName: string): Promise<ApiResponse<any>> {
+    return apiClient.post<any>(`/deployments/${namespace}/${deploymentName}/restart?cluster_id=${clusterId}`, {});
+  },
+
+  async deleteDeployment(clusterId: number, namespace: string, deploymentName: string): Promise<ApiResponse<null>> {
+    return apiClient.delete<null>(`/deployments/${namespace}/${deploymentName}?cluster_id=${clusterId}`);
+  },
+
+  async getDeploymentYaml(clusterId: number, namespace: string, deploymentName: string): Promise<ApiResponse<{ yaml: string }>> {
+    return apiClient.get<{ yaml: string }>(`/deployments/${namespace}/${deploymentName}/yaml?cluster_id=${clusterId}`);
+  },
+
+  async updateDeploymentYaml(clusterId: number, namespace: string, deploymentName: string, yaml: string): Promise<ApiResponse<any>> {
+    return apiClient.put<any>(`/deployments/${namespace}/${deploymentName}/yaml?cluster_id=${clusterId}`, { yaml_content: yaml });
+  },
+
+  async updateDeployment(clusterId: number, namespace: string, deploymentName: string, updates: Record<string, any>): Promise<ApiResponse<any>> {
+    return apiClient.put<any>(`/deployments/${namespace}/${deploymentName}?cluster_id=${clusterId}`, updates);
+  },
+
+  async getDeploymentServices(clusterId: number, namespace: string, deploymentName: string): Promise<ApiResponse<Service[]>> {
+    return apiClient.get<Service[]>(`/deployments/${namespace}/${deploymentName}/services?cluster_id=${clusterId}`);
+  },
+
+  async getDeploymentServiceYaml(clusterId: number, namespace: string, deploymentName: string, serviceName: string): Promise<ApiResponse<{ yaml: string }>> {
+    return apiClient.get<{ yaml: string }>(`/deployments/${namespace}/${deploymentName}/services/${serviceName}/yaml?cluster_id=${clusterId}`);
+  },
+
+  async updateDeploymentServiceYaml(clusterId: number, namespace: string, deploymentName: string, serviceName: string, yaml: string): Promise<ApiResponse<any>> {
+    return apiClient.put<any>(`/deployments/${namespace}/${deploymentName}/services/${serviceName}/yaml?cluster_id=${clusterId}`, { yaml });
+  },
+
+  async deleteDeploymentService(clusterId: number, namespace: string, deploymentName: string, serviceName: string): Promise<ApiResponse<null>> {
+    return apiClient.delete<null>(`/deployments/${namespace}/${deploymentName}/services/${serviceName}?cluster_id=${clusterId}`);
+  },
+};
+
+// ===== Event 相关类型定义 =====
+export interface Event {
+  name: string;
+  namespace: string;
+  type: string;
+  reason: string;
+  message: string;
+  source: string;
+  first_timestamp: string;
+  last_timestamp: string;
+  count: number;
+  involved_object: {
+    kind: string;
+    name: string;
+    namespace: string;
+  };
+  cluster_id: number;
+  cluster_name: string;
+}
+
+// ===== Event API =====
+export const eventApi = {
+  async getEvents(clusterId?: number, namespace?: string): Promise<ApiResponse<Event[]>> {
+    const params = new URLSearchParams();
+    if (clusterId) params.append('cluster_id', clusterId.toString());
+    if (namespace) params.append('namespace', namespace);
+    const query = params.toString() ? `?${params.toString()}` : '';
+    return apiClient.get<Event[]>(`/events${query}`);
+  },
+};
+
+// ===== CronJob 相关类型定义 =====
+export interface CronJob {
+  name: string;
+  namespace: string;
+  schedule: string;
+  suspend: boolean;
+  active: number;
+  last_schedule: string;
+  age: string;
+  labels: Record<string, string>;
+  cluster_id: number;
+  cluster_name: string;
+}
+
+// ===== CronJob API =====
+export const cronjobApi = {
+  async getCronJobs(clusterId: number, namespace: string): Promise<ApiResponse<CronJob[]>> {
+    return apiClient.get<CronJob[]>(`/cronjobs/clusters/${clusterId}/namespaces/${namespace}/cronjobs`);
+  },
+
+  async getCronJob(clusterId: number, namespace: string, cronjobName: string): Promise<ApiResponse<CronJob>> {
+    return apiClient.get<CronJob>(`/cronjobs/clusters/${clusterId}/namespaces/${namespace}/cronjobs/${cronjobName}`);
+  },
+
+  async deleteCronJob(clusterId: number, namespace: string, cronjobName: string): Promise<ApiResponse<null>> {
+    return apiClient.delete<null>(`/cronjobs/clusters/${clusterId}/namespaces/${namespace}/cronjobs/${cronjobName}`);
+  },
+};
+
+// ===== DaemonSet 相关类型定义 =====
+export interface DaemonSet {
+  name: string;
+  namespace: string;
+  desired: number;
+  current: number;
+  ready: number;
+  up_to_date: number;
+  updated: number;
+  available: number;
+  age: string;
+  labels: Record<string, string>;
+  selector: Record<string, string>;
+  cluster_id: number;
+  cluster_name: string;
+}
+
+// ===== DaemonSet API =====
+export const daemonsetApi = {
+  async getDaemonSets(clusterId: number, namespace: string): Promise<ApiResponse<DaemonSet[]>> {
+    return apiClient.get<DaemonSet[]>(`/daemonsets/clusters/${clusterId}/namespaces/${namespace}/daemonsets`);
+  },
+
+  async getDaemonSet(clusterId: number, namespace: string, daemonsetName: string): Promise<ApiResponse<DaemonSet>> {
+    return apiClient.get<DaemonSet>(`/daemonsets/clusters/${clusterId}/namespaces/${namespace}/daemonsets/${daemonsetName}`);
+  },
+
+  async deleteDaemonSet(clusterId: number, namespace: string, daemonsetName: string): Promise<ApiResponse<null>> {
+    return apiClient.delete<null>(`/daemonsets/clusters/${clusterId}/namespaces/${namespace}/daemonsets/${daemonsetName}`);
+  },
+};
+
+// ===== StatefulSet 相关类型定义 =====
+export interface StatefulSet {
+  name: string;
+  namespace: string;
+  replicas: number;
+  ready_replicas: number;
+  current_replicas: number;
+  updated_replicas: number;
+  age: string;
+  labels: Record<string, string>;
+  selector: Record<string, string>;
+  cluster_id: number;
+  cluster_name: string;
+}
+
+// ===== StatefulSet API =====
+export const statefulsetApi = {
+  async getStatefulSets(clusterId: number, namespace: string): Promise<ApiResponse<StatefulSet[]>> {
+    return apiClient.get<StatefulSet[]>(`/statefulsets/clusters/${clusterId}/namespaces/${namespace}/statefulsets`);
+  },
+
+  async getStatefulSet(clusterId: number, namespace: string, statefulsetName: string): Promise<ApiResponse<StatefulSet>> {
+    return apiClient.get<StatefulSet>(`/statefulsets/clusters/${clusterId}/namespaces/${namespace}/statefulsets/${statefulsetName}`);
+  },
+
+  async scaleStatefulSet(clusterId: number, namespace: string, statefulsetName: string, replicas: number): Promise<ApiResponse<any>> {
+    return apiClient.post<any>(`/statefulsets/clusters/${clusterId}/namespaces/${namespace}/statefulsets/${statefulsetName}/scale`, { replicas });
+  },
+
+  async deleteStatefulSet(clusterId: number, namespace: string, statefulsetName: string): Promise<ApiResponse<null>> {
+    return apiClient.delete<null>(`/statefulsets/clusters/${clusterId}/namespaces/${namespace}/statefulsets/${statefulsetName}`);
+  },
+};
+
+// ===== HPA 相关类型定义 =====
+export interface HPA {
+  name: string;
+  namespace: string;
+  reference: {
+    kind: string;
+    name: string;
+  };
+  target_ref: string;
+  min_replicas: number;
+  max_replicas: number;
+  current_replicas: number;
+  desired_replicas: number;
+  metrics: Array<{
+    type: string;
+    current: string;
+    target: string;
+  }>;
+  age: string;
+  labels: Record<string, string>;
+  cluster_id: number;
+  cluster_name: string;
+}
+
+// ===== HPA API =====
+export const hpaApi = {
+  async getHPAs(clusterId: number, namespace: string): Promise<ApiResponse<HPA[]>> {
+    return apiClient.get<HPA[]>(`/hpas/clusters/${clusterId}/namespaces/${namespace}/hpas`);
+  },
+
+  async getHPA(clusterId: number, namespace: string, hpaName: string): Promise<ApiResponse<HPA>> {
+    return apiClient.get<HPA>(`/hpas/clusters/${clusterId}/namespaces/${namespace}/hpas/${hpaName}`);
+  },
+
+  async deleteHPA(clusterId: number, namespace: string, hpaName: string): Promise<ApiResponse<null>> {
+    return apiClient.delete<null>(`/hpas/clusters/${clusterId}/namespaces/${namespace}/hpas/${hpaName}`);
+  },
+};
+
+// ===== Ingress 相关类型定义 =====
+export interface Ingress {
+  name: string;
+  namespace: string;
+  class: string;
+  hosts: string[];
+  address: string;
+  addresses: string[];
+  ports: string;
+  age: string;
+  labels: Record<string, string>;
+  rules: Array<{
+    host: string;
+    paths: Array<{
+      path: string;
+      pathType: string;
+      backend: {
+        service: {
+          name: string;
+          port: { number: number } | { name: string };
+        };
+      };
+    }>;
+  }>;
+  cluster_id: number;
+  cluster_name: string;
+}
+
+// ===== Ingress API =====
+export const ingressApi = {
+  async getIngresses(clusterId: number, namespace: string): Promise<ApiResponse<Ingress[]>> {
+    return apiClient.get<Ingress[]>(`/ingresses/clusters/${clusterId}/namespaces/${namespace}/ingresses`);
+  },
+
+  async getIngress(clusterId: number, namespace: string, ingressName: string): Promise<ApiResponse<Ingress>> {
+    return apiClient.get<Ingress>(`/ingresses/clusters/${clusterId}/namespaces/${namespace}/ingresses/${ingressName}`);
+  },
+
+  async deleteIngress(clusterId: number, namespace: string, ingressName: string): Promise<ApiResponse<null>> {
+    return apiClient.delete<null>(`/ingresses/clusters/${clusterId}/namespaces/${namespace}/ingresses/${ingressName}`);
+  },
+};
+
+// ===== Metrics 相关类型定义 =====
+export interface ClusterHealth {
+  status: string;
+  message: string;
+  metrics_server_installed: boolean;
+  available: boolean;
+}
+
+export interface ClusterMetrics {
+  cluster_id: number;
+  cluster_name: string;
+  cpu_usage: string;
+  memory_usage: string;
+  pod_count: number;
+  node_count: number;
+  timestamp: string;
+}
+
+export interface NodeMetrics {
+  name: string;
+  cpu_usage: string;
+  memory_usage: string;
+  cpu_percentage: number;
+  memory_percentage: number;
+  timestamp: string;
+}
+
+// ===== Metrics API =====
+export const metricsApi = {
+  async getClusterHealth(clusterId: number): Promise<ApiResponse<ClusterHealth>> {
+    return apiClient.get<ClusterHealth>(`/metrics/clusters/${clusterId}/metrics/health`);
+  },
+
+  async getClusterMetrics(clusterId: number): Promise<ApiResponse<ClusterMetrics>> {
+    return apiClient.get<ClusterMetrics>(`/metrics/clusters/${clusterId}/metrics`);
+  },
+
+  async getNodeMetrics(clusterId: number): Promise<ApiResponse<NodeMetrics[]>> {
+    return apiClient.get<NodeMetrics[]>(`/metrics/clusters/${clusterId}/nodes/metrics`);
+  },
+
+  async installMetricsServer(clusterId: number, options?: { image?: string; insecure_tls?: boolean }): Promise<ApiResponse<any>> {
+    return apiClient.post<any>(`/metrics/clusters/${clusterId}/metrics-server/install`, options || {});
+  },
+};
+
+// ===== Login API =====
+export const loginApi = {
+  async login(username: string, password: string): Promise<ApiResponse<{ access_token: string; token_type: string }>> {
+    try {
+      const response = await fetch(`${API_BASE_URL.replace(/\/$/, '')}/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          username,
+          password,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        return { error: errorData.detail || `HTTP ${response.status}: ${response.statusText}` };
+      }
+
+      const data = await response.json();
+      return { data };
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : 'Network error' };
+    }
   },
 };

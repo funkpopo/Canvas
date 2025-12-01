@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Save, Plus, X } from "lucide-react";
 import { toast } from "sonner";
+import { deploymentApi } from "@/lib/api";
 
 interface DeploymentConfigTabProps {
   deploymentDetails: any;
@@ -56,8 +57,6 @@ export default function DeploymentConfigTab({ deploymentDetails, clusterId, onUp
 
     setIsUpdating(true);
     try {
-      const token = localStorage.getItem("token");
-
       const updates: any = {
         replicas: replicas,
         containers: containers.map((container: any) => ({
@@ -77,19 +76,14 @@ export default function DeploymentConfigTab({ deploymentDetails, clusterId, onUp
         }]
       };
 
-      const response = await fetch(
-        `http://localhost:8000/api/deployments/${deploymentDetails.namespace}/${deploymentDetails.name}?cluster_id=${clusterId}`,
-        {
-          method: "PATCH",
-          headers: {
-            "Authorization": `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(updates),
-        }
+      const result = await deploymentApi.updateDeployment(
+        parseInt(clusterId),
+        deploymentDetails.namespace,
+        deploymentDetails.name,
+        updates
       );
 
-      if (response.ok) {
+      if (result.data) {
         toast.success("部署配置更新成功");
         onUpdate();
       } else {

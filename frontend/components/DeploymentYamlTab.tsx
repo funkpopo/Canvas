@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Save, RefreshCw, Eye, Edit } from "lucide-react";
 import { toast } from "sonner";
+import { deploymentApi } from "@/lib/api";
 
 interface DeploymentYamlTabProps {
   namespace: string;
@@ -29,27 +30,21 @@ export default function DeploymentYamlTab({ namespace, deployment, clusterId }: 
     console.log(`正在获取 YAML: ${namespace}/${deployment}, clusterId: ${clusterId}`);
     setIsLoading(true);
     try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(
-        `http://localhost:8000/api/deployments/${namespace}/${deployment}/yaml?cluster_id=${clusterId}`,
-        {
-          headers: {
-            "Authorization": `Bearer ${token}`,
-          },
-        }
+      const result = await deploymentApi.getDeploymentYaml(
+        parseInt(clusterId),
+        namespace,
+        deployment
       );
 
-      if (response.ok) {
-        const data = await response.json();
-        setYamlContent(data.yaml);
+      if (result.data) {
+        setYamlContent(result.data.yaml);
         if (showSuccessToast) {
           toast.success("YAML获取成功");
         }
       } else {
-        const errorData = await response.json().catch(() => ({}));
-        const errorMessage = errorData.detail || `获取YAML失败 (${response.status})`;
+        const errorMessage = result.error || "获取YAML失败";
         toast.error(errorMessage);
-        console.error("获取YAML失败:", response.status, errorData);
+        console.error("获取YAML失败:", result.error);
       }
     } catch (error) {
       console.error("获取YAML出错:", error);
@@ -64,20 +59,14 @@ export default function DeploymentYamlTab({ namespace, deployment, clusterId }: 
 
     setIsSaving(true);
     try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(
-        `http://localhost:8000/api/deployments/${namespace}/${deployment}/yaml?cluster_id=${clusterId}`,
-        {
-          method: "PUT",
-          headers: {
-            "Authorization": `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ yaml_content: yamlContent }),
-        }
+      const result = await deploymentApi.updateDeploymentYaml(
+        parseInt(clusterId),
+        namespace,
+        deployment,
+        yamlContent
       );
 
-      if (response.ok) {
+      if (result.data) {
         toast.success("YAML更新成功");
         setIsEditing(false);
         fetchYaml(false); // 重新获取以确保显示最新内容，不显示成功提示

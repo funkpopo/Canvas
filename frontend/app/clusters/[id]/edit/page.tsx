@@ -6,6 +6,7 @@ import { ArrowLeft, Loader2 } from "lucide-react";
 import Link from "next/link";
 import ClusterForm from "@/components/ClusterForm";
 import AuthGuard from "@/components/AuthGuard";
+import { clusterApi } from "@/lib/api";
 
 interface Cluster {
   id: number;
@@ -30,17 +31,11 @@ function EditClusterPageContent() {
 
   const fetchCluster = async () => {
     try {
-      const token = localStorage.getItem("token");
-      const clusterId = params.id as string;
-      const response = await fetch(`http://localhost:8000/api/clusters/${clusterId}/`, {
-        headers: {
-          "Authorization": `Bearer ${token}`,
-        },
-      });
+      const clusterId = parseInt(params.id as string);
+      const result = await clusterApi.getCluster(clusterId);
 
-      if (response.ok) {
-        const data = await response.json();
-        setCluster(data);
+      if (result.data) {
+        setCluster(result.data as unknown as Cluster);
       } else {
         console.error("获取集群信息失败");
         router.push("/clusters");

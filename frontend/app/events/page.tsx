@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ArrowLeft, AlertTriangle, Info, CheckCircle, XCircle, Loader2, RefreshCw } from "lucide-react";
 import AuthGuard from "@/components/AuthGuard";
+import { eventApi } from "@/lib/api";
 
 interface EventInfo {
   name: string;
@@ -39,16 +40,10 @@ function EventsPageContent() {
 
   const fetchEvents = async () => {
     try {
-      const token = localStorage.getItem("token");
-      const response = await fetch("http://localhost:8000/api/events", {
-        headers: {
-          "Authorization": `Bearer ${token}`,
-        },
-      });
+      const result = await eventApi.getEvents();
 
-      if (response.ok) {
-        const data = await response.json();
-        setEvents(data);
+      if (result.data) {
+        setEvents(result.data as unknown as EventInfo[]);
       } else {
         console.error("获取事件列表失败");
       }

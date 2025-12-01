@@ -13,6 +13,7 @@ import { ArrowLeft, Loader2, RefreshCw, Search, Trash2, AlertCircle } from "luci
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useCluster } from "@/lib/cluster-context";
+import { daemonsetApi, namespaceApi } from "@/lib/api";
 
 interface DaemonSet {
   name: string;
@@ -80,18 +81,14 @@ function DaemonSetsContent() {
 
   const fetchNamespaces = async () => {
     try {
-      const response = await fetch(`http://localhost:8000/api/namespaces?cluster_id=${clusterId}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setNamespaces(data);
-        if (data.length > 0 && !selectedNamespace) {
-          setSelectedNamespace(data[0].name);
+      const response = await namespaceApi.getNamespaces(parseInt(clusterId!));
+      if (response.data) {
+        setNamespaces(response.data);
+        if (response.data.length > 0 && !selectedNamespace) {
+          setSelectedNamespace(response.data[0].name);
         }
+      } else if (response.error) {
+        toast.error('获取命名空间失败: ' + response.error);
       }
     } catch (error) {
       console.error('获取命名空间失败:', error);
@@ -104,20 +101,11 @@ function DaemonSetsContent() {
 
     setIsLoading(true);
     try {
-      const response = await fetch(
-        `http://localhost:8000/api/daemonsets/clusters/${clusterId}/namespaces/${selectedNamespace}/daemonsets`,
-        {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          },
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        setDaemonSets(data);
-      } else {
-        toast.error('获取DaemonSets失败');
+      const response = await daemonsetApi.getDaemonSets(parseInt(clusterId!), selectedNamespace);
+      if (response.data) {
+        setDaemonSets(response.data);
+      } else if (response.error) {
+        toast.error('获取DaemonSets失败: ' + response.error);
       }
     } catch (error) {
       console.error('获取DaemonSets失败:', error);
@@ -130,21 +118,12 @@ function DaemonSetsContent() {
   const handleDelete = async (name: string) => {
     setIsOperationLoading(true);
     try {
-      const response = await fetch(
-        `http://localhost:8000/api/daemonsets/clusters/${clusterId}/namespaces/${selectedNamespace}/daemonsets/${name}`,
-        {
-          method: "DELETE",
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          },
-        }
-      );
-
-      if (response.ok) {
+      const response = await daemonsetApi.deleteDaemonSet(parseInt(clusterId!), selectedNamespace, name);
+      if (response.data !== undefined) {
         toast.success('DaemonSet删除成功');
         fetchDaemonSets();
-      } else {
-        toast.error('删除失败');
+      } else if (response.error) {
+        toast.error('删除失败: ' + response.error);
       }
     } catch (error) {
       console.error('删除失败:', error);

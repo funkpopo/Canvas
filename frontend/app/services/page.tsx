@@ -18,7 +18,7 @@ import ClusterSelector from "@/components/ClusterSelector";
 import YamlEditor from "@/components/YamlEditor";
 import { useAuth } from "@/lib/auth-context";
 import { useCluster } from "@/lib/cluster-context";
-import { serviceApi, Service } from "@/lib/api";
+import { serviceApi, Service, namespaceApi } from "@/lib/api";
 import { canManageResources } from "@/lib/utils";
 import type { Cluster } from "@/lib/cluster-context";
 import { toast } from "sonner";
@@ -92,18 +92,11 @@ export default function ServicesManagement() {
 
   const handleBatchDelete = async (selectedServicesData: Service[]) => {
     try {
-      const token = localStorage.getItem("token");
-      // 注意：这里需要先实现services的批量删除API
-      // 暂时使用单个删除的方式
+      // 使用 serviceApi 进行删除
       for (const service of selectedServicesData) {
-        const response = await fetch(`http://localhost:8000/api/services/${service.namespace}/${service.name}?cluster_id=${service.cluster_id}`, {
-          method: "DELETE",
-          headers: {
-            "Authorization": `Bearer ${token}`,
-          },
-        });
+        const result = await serviceApi.deleteService(service.cluster_id, service.namespace, service.name);
 
-        if (!response.ok) {
+        if (result.error) {
           throw new Error(`删除服务 ${service.namespace}/${service.name} 失败`);
         }
       }
@@ -121,16 +114,10 @@ export default function ServicesManagement() {
   const fetchNamespaces = async () => {
     if (!selectedClusterId) return;
     try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(`http://localhost:8000/api/namespaces?cluster_id=${selectedClusterId}`, {
-        headers: {
-          "Authorization": `Bearer ${token}`,
-        },
-      });
+      const result = await namespaceApi.getNamespaces(selectedClusterId);
 
-      if (response.ok) {
-        const data = await response.json();
-        const namespaceNames = data.map((ns: any) => ns.name);
+      if (result.data) {
+        const namespaceNames = (result.data as any[]).map((ns: any) => ns.name);
         setNamespaces(namespaceNames);
       } else {
         console.error("获取命名空间列表失败");

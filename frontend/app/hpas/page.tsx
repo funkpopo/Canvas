@@ -17,6 +17,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useCluster } from "@/lib/cluster-context";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { hpaApi, namespaceApi } from "@/lib/api";
 
 interface HPA {
   name: string;
@@ -77,19 +78,14 @@ function HPAsContent() {
 
   const fetchNamespaces = async () => {
     try {
-      const response = await fetch(`http://localhost:8000/api/namespaces?cluster_id=${clusterId}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setNamespaces(data);
-        // 自动选择第一个命名空间
-        if (data.length > 0 && !selectedNamespace) {
-          setSelectedNamespace(data[0].name);
+      const response = await namespaceApi.getNamespaces(parseInt(clusterId!));
+      if (response.data) {
+        setNamespaces(response.data);
+        if (response.data.length > 0 && !selectedNamespace) {
+          setSelectedNamespace(response.data[0].name);
         }
+      } else if (response.error) {
+        toast.error('获取命名空间失败: ' + response.error);
       }
     } catch (error) {
       console.error('获取命名空间失败:', error);
@@ -102,20 +98,11 @@ function HPAsContent() {
 
     setIsLoading(true);
     try {
-      const response = await fetch(
-        `http://localhost:8000/api/hpas/clusters/${clusterId}/namespaces/${selectedNamespace}/hpas`,
-        {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          },
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        setHPAs(data);
-      } else {
-        toast.error('获取HPAs失败');
+      const response = await hpaApi.getHPAs(parseInt(clusterId!), selectedNamespace);
+      if (response.data) {
+        setHPAs(response.data);
+      } else if (response.error) {
+        toast.error('获取HPAs失败: ' + response.error);
       }
     } catch (error) {
       console.error('获取HPAs失败:', error);
@@ -128,21 +115,12 @@ function HPAsContent() {
   const handleDelete = async (name: string) => {
     setIsOperationLoading(true);
     try {
-      const response = await fetch(
-        `http://localhost:8000/api/hpas/clusters/${clusterId}/namespaces/${selectedNamespace}/hpas/${name}`,
-        {
-          method: "DELETE",
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          },
-        }
-      );
-
-      if (response.ok) {
+      const response = await hpaApi.deleteHPA(parseInt(clusterId!), selectedNamespace, name);
+      if (response.data !== undefined) {
         toast.success('HPA删除成功');
         fetchHPAs();
-      } else {
-        toast.error('删除失败');
+      } else if (response.error) {
+        toast.error('删除失败: ' + response.error);
       }
     } catch (error) {
       console.error('删除失败:', error);

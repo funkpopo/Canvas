@@ -15,6 +15,7 @@ import { useAuth } from "@/lib/auth-context";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { podApi } from "@/lib/api";
 
 interface PodDetails {
   name: string;
@@ -137,19 +138,14 @@ export default function PodDetailsPage({ params }: { params: Promise<{ namespace
 
   const fetchPodDetails = async () => {
     try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(
-        `http://localhost:8000/api/pods/${resolvedParams.namespace}/${resolvedParams.pod}?cluster_id=${clusterId}`,
-        {
-          headers: {
-            "Authorization": `Bearer ${token}`,
-          },
-        }
+      const result = await podApi.getPod(
+        parseInt(clusterId!),
+        resolvedParams.namespace,
+        resolvedParams.pod
       );
 
-      if (response.ok) {
-        const data = await response.json();
-        setPodDetails(data);
+      if (result.data) {
+        setPodDetails(result.data as unknown as PodDetails);
       } else {
         console.error("获取Pod详情失败");
       }
@@ -210,21 +206,13 @@ export default function PodDetailsPage({ params }: { params: Promise<{ namespace
     if (!podDetails || !clusterId) return;
 
     try {
-      const token = localStorage.getItem("token");
-      const url = new URL(`http://localhost:8000/api/pods/${podDetails.namespace}/${podDetails.name}`);
-      url.searchParams.set('cluster_id', clusterId);
-      if (confirmDialog.forceOption) {
-        url.searchParams.set('force', 'true');
-      }
+      const result = await podApi.deletePod(
+        parseInt(clusterId),
+        podDetails.namespace,
+        podDetails.name
+      );
 
-      const response = await fetch(url.toString(), {
-        method: "DELETE",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-        },
-      });
-
-      if (response.ok) {
+      if (!result.error) {
         const deleteType = confirmDialog.forceOption ? "强制" : "正常";
         toast.success(`Pod${deleteType}删除成功`);
         // 删除成功后返回Pod列表页面
