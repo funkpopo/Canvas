@@ -4,7 +4,7 @@ from typing import List, Optional
 from ..database import get_db
 from ..models import Cluster
 from ..auth import get_current_user, require_resource_management
-from ..k8s_client import (
+from ..services.k8s import (
     get_namespace_pdbs, get_pdb_details, delete_pdb
 )
 from ..audit import log_action

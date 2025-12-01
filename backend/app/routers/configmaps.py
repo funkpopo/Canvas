@@ -4,7 +4,7 @@ from typing import List, Optional
 from ..database import get_db
 from ..models import Cluster, AuditLog, User
 from ..auth import get_current_user, require_configmap_management, require_read_only
-from ..k8s_client import (
+from ..services.k8s import (
     get_namespace_configmaps, get_configmap_details, create_configmap, update_configmap, delete_configmap,
     get_configmap_yaml, update_configmap_yaml
 )

@@ -41,7 +41,11 @@ from .client_pool import (
     return_k8s_client,
     test_cluster_connection,
     get_client_pool,
+    _client_pool,
 )
+
+# 兼容别名
+get_k8s_client = create_k8s_client
 
 # ========== 集群/节点基础操作 ==========
 from .base_operations import (
@@ -263,6 +267,8 @@ __all__ = [
     'return_k8s_client',
     'test_cluster_connection',
     'get_client_pool',
+    '_client_pool',
+    'get_k8s_client',
 
     # 集群/节点基础操作
     'get_cluster_stats',

@@ -4,7 +4,7 @@ from typing import List, Optional
 from ..database import get_db
 from ..models import Cluster
 from ..auth import get_current_user, require_resource_management
-from ..k8s_client import (
+from ..services.k8s import (
     get_deployment_details, get_deployment_pods, scale_deployment, restart_deployment, delete_deployment,
     get_namespace_deployments, update_deployment, get_deployment_yaml, update_deployment_yaml,
     get_deployment_services, get_service_details, update_service, get_service_yaml, update_service_yaml
@@ -130,7 +130,7 @@ async def get_deployments(
                     deployments = get_namespace_deployments(cluster, namespace)
                 else:
                     # 获取所有命名空间的部署
-                    from ..k8s_client import get_namespaces_info
+                    from ..services.k8s import get_namespaces_info
                     namespaces = get_namespaces_info(cluster)
                     deployments = []
                     for ns_info in namespaces:

@@ -5,7 +5,7 @@ Celery异步任务定义
 from .celery_app import celery_app
 from .database import SessionLocal
 from .models import Cluster
-from .k8s_client import (
+from .services.k8s import (
     get_pods_info,
     get_namespace_deployments,
     get_cluster_stats,
@@ -103,7 +103,7 @@ def batch_scale_deployments(cluster_id: int, deployments: list):
     Returns:
         dict: 操作结果
     """
-    from .k8s_client import scale_deployment
+    from .services.k8s import scale_deployment
 
     db = SessionLocal()
     try:

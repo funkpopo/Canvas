@@ -45,7 +45,7 @@ async def create_cluster(
 
     # 如果集群被激活，在后台线程中启动监听器
     if db_cluster.is_active:
-        from ..k8s_client import start_watcher_async
+        from ..services.k8s import start_watcher_async
         start_watcher_async(db_cluster)
 
     return db_cluster
@@ -117,7 +117,7 @@ async def update_cluster(
     invalidate_cache("cluster_list:*")
 
     # 处理监听器状态变化
-    from ..k8s_client import watcher_manager, start_watcher_async
+    from ..services.k8s import watcher_manager, start_watcher_async
 
     # 如果集群被激活，在后台线程中启动监听器
     if cluster.is_active and not update_data.get("is_active") is False:
@@ -140,7 +140,7 @@ async def delete_cluster(
         raise HTTPException(status_code=404, detail="集群不存在")
 
     # 删除前停止监听器
-    from ..k8s_client import watcher_manager
+    from ..services.k8s import watcher_manager
     watcher_manager.stop_watcher(cluster_id)
 
     # 使集群列表缓存失效
@@ -157,7 +157,7 @@ async def test_cluster_connection(
     db: Session = Depends(get_db),
     current_user: dict = Depends(require_read_only),
 ):
-    from ..k8s_client import test_cluster_connection as test_conn
+    from ..services.k8s import test_cluster_connection as test_conn
     cluster = db.query(Cluster).filter(Cluster.id == cluster_id).first()
     if not cluster:
         raise HTTPException(status_code=404, detail="集群不存在")
@@ -182,7 +182,7 @@ async def activate_cluster(
     db.refresh(cluster)
 
     # 激活集群时在后台线程中启动监听器
-    from ..k8s_client import start_watcher_async
+    from ..services.k8s import start_watcher_async
     start_watcher_async(cluster)
 
     return cluster

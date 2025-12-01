@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from ..database import SessionLocal
 from ..models import AlertRule, AlertEvent, Cluster
-from ..k8s_client import get_node_metrics, get_pod_metrics, get_k8s_client
+from .k8s import get_node_metrics, get_pod_metrics, get_k8s_client
 from ..core.logging import get_logger
 import json
 from typing import Dict, Any, List

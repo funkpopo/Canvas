@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import Cluster
 from ..auth import get_current_user
-from ..k8s_client import (
+from ..services.k8s import (
     get_cluster_metrics,
     get_node_metrics,
     get_pod_metrics,
@@ -172,7 +172,7 @@ async def check_metrics_server_health(
             raise HTTPException(status_code=404, detail="集群不存在")
 
         # 尝试获取简单的集群指标来检测metrics-server是否可用
-        from ..k8s_client import check_metrics_server_available
+        from ..services.k8s import check_metrics_server_available
         available = check_metrics_server_available(cluster)
 
         return {

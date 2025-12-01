@@ -5,7 +5,7 @@ from typing import List, Optional
 from ..database import get_db
 from ..models import Cluster, User
 from ..auth import get_current_user, require_namespace_access, require_cluster_access
-from ..k8s_client import get_pods_info, get_pod_details, get_pod_logs, restart_pod, delete_pod, batch_delete_pods, batch_restart_pods
+from ..services.k8s import get_pods_info, get_pod_details, get_pod_logs, restart_pod, delete_pod, batch_delete_pods, batch_restart_pods
 from ..audit import log_action
 from pydantic import BaseModel
 from ..core.logging import get_logger

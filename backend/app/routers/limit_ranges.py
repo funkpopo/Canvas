@@ -4,7 +4,7 @@ from typing import List
 from ..database import get_db
 from ..models import Cluster
 from ..auth import get_current_user, require_resource_management
-from ..k8s_client import (
+from ..services.k8s import (
     get_namespace_limit_ranges, get_limit_range_details, delete_limit_range
 )
 from ..audit import log_action

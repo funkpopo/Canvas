@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import Cluster
 from ..auth import get_current_user
-from ..k8s_client import get_cluster_stats, _client_pool
+from ..services.k8s import get_cluster_stats, _client_pool
 from pydantic import BaseModel
 from typing import Dict, Any
 from ..core.logging import get_logger

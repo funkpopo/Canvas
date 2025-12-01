@@ -4,7 +4,7 @@ from typing import List, Optional
 from ..database import get_db
 from ..models import Cluster, AuditLog, User
 from ..auth import get_current_user, require_resource_quota_management, require_read_only
-from ..k8s_client import (
+from ..services.k8s import (
     get_namespace_resource_quotas, get_resource_quota_details, create_resource_quota, update_resource_quota, delete_resource_quota
 )
 from ..audit import log_action

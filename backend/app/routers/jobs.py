@@ -4,7 +4,7 @@ from typing import List, Optional, Dict, Any
 from ..database import get_db
 from ..models import Cluster, JobTemplate, JobHistory
 from ..auth import get_current_user
-from ..k8s_client import (
+from ..services.k8s import (
     get_namespace_jobs, get_job_details, create_job, delete_job, restart_job,
     get_job_pods, get_job_yaml, update_job_yaml, monitor_job_status_changes
 )
