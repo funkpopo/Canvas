@@ -1,208 +1,232 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Loader2, Activity, Search, ArrowLeft } from "lucide-react";
-import { useAuth } from "@/lib/auth-context";
-import { useCluster } from "@/lib/cluster-context";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Activity, Eye, Code, RotateCcw, Scale } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import {
+  ResourceList,
+  ColumnDef,
+  ActionDef,
+  BaseResource,
+  NameColumn,
+  NamespaceColumn,
+  ClusterColumn,
+  AgeColumn,
+} from "@/components/ResourceList";
 import { deploymentApi } from "@/lib/api";
+import { canManageResources } from "@/lib/utils";
+import { useAuth } from "@/lib/auth-context";
+import { toast } from "sonner";
 
-interface Deployment {
-  name: string;
-  namespace: string;
+// ============ 类型定义 ============
+
+interface Deployment extends BaseResource {
   replicas: number;
   ready_replicas: number;
   available_replicas: number;
-  updated_replicas: number;
-  age: string;
-  images: string[];
-  labels: Record<string, string>;
-  status: string;
-  cluster_id: number;
-  cluster_name: string;
+  unavailable_replicas: number;
+  selector: Record<string, string>;
+  strategy: string;
 }
 
+// ============ 状态判断函数 ============
+
+function getDeploymentStatus(deployment: Deployment): string {
+  const { replicas, ready_replicas, available_replicas } = deployment;
+
+  if (ready_replicas === replicas && available_replicas === replicas) {
+    return "Running";
+  } else if (ready_replicas === 0) {
+    return "Failed";
+  } else {
+    return "Updating";
+  }
+}
+
+function getStatusBadgeClass(status: string): string {
+  switch (status) {
+    case "Running":
+      return "bg-green-500";
+    case "Failed":
+      return "bg-red-500";
+    case "Updating":
+      return "bg-yellow-500";
+    default:
+      return "bg-gray-500";
+  }
+}
+
+// ============ 页面组件 ============
+
 export default function DeploymentsPage() {
-  const [deployments, setDeployments] = useState<Deployment[]>([]);
-  const [filteredDeployments, setFilteredDeployments] = useState<Deployment[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState("");
   const router = useRouter();
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
-  const { selectedCluster } = useCluster();
+  const { user } = useAuth();
+  const [yamlPreview, setYamlPreview] = useState("");
+  const [isYamlOpen, setIsYamlOpen] = useState(false);
+  const [selectedDeployment, setSelectedDeployment] = useState<Deployment | null>(null);
 
-  useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
-      router.push("/login");
-      return;
-    }
-
-    if (isAuthenticated) {
-      fetchDeployments();
-    }
-  }, [isAuthenticated, authLoading, router, selectedCluster]);
-
-  useEffect(() => {
-    if (searchTerm) {
-      const filtered = deployments.filter(
-        (deployment) =>
-          deployment.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          deployment.namespace.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          deployment.cluster_name.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-      setFilteredDeployments(filtered);
-    } else {
-      setFilteredDeployments(deployments);
-    }
-  }, [searchTerm, deployments]);
-
-  const fetchDeployments = async () => {
+  // 查看 YAML
+  const handleViewYaml = async (deployment: Deployment) => {
     try {
-      setIsLoading(true);
-      const result = await deploymentApi.getDeployments(
-        selectedCluster ? Number(selectedCluster) : undefined
+      const response = await deploymentApi.getDeploymentYaml(
+        deployment.cluster_id,
+        deployment.namespace,
+        deployment.name
       );
-
-      if (result.data) {
-        setDeployments(result.data as unknown as Deployment[]);
-        setFilteredDeployments(result.data as unknown as Deployment[]);
+      if (response.data) {
+        setYamlPreview(response.data.yaml);
+        setSelectedDeployment(deployment);
+        setIsYamlOpen(true);
       } else {
-        console.error("获取 Deployments 失败");
+        toast.error(`获取YAML失败: ${response.error}`);
       }
-    } catch (error) {
-      console.error("获取 Deployments 出错:", error);
-    } finally {
-      setIsLoading(false);
+    } catch {
+      toast.error("获取YAML失败");
     }
   };
 
-  const getStatusBadge = (deployment: Deployment) => {
-    const { replicas, ready_replicas, available_replicas } = deployment;
-
-    if (ready_replicas === replicas && available_replicas === replicas) {
-      return <Badge className="bg-green-500">Running</Badge>;
-    } else if (ready_replicas === 0) {
-      return <Badge variant="destructive">Failed</Badge>;
-    } else {
-      return <Badge className="bg-yellow-500">Updating</Badge>;
+  // 重启 Deployment
+  const handleRestart = async (deployment: Deployment) => {
+    try {
+      const response = await deploymentApi.restartDeployment(
+        deployment.cluster_id,
+        deployment.namespace,
+        deployment.name
+      );
+      if (!response.error) {
+        toast.success(`Deployment ${deployment.name} 重启成功`);
+      } else {
+        toast.error(`重启失败: ${response.error}`);
+      }
+    } catch {
+      toast.error("重启失败");
     }
   };
 
-  if (authLoading || isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
-    );
-  }
+  // ============ 列定义 ============
+  const columns: ColumnDef<Deployment>[] = [
+    NameColumn<Deployment>(),
+    NamespaceColumn<Deployment>(),
+    ClusterColumn<Deployment>(),
+    {
+      key: "status",
+      header: "状态",
+      render: (item) => {
+        const status = getDeploymentStatus(item);
+        return <Badge className={getStatusBadgeClass(status)}>{status}</Badge>;
+      },
+    },
+    {
+      key: "replicas",
+      header: "副本",
+      render: (item) => `${item.ready_replicas}/${item.replicas}`,
+    },
+    AgeColumn<Deployment>(),
+  ];
 
-  if (!isAuthenticated) {
-    return null;
-  }
+  // ============ 操作按钮定义 ============
+  const actions: ActionDef<Deployment>[] = [
+    {
+      key: "view",
+      icon: Eye,
+      tooltip: "查看详情",
+      onClick: (item) =>
+        router.push(
+          `/deployments/${item.namespace}/${item.name}?cluster_id=${item.cluster_id}`
+        ),
+    },
+    {
+      key: "yaml",
+      icon: Code,
+      tooltip: "查看YAML",
+      onClick: handleViewYaml,
+    },
+    {
+      key: "restart",
+      icon: RotateCcw,
+      tooltip: "重启",
+      visible: () => canManageResources(user),
+      onClick: handleRestart,
+    },
+  ];
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-6">
-          <Button variant="outline" onClick={() => router.push("/")} className="mb-4">
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            返回首页
-          </Button>
+    <>
+      <ResourceList<Deployment>
+        resourceType="Deployment"
+        title="Deployments"
+        description="管理和监控 Kubernetes Deployments"
+        icon={Activity}
+        columns={columns}
+        actions={actions}
+        fetchFn={async (clusterId, namespace) => {
+          const result = await deploymentApi.getDeployments(clusterId, namespace);
+          return {
+            data: result.data as unknown as Deployment[],
+            error: result.error,
+          };
+        }}
+        deleteFn={async (clusterId, namespace, name) => {
+          return await deploymentApi.deleteDeployment(clusterId, namespace, name);
+        }}
+        batchOperations={{
+          delete: canManageResources(user),
+          restart: false,
+          label: false,
+        }}
+        searchFields={["name", "namespace", "cluster_name"]}
+        statusFilter={{
+          field: "replicas" as keyof Deployment,
+          options: [
+            { value: "running", label: "运行中" },
+            { value: "updating", label: "更新中" },
+            { value: "failed", label: "失败" },
+          ],
+        }}
+        requireNamespace={false}
+        searchPlaceholder="搜索 Deployment..."
+        detailLink={(item) =>
+          `/deployments/${item.namespace}/${item.name}?cluster_id=${item.cluster_id}`
+        }
+        deleteConfirm={{
+          title: "删除 Deployment",
+          description: (item) =>
+            `确定要删除 Deployment "${item.namespace}/${item.name}" 吗？此操作将删除所有关联的 ReplicaSets 和 Pods。`,
+        }}
+      />
 
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="flex items-center">
-                    <Activity className="h-6 w-6 mr-2" />
-                    Deployments
-                  </CardTitle>
-                  <CardDescription>
-                    管理和监控 Kubernetes Deployments
-                  </CardDescription>
-                </div>
-                <Button onClick={fetchDeployments} variant="outline">
-                  刷新
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="mb-4">
-                <div className="relative">
-                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="搜索 Deployment..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-8"
-                  />
-                </div>
-              </div>
-
-              {filteredDeployments.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  {searchTerm ? "未找到匹配的 Deployment" : "暂无 Deployment"}
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>名称</TableHead>
-                        <TableHead>命名空间</TableHead>
-                        <TableHead>集群</TableHead>
-                        <TableHead>状态</TableHead>
-                        <TableHead>副本</TableHead>
-                        <TableHead>镜像</TableHead>
-                        <TableHead>年龄</TableHead>
-                        <TableHead>操作</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredDeployments.map((deployment) => (
-                        <TableRow key={`${deployment.cluster_id}-${deployment.namespace}-${deployment.name}`}>
-                          <TableCell className="font-medium">{deployment.name}</TableCell>
-                          <TableCell>{deployment.namespace}</TableCell>
-                          <TableCell>{deployment.cluster_name}</TableCell>
-                          <TableCell>{getStatusBadge(deployment)}</TableCell>
-                          <TableCell>
-                            {deployment.ready_replicas}/{deployment.replicas}
-                          </TableCell>
-                          <TableCell>
-                            <div className="max-w-xs truncate" title={deployment.images.join(", ")}>
-                              {deployment.images[0] || "N/A"}
-                            </div>
-                          </TableCell>
-                          <TableCell>{deployment.age}</TableCell>
-                          <TableCell>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              asChild
-                            >
-                              <Link
-                                href={`/deployments/${deployment.namespace}/${deployment.name}?cluster_id=${deployment.cluster_id}`}
-                              >
-                                查看详情
-                              </Link>
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    </div>
+      {/* YAML 预览对话框 */}
+      <Dialog open={isYamlOpen} onOpenChange={setIsYamlOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedDeployment
+                ? `${selectedDeployment.namespace}/${selectedDeployment.name} - YAML配置`
+                : "YAML配置"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="mt-4">
+            <Textarea
+              value={yamlPreview}
+              readOnly
+              className="font-mono text-sm min-h-[400px]"
+            />
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setIsYamlOpen(false)}>关闭</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

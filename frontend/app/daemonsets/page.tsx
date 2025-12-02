@@ -1,314 +1,129 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowLeft, Loader2, RefreshCw, Search, Trash2, AlertCircle } from "lucide-react";
-import { toast } from "sonner";
-import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { useCluster } from "@/lib/cluster-context";
-import { daemonsetApi, namespaceApi } from "@/lib/api";
+import { Loader2, Layers, Trash2 } from "lucide-react";
+import {
+  ResourceList,
+  ColumnDef,
+  ActionDef,
+  BaseResource,
+  NameColumn,
+  AgeColumn,
+} from "@/components/ResourceList";
+import { daemonsetApi } from "@/lib/api";
 
-interface DaemonSet {
-  name: string;
-  namespace: string;
+// ============ 类型定义 ============
+
+interface DaemonSet extends BaseResource {
   desired: number;
   current: number;
   ready: number;
   updated: number;
   available: number;
-  age: string;
-  labels: Record<string, string>;
-  cluster_id: number;
-  cluster_name: string;
 }
 
-interface Namespace {
-  name: string;
-  status: string;
-}
+// ============ 内容组件 ============
 
 function DaemonSetsContent() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [daemonsets, setDaemonSets] = useState<DaemonSet[]>([]);
-  const [namespaces, setNamespaces] = useState<Namespace[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [selectedNamespace, setSelectedNamespace] = useState<string>("");
-  const [searchTerm, setSearchTerm] = useState("");
-  const [isOperationLoading, setIsOperationLoading] = useState(false);
-  const [confirmDialog, setConfirmDialog] = useState({
-    open: false,
-    title: "",
-    description: "",
-    onConfirm: () => {},
-  });
-
-  const router = useRouter();
   const searchParams = useSearchParams();
-  const { selectedCluster, clusters } = useCluster();
-  const clusterIdFromUrl = searchParams.get('cluster_id');
-  const clusterId = clusterIdFromUrl || (selectedCluster ? String(selectedCluster) : null);
+  const clusterIdFromUrl = searchParams.get("cluster_id");
 
-  // 获取集群信息
-  const currentCluster = clusters.find(c => c.id === parseInt(clusterId || '0'));
-
-  useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      router.push("/login");
-      return;
-    }
-    setIsAuthenticated(true);
-  }, [router]);
-
-  useEffect(() => {
-    if (isAuthenticated && clusterId) {
-      fetchNamespaces();
-    }
-  }, [isAuthenticated, clusterId]);
-
-  useEffect(() => {
-    if (isAuthenticated && clusterId && selectedNamespace) {
-      fetchDaemonSets();
-    }
-  }, [isAuthenticated, clusterId, selectedNamespace]);
-
-  const fetchNamespaces = async () => {
-    try {
-      const response = await namespaceApi.getNamespaces(parseInt(clusterId!));
-      if (response.data) {
-        setNamespaces(response.data);
-        if (response.data.length > 0 && !selectedNamespace) {
-          setSelectedNamespace(response.data[0].name);
-        }
-      } else if (response.error) {
-        toast.error('获取命名空间失败: ' + response.error);
-      }
-    } catch (error) {
-      console.error('获取命名空间失败:', error);
-      toast.error('获取命名空间失败');
-    }
-  };
-
-  const fetchDaemonSets = async () => {
-    if (!selectedNamespace) return;
-
-    setIsLoading(true);
-    try {
-      const response = await daemonsetApi.getDaemonSets(parseInt(clusterId!), selectedNamespace);
-      if (response.data) {
-        setDaemonSets(response.data);
-      } else if (response.error) {
-        toast.error('获取DaemonSets失败: ' + response.error);
-      }
-    } catch (error) {
-      console.error('获取DaemonSets失败:', error);
-      toast.error('获取DaemonSets失败');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleDelete = async (name: string) => {
-    setIsOperationLoading(true);
-    try {
-      const response = await daemonsetApi.deleteDaemonSet(parseInt(clusterId!), selectedNamespace, name);
-      if (response.data !== undefined) {
-        toast.success('DaemonSet删除成功');
-        fetchDaemonSets();
-      } else if (response.error) {
-        toast.error('删除失败: ' + response.error);
-      }
-    } catch (error) {
-      console.error('删除失败:', error);
-      toast.error('删除失败');
-    } finally {
-      setIsOperationLoading(false);
-    }
-  };
-
-  const filteredDaemonSets = daemonsets.filter(ds =>
-    ds.name.toLowerCase().includes(searchTerm.toLowerCase())
+  const [selectedNamespace, setSelectedNamespace] = useState("default");
+  const [selectedClusterId, setSelectedClusterId] = useState<number | null>(
+    clusterIdFromUrl ? parseInt(clusterIdFromUrl) : null
   );
 
-  if (!isAuthenticated) {
-    return <div>验证中...</div>;
-  }
+  // ============ 列定义 ============
+  const columns: ColumnDef<DaemonSet>[] = [
+    NameColumn<DaemonSet>(),
+    {
+      key: "desiredCurrent",
+      header: "期望/当前",
+      render: (item) => (
+        <Badge variant={item.current === item.desired ? "default" : "secondary"}>
+          {item.desired}/{item.current}
+        </Badge>
+      ),
+    },
+    {
+      key: "ready",
+      header: "就绪",
+      render: (item) => item.ready,
+    },
+    {
+      key: "updated",
+      header: "更新",
+      render: (item) => item.updated,
+    },
+    {
+      key: "available",
+      header: "可用",
+      render: (item) => item.available,
+    },
+    AgeColumn<DaemonSet>(),
+  ];
 
-  if (!clusterId) {
-    return (
-      <div className="container mx-auto p-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center text-yellow-600">
-              <AlertCircle className="h-5 w-5 mr-2" />
-              未选择集群
-            </CardTitle>
-            <CardDescription>
-              请先从首页选择一个集群，或者确保 URL 中包含 cluster_id 参数
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Link href="/">
-              <Button>
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                返回首页选择集群
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+  // ============ 操作按钮定义 ============
+  const actions: ActionDef<DaemonSet>[] = [
+    {
+      key: "delete",
+      icon: Trash2,
+      tooltip: "删除",
+      danger: true,
+      onClick: () => {},
+    },
+  ];
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <Link href="/">
-            <Button variant="outline" size="sm">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              返回
-            </Button>
-          </Link>
-          <div>
-            <h1 className="text-3xl font-bold">DaemonSets管理</h1>
-            <p className="text-muted-foreground">
-              管理守护进程工作负载
-              {currentCluster && (
-                <span className="ml-2">
-                  • 集群: <span className="font-semibold text-foreground">{currentCluster.name}</span>
-                </span>
-              )}
-            </p>
-          </div>
-        </div>
-        <Button onClick={fetchDaemonSets} disabled={isLoading}>
-          <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-          刷新
-        </Button>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>DaemonSet列表</CardTitle>
-          <CardDescription>选择命名空间查看其中的DaemonSets</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col space-y-4">
-            <div className="flex flex-wrap gap-4">
-              <div className="flex-1 min-w-[200px]">
-                <Select value={selectedNamespace} onValueChange={setSelectedNamespace}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="选择命名空间" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {namespaces.map((ns) => (
-                      <SelectItem key={ns.name} value={ns.name}>
-                        {ns.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex-1 min-w-[200px]">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                  <Input
-                    placeholder="搜索DaemonSet名称..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {isLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-8 w-8 animate-spin" />
-                <span className="ml-2">加载中...</span>
-              </div>
-            ) : (
-              <div className="border rounded-lg">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>名称</TableHead>
-                      <TableHead>期望/当前</TableHead>
-                      <TableHead>就绪</TableHead>
-                      <TableHead>更新</TableHead>
-                      <TableHead>可用</TableHead>
-                      <TableHead>年龄</TableHead>
-                      <TableHead>操作</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredDaemonSets.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                          {selectedNamespace ? '该命名空间中没有DaemonSets' : '请选择命名空间'}
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      filteredDaemonSets.map((ds) => (
-                        <TableRow key={ds.name}>
-                          <TableCell className="font-medium">{ds.name}</TableCell>
-                          <TableCell>
-                            <Badge variant={ds.current === ds.desired ? "default" : "secondary"}>
-                              {ds.desired}/{ds.current}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>{ds.ready}</TableCell>
-                          <TableCell>{ds.updated}</TableCell>
-                          <TableCell>{ds.available}</TableCell>
-                          <TableCell>{ds.age}</TableCell>
-                          <TableCell>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => setConfirmDialog({
-                                open: true,
-                                title: "删除DaemonSet",
-                                description: `确定要删除DaemonSet "${ds.name}" 吗？`,
-                                onConfirm: () => handleDelete(ds.name),
-                              })}
-                              disabled={isOperationLoading}
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      <ConfirmDialog
-        open={confirmDialog.open}
-        onOpenChange={(open) => setConfirmDialog(prev => ({ ...prev, open }))}
-        title={confirmDialog.title}
-        description={confirmDialog.description}
-        onConfirm={confirmDialog.onConfirm}
-      />
-    </div>
+    <ResourceList<DaemonSet>
+      resourceType="DaemonSet"
+      title="DaemonSets管理"
+      description="管理守护进程工作负载"
+      icon={Layers}
+      columns={columns}
+      actions={actions}
+      fetchFn={async (clusterId, namespace) => {
+        if (namespace) setSelectedNamespace(namespace);
+        setSelectedClusterId(clusterId);
+        const result = await daemonsetApi.getDaemonSets(clusterId, namespace!);
+        return {
+          data: result.data as unknown as DaemonSet[],
+          error: result.error,
+        };
+      }}
+      deleteFn={async (clusterId, namespace, name) => {
+        return await daemonsetApi.deleteDaemonSet(clusterId, namespace, name);
+      }}
+      batchOperations={{
+        delete: true,
+        restart: false,
+        label: false,
+      }}
+      searchFields={["name"]}
+      requireNamespace={true}
+      searchPlaceholder="搜索 DaemonSet..."
+      deleteConfirm={{
+        title: "删除 DaemonSet",
+        description: (item) =>
+          `确定要删除 DaemonSet "${item.name}" 吗？此操作不可撤销。`,
+      }}
+    />
   );
 }
+
+// ============ 页面组件 ============
 
 export default function DaemonSetsPage() {
   return (
-    <Suspense fallback={<div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin" /></div>}>
+    <Suspense
+      fallback={
+        <div className="flex justify-center items-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin" />
+        </div>
+      }
+    >
       <DaemonSetsContent />
     </Suspense>
   );
