@@ -1,19 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Server, Cpu, MemoryStick, HardDrive, Loader2 } from "lucide-react";
+import { Server, Cpu, MemoryStick, HardDrive } from "lucide-react";
 import AuthGuard from "@/components/AuthGuard";
-import { nodeApi } from "@/lib/api";
+import { nodeApi, Node } from "@/lib/api";
+import {
+  ResourceList,
+  BaseResource,
+  ColumnDef,
+  CardRenderConfig,
+  ApiResponse,
+  getStatusBadgeVariant,
+} from "@/components/ResourceList";
 
-interface NodeInfo {
-  name: string;
+// Node 资源接口 - 扩展 BaseResource
+interface NodeInfo extends BaseResource {
   status: string;
   roles: string[];
-  age: string;
   version: string;
   internal_ip: string | null;
   external_ip: string | null;
@@ -23,188 +26,205 @@ interface NodeInfo {
   cpu_usage?: string;
   memory_usage?: string;
   pods_usage?: string;
-  cluster_id: number;
-  cluster_name: string;
+}
+
+// 转换 Node 到 NodeInfo (添加 BaseResource 必需字段)
+function transformNode(node: Node): NodeInfo {
+  return {
+    ...node,
+    id: `${node.cluster_id}-${node.name}`,
+    namespace: "", // 节点不属于任何命名空间
+    pods_capacity: node.pod_capacity,
+    internal_ip: node.internal_ip || null,
+    external_ip: node.external_ip || null,
+  };
+}
+
+// 自定义 fetch 函数 - 转换 API 响应
+async function fetchNodesApi(): Promise<ApiResponse<NodeInfo[]>> {
+  const result = await nodeApi.getNodes();
+  if (result.data) {
+    return {
+      data: result.data.map(transformNode),
+    };
+  }
+  return { error: result.error };
+}
+
+// 获取角色显示
+function getRoleDisplay(roles: string[]) {
+  if (roles.includes("master")) return "Master";
+  if (roles.includes("worker")) return "Worker";
+  return "Node";
 }
 
 function NodesPageContent() {
-  const [nodes, setNodes] = useState<NodeInfo[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  // 列定义
+  const columns: ColumnDef<NodeInfo>[] = [
+    {
+      key: "name",
+      header: "名称",
+      render: (item) => <span className="font-medium">{item.name}</span>,
+    },
+    {
+      key: "status",
+      header: "状态",
+      render: (item) => (
+        <Badge variant={getStatusBadgeVariant(item.status)}>{item.status}</Badge>
+      ),
+    },
+    {
+      key: "role",
+      header: "角色",
+      render: (item) => getRoleDisplay(item.roles),
+    },
+    {
+      key: "cluster",
+      header: "集群",
+      render: (item) => item.cluster_name,
+    },
+    {
+      key: "internal_ip",
+      header: "内部IP",
+      render: (item) => item.internal_ip || "N/A",
+    },
+    {
+      key: "cpu",
+      header: "CPU",
+      render: (item) => (
+        <div>
+          <span>{item.cpu_capacity}</span>
+          {item.cpu_usage && (
+            <span className="text-xs text-gray-500 ml-1">({item.cpu_usage})</span>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: "memory",
+      header: "内存",
+      render: (item) => (
+        <div>
+          <span>{item.memory_capacity}</span>
+          {item.memory_usage && (
+            <span className="text-xs text-gray-500 ml-1">({item.memory_usage})</span>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: "version",
+      header: "版本",
+      render: (item) => item.version,
+    },
+    {
+      key: "age",
+      header: "年龄",
+      render: (item) => item.age,
+    },
+  ];
 
-  useEffect(() => {
-    fetchNodes();
-  }, []);
+  // 卡片视图配置
+  const cardConfig: CardRenderConfig<NodeInfo> = {
+    title: (item) => item.name,
+    subtitle: (item) => `${item.cluster_name} • ${getRoleDisplay(item.roles)} • ${item.age}`,
+    status: (item) => (
+      <Badge variant={getStatusBadgeVariant(item.status)}>{item.status}</Badge>
+    ),
+    content: (item) => (
+      <div className="space-y-4">
+        {/* IP 地址 */}
+        <div className="text-sm">
+          <div className="flex justify-between">
+            <span className="text-gray-600 dark:text-gray-400">内部IP:</span>
+            <span>{item.internal_ip || "N/A"}</span>
+          </div>
+          {item.external_ip && (
+            <div className="flex justify-between">
+              <span className="text-gray-600 dark:text-gray-400">外部IP:</span>
+              <span>{item.external_ip}</span>
+            </div>
+          )}
+        </div>
 
-  const fetchNodes = async () => {
-    try {
-      const result = await nodeApi.getNodes();
+        {/* 资源容量和使用情况 */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <Cpu className="h-4 w-4 mr-1 text-zinc-500" />
+              <span className="text-sm">CPU</span>
+            </div>
+            <div className="text-right">
+              <div className="text-sm font-medium">{item.cpu_capacity}</div>
+              {item.cpu_usage && (
+                <div className="text-xs text-gray-500">{item.cpu_usage} 已用</div>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <MemoryStick className="h-4 w-4 mr-1 text-green-500" />
+              <span className="text-sm">内存</span>
+            </div>
+            <div className="text-right">
+              <div className="text-sm font-medium">{item.memory_capacity}</div>
+              {item.memory_usage && (
+                <div className="text-xs text-gray-500">{item.memory_usage} 已用</div>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <HardDrive className="h-4 w-4 mr-1 text-purple-500" />
+              <span className="text-sm">Pods</span>
+            </div>
+            <div className="text-right">
+              <div className="text-sm font-medium">
+                {item.pods_usage || "0"}/{item.pods_capacity}
+              </div>
+              {item.pods_usage && (
+                <div className="text-xs text-gray-500">
+                  {Math.round(
+                    (parseInt(item.pods_usage) / parseInt(item.pods_capacity || "1")) * 100
+                  )}
+                  % 已用
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
 
-      if (result.data) {
-        setNodes(result.data as unknown as NodeInfo[]);
-      } else {
-        console.error("获取节点列表失败");
-      }
-    } catch (error) {
-      console.error("获取节点列表出错:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const getStatusBadgeVariant = (status: string) => {
-    switch (status) {
-      case "Ready":
-        return "default";
-      case "NotReady":
-        return "destructive";
-      default:
-        return "secondary";
-    }
-  };
-
-  const getRoleDisplay = (roles: string[]) => {
-    if (roles.includes("master")) return "Master";
-    if (roles.includes("worker")) return "Worker";
-    return "Node";
+        {/* 版本信息 */}
+        <div className="text-xs text-gray-500 dark:text-gray-400">
+          K8s版本: {item.version}
+        </div>
+      </div>
+    ),
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="bg-card shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
-              <Link href="/" className="flex items-center">
-                <ArrowLeft className="h-5 w-5 mr-2" />
-                <span className="text-gray-600 dark:text-gray-400">返回仪表板</span>
-              </Link>
-            </div>
-            <Button variant="outline" onClick={fetchNodes} disabled={isLoading}>
-              {isLoading ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Server className="h-4 w-4 mr-2" />
-              )}
-              刷新
-            </Button>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <h2 className="text-3xl font-bold text-gray-900 dark:text-white">
-            节点管理
-          </h2>
-          <p className="mt-2 text-gray-600 dark:text-gray-400">
-            查看和管理Kubernetes集群中的节点资源
-          </p>
-        </div>
-
-        {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin mr-2" />
-            <span className="text-lg">加载中...</span>
-          </div>
-        ) : nodes.length === 0 ? (
-          <Card>
-            <CardContent className="flex flex-col items-center justify-center py-12">
-              <Server className="h-12 w-12 text-gray-400 mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                暂无节点
-              </h3>
-              <p className="text-gray-600 dark:text-gray-400">
-                没有找到任何节点信息
-              </p>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {nodes.map((node) => (
-              <Card key={`${node.cluster_id}-${node.name}`} className="hover:shadow-lg transition-shadow">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg">{node.name}</CardTitle>
-                    <Badge variant={getStatusBadgeVariant(node.status)}>
-                      {node.status}
-                    </Badge>
-                  </div>
-                  <CardDescription>
-                    {node.cluster_name} • {getRoleDisplay(node.roles)} • {node.age}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {/* IP 地址 */}
-                    <div className="text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-gray-600 dark:text-gray-400">内部IP:</span>
-                        <span>{node.internal_ip || "N/A"}</span>
-                      </div>
-                      {node.external_ip && (
-                        <div className="flex justify-between">
-                          <span className="text-gray-600 dark:text-gray-400">外部IP:</span>
-                          <span>{node.external_ip}</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* 资源容量和使用情况 */}
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center">
-                          <Cpu className="h-4 w-4 mr-1 text-zinc-500" />
-                          <span className="text-sm">CPU</span>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-sm font-medium">{node.cpu_capacity}</div>
-                          {node.cpu_usage && (
-                            <div className="text-xs text-gray-500">{node.cpu_usage} 已用</div>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center">
-                          <MemoryStick className="h-4 w-4 mr-1 text-green-500" />
-                          <span className="text-sm">内存</span>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-sm font-medium">{node.memory_capacity}</div>
-                          {node.memory_usage && (
-                            <div className="text-xs text-gray-500">{node.memory_usage} 已用</div>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center">
-                          <HardDrive className="h-4 w-4 mr-1 text-purple-500" />
-                          <span className="text-sm">Pods</span>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-sm font-medium">{node.pods_usage || '0'}/{node.pods_capacity}</div>
-                          {node.pods_usage && (
-                            <div className="text-xs text-gray-500">
-                              {Math.round((parseInt(node.pods_usage) / parseInt(node.pods_capacity || '1')) * 100)}% 已用
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* 版本信息 */}
-                    <div className="text-xs text-gray-500 dark:text-gray-400">
-                      K8s版本: {node.version}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
-      </main>
-    </div>
+    <ResourceList<NodeInfo>
+      resourceType="节点"
+      title="节点管理"
+      description="查看和管理Kubernetes集群中的节点资源"
+      icon={Server}
+      columns={columns}
+      actions={[]}
+      fetchFn={fetchNodesApi}
+      requireNamespace={false}
+      defaultViewMode="card"
+      cardConfig={cardConfig}
+      allowViewToggle={true}
+      searchFields={["name", "status", "internal_ip"]}
+      statusFilter={{
+        field: "status",
+        options: [
+          { value: "Ready", label: "Ready" },
+          { value: "NotReady", label: "NotReady" },
+        ],
+      }}
+      emptyText="没有找到任何节点信息"
+    />
   );
 }
 

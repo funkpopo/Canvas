@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Search, ArrowLeft, RefreshCw, Plus, LucideIcon } from "lucide-react";
+import { Loader2, Search, ArrowLeft, RefreshCw, Plus, LucideIcon, LayoutGrid, List } from "lucide-react";
 import ClusterSelector from "@/components/ClusterSelector";
 import { BatchOperations, ItemCheckbox, BatchOperationItem } from "@/components/BatchOperations";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -85,6 +85,23 @@ export interface DeleteConfirmConfig {
   showForceOption?: boolean;
 }
 
+/** 视图模式 */
+export type ViewMode = "table" | "card";
+
+/** 卡片渲染器定义 */
+export interface CardRenderConfig<T> {
+  /** 卡片标题渲染 */
+  title: (item: T) => ReactNode;
+  /** 卡片副标题/描述渲染 */
+  subtitle?: (item: T) => ReactNode;
+  /** 卡片状态 Badge 渲染 */
+  status?: (item: T) => ReactNode;
+  /** 卡片内容渲染 */
+  content: (item: T) => ReactNode;
+  /** 卡片操作按钮渲染 (可选，不提供则使用 actions) */
+  actions?: (item: T, defaultActions: ReactNode) => ReactNode;
+}
+
 /** ResourceList 组件属性 */
 export interface ResourceListProps<T extends BaseResource> {
   /** 资源类型标识 */
@@ -95,7 +112,7 @@ export interface ResourceListProps<T extends BaseResource> {
   description: string;
   /** 页面图标 */
   icon?: LucideIcon;
-  /** 列定义 */
+  /** 列定义 (表格视图) */
   columns: ColumnDef<T>[];
   /** 操作按钮定义 */
   actions?: ActionDef<T>[];
@@ -141,6 +158,18 @@ export interface ResourceListProps<T extends BaseResource> {
   getItemId?: (item: T) => string;
   /** WebSocket 更新回调 */
   onUpdate?: () => void;
+  /** 默认视图模式 */
+  defaultViewMode?: ViewMode;
+  /** 卡片渲染配置 (启用卡片视图) */
+  cardConfig?: CardRenderConfig<T>;
+  /** 是否允许切换视图模式 */
+  allowViewToggle?: boolean;
+  /** 额外的头部状态区域 (如 WebSocket 连接状态) */
+  statusBadge?: ReactNode;
+  /** 命名空间选项来源: 'api' 从 API 获取, 'data' 从数据中提取 */
+  namespaceSource?: "api" | "data";
+  /** 是否在集群选择器旁显示命名空间选择器 */
+  showNamespaceInHeader?: boolean;
 }
 
 // ============ 工具函数 ============
@@ -191,6 +220,12 @@ export function ResourceList<T extends BaseResource>({
   headerActions,
   getItemId = generateResourceId,
   onUpdate,
+  defaultViewMode = "table",
+  cardConfig,
+  allowViewToggle = true,
+  statusBadge,
+  namespaceSource = "api",
+  showNamespaceInHeader = false,
 }: ResourceListProps<T>) {
   // ============ 状态 ============
   const [items, setItems] = useState<T[]>([]);
@@ -199,8 +234,9 @@ export function ResourceList<T extends BaseResource>({
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [selectedClusterId, setSelectedClusterId] = useState<number | null>(null);
-  const [selectedNamespace, setSelectedNamespace] = useState<string>(defaultNamespace);
+  const [selectedNamespace, setSelectedNamespace] = useState<string>(requireNamespace ? defaultNamespace : "");
   const [namespaces, setNamespaces] = useState<string[]>([]);
+  const [viewMode, setViewMode] = useState<ViewMode>(cardConfig ? defaultViewMode : "table");
 
   // 删除确认对话框状态
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -223,12 +259,12 @@ export function ResourceList<T extends BaseResource>({
 
   const router = useRouter();
   const { user, isLoading: authLoading, isAuthenticated } = useAuth();
-  const { clusters } = useCluster();
+  const { clusters, activeCluster } = useCluster();
 
   // ============ 数据获取 ============
 
-  /** 获取命名空间列表 */
-  const fetchNamespaces = useCallback(async () => {
+  /** 获取命名空间列表 (从 API) */
+  const fetchNamespacesFromApi = useCallback(async () => {
     if (!selectedClusterId) return;
     try {
       const result = await namespaceApi.getNamespaces(selectedClusterId);
@@ -246,13 +282,15 @@ export function ResourceList<T extends BaseResource>({
   /** 获取资源列表 */
   const fetchItems = useCallback(async () => {
     if (!selectedClusterId) return;
-    if (requireNamespace && !selectedNamespace) return;
+    // 如果从 API 获取命名空间且必须选择命名空间，则检查
+    if (namespaceSource === "api" && requireNamespace && !selectedNamespace) return;
 
     setIsLoading(true);
     try {
       const response = await fetchFn(
         selectedClusterId,
-        requireNamespace ? selectedNamespace : undefined
+        // 如果从数据中提取命名空间，不传命名空间参数获取所有数据
+        namespaceSource === "data" ? undefined : (requireNamespace ? selectedNamespace : undefined)
       );
 
       if (response.data) {
@@ -262,6 +300,14 @@ export function ResourceList<T extends BaseResource>({
           id: getItemId(item),
         }));
         setItems(itemsWithIds);
+
+        // 如果从数据中提取命名空间
+        if (namespaceSource === "data") {
+          const uniqueNamespaces = Array.from(
+            new Set(itemsWithIds.map((item) => item.namespace).filter(Boolean))
+          ) as string[];
+          setNamespaces(uniqueNamespaces);
+        }
       } else if (response.error) {
         toast.error(`获取${resourceType}列表失败: ${response.error}`);
       }
@@ -270,38 +316,50 @@ export function ResourceList<T extends BaseResource>({
     } finally {
       setIsLoading(false);
     }
-  }, [selectedClusterId, selectedNamespace, requireNamespace, fetchFn, resourceType, getItemId]);
+  }, [selectedClusterId, selectedNamespace, requireNamespace, fetchFn, resourceType, getItemId, namespaceSource]);
 
   // ============ Effects ============
 
-  // 初始化集群选择
+  // 初始化集群选择 - 优先使用 activeCluster
   useEffect(() => {
-    if (user && clusters.length > 0 && !selectedClusterId) {
-      setSelectedClusterId(clusters[0].id);
+    if (user && !selectedClusterId) {
+      if (activeCluster) {
+        setSelectedClusterId(activeCluster.id);
+      } else if (clusters.length > 0) {
+        setSelectedClusterId(clusters[0].id);
+      }
     }
-  }, [user, clusters, selectedClusterId]);
+  }, [user, clusters, activeCluster, selectedClusterId]);
 
-  // 集群变化时获取命名空间
+  // 集群变化时获取命名空间 (仅从 API 获取时)
   useEffect(() => {
-    if (selectedClusterId && requireNamespace) {
-      fetchNamespaces();
+    if (selectedClusterId && requireNamespace && namespaceSource === "api") {
+      fetchNamespacesFromApi();
     }
-  }, [selectedClusterId, requireNamespace, fetchNamespaces]);
+  }, [selectedClusterId, requireNamespace, namespaceSource, fetchNamespacesFromApi]);
 
   // 集群/命名空间变化时获取资源
   useEffect(() => {
     if (selectedClusterId) {
-      if (requireNamespace && selectedNamespace) {
+      if (namespaceSource === "data") {
+        // 从数据中提取命名空间，直接获取
+        fetchItems();
+      } else if (requireNamespace && selectedNamespace) {
         fetchItems();
       } else if (!requireNamespace) {
         fetchItems();
       }
     }
-  }, [selectedClusterId, selectedNamespace, requireNamespace, fetchItems]);
+  }, [selectedClusterId, selectedNamespace, requireNamespace, namespaceSource, fetchItems]);
 
   // ============ 过滤逻辑 ============
 
   const filteredItems = items.filter((item) => {
+    // 命名空间过滤 (当从数据中提取命名空间时)
+    if (namespaceSource === "data" && selectedNamespace && item.namespace !== selectedNamespace) {
+      return false;
+    }
+
     // 搜索过滤
     const matchesSearch = searchFields.some((field) => {
       const value = item[field];
@@ -422,7 +480,27 @@ export function ResourceList<T extends BaseResource>({
                 value={selectedClusterId?.toString() || ""}
                 onValueChange={(value) => setSelectedClusterId(value ? parseInt(value) : null)}
               />
-              {requireNamespace && (
+              {/* 命名空间选择器 (Header 模式 或 从数据提取) */}
+              {(showNamespaceInHeader || namespaceSource === "data") && namespaces.length > 0 && (
+                <Select
+                  value={selectedNamespace || "all"}
+                  onValueChange={(value) => setSelectedNamespace(value === "all" ? "" : value)}
+                >
+                  <SelectTrigger className="w-48">
+                    <SelectValue placeholder="选择命名空间" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">全部命名空间</SelectItem>
+                    {namespaces.map((ns) => (
+                      <SelectItem key={ns} value={ns}>
+                        {ns}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              {/* 命名空间选择器 (卡片内模式，从 API 获取) */}
+              {!showNamespaceInHeader && namespaceSource === "api" && requireNamespace && (
                 <Select value={selectedNamespace} onValueChange={setSelectedNamespace}>
                   <SelectTrigger className="w-[200px]">
                     <SelectValue placeholder="选择命名空间" />
@@ -448,120 +526,164 @@ export function ResourceList<T extends BaseResource>({
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
-          <h2 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center">
-            {Icon && <Icon className="h-8 w-8 mr-3" />}
-            {title}
-          </h2>
-          <p className="mt-2 text-gray-600 dark:text-gray-400">{description}</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center">
+                {Icon && <Icon className="h-8 w-8 mr-3" />}
+                {title}
+              </h2>
+              <p className="mt-2 text-gray-600 dark:text-gray-400">{description}</p>
+            </div>
+            <div className="flex items-center space-x-2">
+              {statusBadge}
+            </div>
+          </div>
         </div>
 
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>{resourceType}列表</CardTitle>
-                <CardDescription>
-                  {requireNamespace
-                    ? selectedNamespace
-                      ? `命名空间: ${selectedNamespace}`
-                      : "请选择命名空间"
-                    : `共 ${filteredItems.length} 个${resourceType}`}
-                </CardDescription>
+        {/* 加载状态 */}
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin mr-2" />
+            <span className="text-lg">加载中...</span>
+          </div>
+        ) : filteredItems.length === 0 ? (
+          /* 空状态 */
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-12">
+              {Icon && <Icon className="h-12 w-12 text-gray-400 mb-4" />}
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                {searchTerm ? `未找到匹配的${resourceType}` : `暂无${resourceType}`}
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-4">
+                {emptyText || `开始创建您的第一个${resourceType}`}
+              </p>
+              {createButton && createButton.canCreate !== false && (
+                <Button onClick={createButton.onClick}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  {createButton.label}
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        ) : (
+          /* 内容区域 */
+          <>
+            {/* 批量操作 */}
+            {(batchOperations.delete || batchOperations.restart || batchOperations.label) && (
+              <BatchOperations
+                items={filteredItems}
+                selectedItems={selectedItems}
+                onSelectionChange={setSelectedItems}
+                onBatchDelete={batchOperations.delete ? handleBatchDelete : undefined}
+                onBatchRestart={batchOperations.restart ? handleBatchRestart : undefined}
+                resourceType={resourceType}
+                supportedOperations={batchOperations}
+              />
+            )}
+
+            {/* 工具栏：搜索、筛选、视图切换 */}
+            <div className="flex items-center justify-between gap-4 mb-4">
+              <div className="flex items-center gap-4 flex-1">
+                <div className="relative flex-1 max-w-sm">
+                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder={searchPlaceholder || `搜索${resourceType}...`}
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-8"
+                  />
+                </div>
+                {statusFilter && (
+                  <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+                    <SelectTrigger className="w-[150px]">
+                      <SelectValue placeholder="状态筛选" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">全部状态</SelectItem>
+                      {statusFilter.options.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 {headerActions}
                 {createButton && createButton.canCreate !== false && (
-                  <Button onClick={createButton.onClick} disabled={requireNamespace && !selectedNamespace}>
+                  <Button onClick={createButton.onClick} disabled={namespaceSource === "api" && requireNamespace && !selectedNamespace}>
                     <Plus className="w-4 h-4 mr-2" />
                     {createButton.label}
                   </Button>
                 )}
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {/* 搜索和筛选 */}
-            <div className="flex items-center gap-4 mb-4">
-              <div className="relative flex-1 max-w-sm">
-                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder={searchPlaceholder || `搜索${resourceType}...`}
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-8"
-                />
-              </div>
-              {statusFilter && (
-                <Select value={selectedStatus} onValueChange={setSelectedStatus}>
-                  <SelectTrigger className="w-[150px]">
-                    <SelectValue placeholder="状态筛选" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">全部状态</SelectItem>
-                    {statusFilter.options.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
-
-            {/* 内容区域 */}
-            {isLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-8 h-8 animate-spin" />
-                <span className="ml-2">加载中...</span>
-              </div>
-            ) : filteredItems.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                {searchTerm
-                  ? `未找到匹配的${resourceType}`
-                  : emptyText || (requireNamespace && !selectedNamespace)
-                    ? `请选择命名空间查看${resourceType}`
-                    : `暂无${resourceType}`}
-              </div>
-            ) : (
-              <>
-                {/* 批量操作 */}
-                {(batchOperations.delete || batchOperations.restart || batchOperations.label) && (
-                  <BatchOperations
-                    items={filteredItems}
-                    selectedItems={selectedItems}
-                    onSelectionChange={setSelectedItems}
-                    onBatchDelete={batchOperations.delete ? handleBatchDelete : undefined}
-                    onBatchRestart={batchOperations.restart ? handleBatchRestart : undefined}
-                    resourceType={resourceType}
-                    supportedOperations={batchOperations}
-                  />
+                {/* 视图切换按钮 */}
+                {cardConfig && allowViewToggle && (
+                  <div className="flex items-center border rounded-md">
+                    <Button
+                      variant={viewMode === "card" ? "secondary" : "ghost"}
+                      size="sm"
+                      onClick={() => setViewMode("card")}
+                      className="rounded-r-none"
+                    >
+                      <LayoutGrid className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant={viewMode === "table" ? "secondary" : "ghost"}
+                      size="sm"
+                      onClick={() => setViewMode("table")}
+                      className="rounded-l-none"
+                    >
+                      <List className="h-4 w-4" />
+                    </Button>
+                  </div>
                 )}
+              </div>
+            </div>
 
-                {/* 表格 */}
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        {(batchOperations.delete || batchOperations.restart || batchOperations.label) && (
-                          <TableHead className="w-12"></TableHead>
-                        )}
-                        {columns.map((col) => (
-                          <TableHead key={col.key} className={col.className}>
-                            {col.header}
-                          </TableHead>
-                        ))}
-                        {actions.length > 0 && <TableHead>操作</TableHead>}
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredItems.map((item) => (
-                        <TableRow
-                          key={item.id}
-                          className={detailLink ? "cursor-pointer hover:bg-muted/50" : ""}
-                          onClick={detailLink ? () => router.push(detailLink(item)) : undefined}
-                        >
-                          {(batchOperations.delete || batchOperations.restart || batchOperations.label) && (
-                            <TableCell onClick={(e) => e.stopPropagation()}>
+            {/* 卡片视图 */}
+            {viewMode === "card" && cardConfig ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredItems.map((item) => {
+                  // 默认操作按钮渲染
+                  const defaultActionsNode = actions.length > 0 ? (
+                    <div className="flex justify-end space-x-2">
+                      {actions.map((action) => {
+                        const visible = action.visible ? action.visible(item) : true;
+                        const disabled = action.disabled ? action.disabled(item) : false;
+                        if (!visible) return null;
+
+                        const ActionIcon = action.icon;
+                        return (
+                          <Button
+                            key={action.key}
+                            variant={action.variant || "outline"}
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              action.onClick(item);
+                            }}
+                            disabled={disabled}
+                            className={action.danger ? "text-red-600 hover:text-red-700" : ""}
+                            title={action.tooltip}
+                          >
+                            <ActionIcon className="w-4 h-4" />
+                          </Button>
+                        );
+                      })}
+                    </div>
+                  ) : null;
+
+                  return (
+                    <Card
+                      key={item.id}
+                      className={`hover:shadow-lg transition-shadow ${detailLink ? "cursor-pointer" : ""}`}
+                      onClick={detailLink ? () => router.push(detailLink(item)) : undefined}
+                    >
+                      <CardHeader>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            {(batchOperations.delete || batchOperations.restart || batchOperations.label) && (
                               <ItemCheckbox
                                 itemId={item.id}
                                 isSelected={selectedItems.includes(item.id)}
@@ -573,48 +695,122 @@ export function ResourceList<T extends BaseResource>({
                                   }
                                 }}
                               />
-                            </TableCell>
+                            )}
+                            <CardTitle className="text-lg truncate max-w-[200px]" title={item.name}>
+                              {cardConfig.title(item)}
+                            </CardTitle>
+                          </div>
+                          {cardConfig.status && cardConfig.status(item)}
+                        </div>
+                        {cardConfig.subtitle && (
+                          <CardDescription>{cardConfig.subtitle(item)}</CardDescription>
+                        )}
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-4">
+                          {cardConfig.content(item)}
+                          {cardConfig.actions
+                            ? cardConfig.actions(item, defaultActionsNode)
+                            : defaultActionsNode}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            ) : (
+              /* 表格视图 */
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle>{resourceType}列表</CardTitle>
+                      <CardDescription>
+                        共 {filteredItems.length} 个{resourceType}
+                        {selectedNamespace && ` · 命名空间: ${selectedNamespace}`}
+                      </CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          {(batchOperations.delete || batchOperations.restart || batchOperations.label) && (
+                            <TableHead className="w-12"></TableHead>
                           )}
                           {columns.map((col) => (
-                            <TableCell key={col.key} className={col.className}>
-                              {col.render(item)}
-                            </TableCell>
+                            <TableHead key={col.key} className={col.className}>
+                              {col.header}
+                            </TableHead>
                           ))}
-                          {actions.length > 0 && (
-                            <TableCell onClick={(e) => e.stopPropagation()}>
-                              <div className="flex items-center gap-2">
-                                {actions.map((action) => {
-                                  const visible = action.visible ? action.visible(item) : true;
-                                  const disabled = action.disabled ? action.disabled(item) : false;
-                                  if (!visible) return null;
-
-                                  const ActionIcon = action.icon;
-                                  return (
-                                    <Button
-                                      key={action.key}
-                                      variant={action.variant || "outline"}
-                                      size="sm"
-                                      onClick={() => action.onClick(item)}
-                                      disabled={disabled}
-                                      className={action.danger ? "text-red-600 hover:text-red-700" : ""}
-                                      title={action.tooltip}
-                                    >
-                                      <ActionIcon className="w-4 h-4" />
-                                    </Button>
-                                  );
-                                })}
-                              </div>
-                            </TableCell>
-                          )}
+                          {actions.length > 0 && <TableHead>操作</TableHead>}
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredItems.map((item) => (
+                          <TableRow
+                            key={item.id}
+                            className={detailLink ? "cursor-pointer hover:bg-muted/50" : ""}
+                            onClick={detailLink ? () => router.push(detailLink(item)) : undefined}
+                          >
+                            {(batchOperations.delete || batchOperations.restart || batchOperations.label) && (
+                              <TableCell onClick={(e) => e.stopPropagation()}>
+                                <ItemCheckbox
+                                  itemId={item.id}
+                                  isSelected={selectedItems.includes(item.id)}
+                                  onChange={(itemId, checked) => {
+                                    if (checked) {
+                                      setSelectedItems([...selectedItems, itemId]);
+                                    } else {
+                                      setSelectedItems(selectedItems.filter((id) => id !== itemId));
+                                    }
+                                  }}
+                                />
+                              </TableCell>
+                            )}
+                            {columns.map((col) => (
+                              <TableCell key={col.key} className={col.className}>
+                                {col.render(item)}
+                              </TableCell>
+                            ))}
+                            {actions.length > 0 && (
+                              <TableCell onClick={(e) => e.stopPropagation()}>
+                                <div className="flex items-center gap-2">
+                                  {actions.map((action) => {
+                                    const visible = action.visible ? action.visible(item) : true;
+                                    const disabled = action.disabled ? action.disabled(item) : false;
+                                    if (!visible) return null;
+
+                                    const ActionIcon = action.icon;
+                                    return (
+                                      <Button
+                                        key={action.key}
+                                        variant={action.variant || "outline"}
+                                        size="sm"
+                                        onClick={() => action.onClick(item)}
+                                        disabled={disabled}
+                                        className={action.danger ? "text-red-600 hover:text-red-700" : ""}
+                                        title={action.tooltip}
+                                      >
+                                        <ActionIcon className="w-4 h-4" />
+                                      </Button>
+                                    );
+                                  })}
+                                </div>
+                              </TableCell>
+                            )}
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </CardContent>
+              </Card>
             )}
-          </CardContent>
-        </Card>
+          </>
+        )}
       </main>
 
       {/* 确认对话框 */}

@@ -1,66 +1,61 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Activity, Square, FileText, Loader2, RefreshCw, Wifi, WifiOff } from "lucide-react";
+import { Activity, FileText, Square, Wifi, WifiOff } from "lucide-react";
 import { useCluster } from "@/lib/cluster-context";
-import ClusterSelector from "@/components/ClusterSelector";
 import AuthGuard from "@/components/AuthGuard";
 import { toast } from "sonner";
-import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useResourceUpdates } from "@/hooks/useWebSocket";
 import { useTranslations } from "@/hooks/use-translations";
-import { BatchOperations, ItemCheckbox } from "@/components/BatchOperations";
-import { podApi } from "@/lib/api";
+import { podApi, Pod } from "@/lib/api";
+import {
+  ResourceList,
+  BaseResource,
+  ColumnDef,
+  ActionDef,
+  CardRenderConfig,
+  ApiResponse,
+  getStatusBadgeVariant,
+} from "@/components/ResourceList";
+import { useState } from "react";
 
-interface PodInfo {
-  id: string;
-  name: string;
-  namespace: string;
+// Pod 资源接口 - 扩展 BaseResource
+interface PodInfo extends BaseResource {
   status: string;
   node_name: string | null;
-  age: string;
   restarts: number;
   ready_containers: string;
-  cluster_name: string;
-  labels: Record<string, string>;
-  cluster_id: number;
+}
+
+// 转换 Pod 到 PodInfo (添加 BaseResource 必需字段)
+function transformPod(pod: Pod): PodInfo {
+  return {
+    ...pod,
+    id: `${pod.cluster_id}-${pod.namespace}-${pod.name}`,
+    node_name: pod.node || null,
+    ready_containers: pod.ready,
+  };
+}
+
+// 自定义 fetch 函数 - 转换 API 响应
+async function fetchPodsApi(clusterId: number, namespace?: string): Promise<ApiResponse<PodInfo[]>> {
+  const result = await podApi.getPods(clusterId, namespace);
+  if (result.data) {
+    return {
+      data: result.data.map(transformPod),
+    };
+  }
+  return { error: result.error };
 }
 
 function PodsPageContent() {
   const t = useTranslations("pods");
-  const tCommon = useTranslations("common");
-
-  const [pods, setPods] = useState<PodInfo[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [selectedNamespace, setSelectedNamespace] = useState<string>("");
-  const [availableNamespaces, setAvailableNamespaces] = useState<string[]>([]);
-  const [selectedPods, setSelectedPods] = useState<string[]>([]);
-  const [confirmDialog, setConfirmDialog] = useState({
-    open: false,
-    title: "",
-    description: "",
-    onConfirm: () => {},
-    showForceOption: false,
-    forceOption: false,
-  });
-  const router = useRouter();
-  const { activeCluster, isLoading: isClusterLoading, wsConnected } = useCluster();
+  const { wsConnected, activeCluster } = useCluster();
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // WebSocket实时更新
-  const { updates: podUpdates } = useResourceUpdates('pods');
-
-  useEffect(() => {
-    // 只有在集群加载完成后才获取数据
-    if (!isClusterLoading) {
-      fetchPods();
-    }
-  }, [selectedNamespace, isClusterLoading, activeCluster]);
+  const { updates: podUpdates } = useResourceUpdates("pods");
 
   // 监听WebSocket Pod更新
   useEffect(() => {
@@ -68,89 +63,125 @@ function PodsPageContent() {
       const latestUpdate = podUpdates[podUpdates.length - 1];
       const updateData = latestUpdate.data;
 
-      // 检查更新是否属于当前集群和命名空间
+      // 检查更新是否属于当前集群
       if (activeCluster && updateData.cluster_id === activeCluster.id) {
-        if (!selectedNamespace || updateData.namespace === selectedNamespace) {
-          console.log('Pod update received:', updateData);
-          // 短暂延迟后刷新数据，避免频繁请求
-          setTimeout(() => {
-            fetchPods();
-          }, 1000);
-        }
+        console.log("Pod update received:", updateData);
+        // 短暂延迟后刷新数据
+        setTimeout(() => {
+          setRefreshKey((prev) => prev + 1);
+        }, 1000);
       }
     }
-  }, [podUpdates, activeCluster, selectedNamespace]);
+  }, [podUpdates, activeCluster]);
 
-  const fetchPods = async () => {
-    try {
-      setIsLoading(true);
-      const result = await podApi.getPods(
-        activeCluster?.id,
-        selectedNamespace || undefined
-      );
+  // 列定义
+  const columns: ColumnDef<PodInfo>[] = [
+    {
+      key: "name",
+      header: "名称",
+      render: (item) => <span className="font-medium">{item.name}</span>,
+    },
+    {
+      key: "namespace",
+      header: "命名空间",
+      render: (item) => item.namespace,
+    },
+    {
+      key: "status",
+      header: "状态",
+      render: (item) => (
+        <Badge variant={getStatusBadgeVariant(item.status)}>{item.status}</Badge>
+      ),
+    },
+    {
+      key: "node",
+      header: "节点",
+      render: (item) => item.node_name || "未调度",
+    },
+    {
+      key: "containers",
+      header: "容器",
+      render: (item) => item.ready_containers,
+    },
+    {
+      key: "restarts",
+      header: "重启次数",
+      render: (item) => item.restarts,
+    },
+    {
+      key: "age",
+      header: "年龄",
+      render: (item) => item.age,
+    },
+  ];
 
-      if (result.data) {
-        // 为每个pod添加唯一ID
-        const podsWithIds = (result.data as unknown as PodInfo[]).map((pod: PodInfo) => ({
-          ...pod,
-          id: `${pod.cluster_id}-${pod.namespace}-${pod.name}`
-        }));
-        setPods(podsWithIds);
+  // 操作按钮定义
+  const actions: ActionDef<PodInfo>[] = [
+    {
+      key: "logs",
+      icon: FileText,
+      tooltip: "查看日志",
+      onClick: (item) => {
+        const logsUrl = `/pods/${item.namespace}/${item.name}/logs?cluster_id=${item.cluster_id}`;
+        window.open(logsUrl, "_blank", "width=800,height=600");
+      },
+    },
+    {
+      key: "delete",
+      icon: Square,
+      tooltip: "删除Pod",
+      variant: "destructive",
+      danger: true,
+      onClick: () => {
+        // 删除由 ResourceList 内部处理
+      },
+    },
+  ];
 
-        // 提取可用的命名空间列表
-        const namespaces = Array.from(new Set(podsWithIds.map((pod: PodInfo) => pod.namespace))) as string[];
-        setAvailableNamespaces(namespaces);
-      } else {
-        console.error("获取Pod列表失败");
-        setPods([]);
-        setAvailableNamespaces([]);
-      }
-    } catch (error) {
-      console.error("获取Pod列表出错:", error);
-      setPods([]);
-      setAvailableNamespaces([]);
-    } finally {
-      setIsLoading(false);
-    }
+  // 卡片视图配置
+  const cardConfig: CardRenderConfig<PodInfo> = {
+    title: (item) => item.name,
+    subtitle: (item) => `${item.cluster_name} • ${item.namespace} • ${item.age}`,
+    status: (item) => (
+      <Badge variant={getStatusBadgeVariant(item.status)}>{item.status}</Badge>
+    ),
+    content: (item) => (
+      <div className="space-y-2 text-sm">
+        <div className="flex justify-between">
+          <span className="text-gray-600 dark:text-gray-400">节点:</span>
+          <span>{item.node_name || "未调度"}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-gray-600 dark:text-gray-400">容器:</span>
+          <span>{item.ready_containers}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-gray-600 dark:text-gray-400">重启次数:</span>
+          <span>{item.restarts}</span>
+        </div>
+      </div>
+    ),
   };
 
-  const handleDeletePod = (pod: PodInfo) => {
-    setConfirmDialog({
-      open: true,
-      title: "删除Pod",
-      description: `确定要删除Pod "${pod.name}" 吗？此操作不可撤销。`,
-      onConfirm: () => performDeletePod(pod),
-      showForceOption: true,
-      forceOption: false,
-    });
-  };
+  // WebSocket 状态 Badge
+  const statusBadge = wsConnected ? (
+    <Badge variant="default" className="bg-green-500 hover:bg-green-600">
+      <Wifi className="h-3 w-3 mr-1" />
+      {t("realTimeConnected")}
+    </Badge>
+  ) : (
+    <Badge variant="secondary">
+      <WifiOff className="h-3 w-3 mr-1" />
+      {t("realTimeDisconnected")}
+    </Badge>
+  );
 
-  const handleForceOptionChange = (checked: boolean) => {
-    setConfirmDialog(prev => ({ ...prev, forceOption: checked }));
-  };
-
-  const performDeletePod = async (pod: PodInfo) => {
-    try {
-      const result = await podApi.deletePod(pod.cluster_id, pod.namespace, pod.name);
-
-      if (!result.error) {
-        const deleteType = confirmDialog.forceOption ? "强制" : "正常";
-        toast.success(`Pod${deleteType}删除成功`);
-        fetchPods();
-      } else {
-        toast.error("删除Pod失败");
-      }
-    } catch (error) {
-      console.error("删除Pod出错:", error);
-      toast.error("删除Pod时发生错误");
-    }
-  };
-
+  // 批量删除处理
   const handleBatchDelete = async (selectedPodsData: PodInfo[]) => {
     try {
       const result = await podApi.batchDeletePods(
         selectedPodsData[0]?.cluster_id,
-        selectedPodsData.map(pod => ({ namespace: pod.namespace, name: pod.name }))
+        selectedPodsData.map((pod) => ({ namespace: pod.namespace, name: pod.name }))
       );
 
       if (result.data) {
@@ -160,7 +191,6 @@ function PodsPageContent() {
         } else {
           toast.success(`批量删除成功，共删除 ${data.success_count} 个Pod`);
         }
-        fetchPods();
       } else {
         toast.error("批量删除Pod失败");
       }
@@ -171,11 +201,12 @@ function PodsPageContent() {
     }
   };
 
+  // 批量重启处理
   const handleBatchRestart = async (selectedPodsData: PodInfo[]) => {
     try {
       const result = await podApi.batchRestartPods(
         selectedPodsData[0]?.cluster_id,
-        selectedPodsData.map(pod => ({ namespace: pod.namespace, name: pod.name }))
+        selectedPodsData.map((pod) => ({ namespace: pod.namespace, name: pod.name }))
       );
 
       if (result.data) {
@@ -185,7 +216,6 @@ function PodsPageContent() {
         } else {
           toast.success(`批量重启成功，共重启 ${data.success_count} 个Pod`);
         }
-        fetchPods();
       } else {
         toast.error("批量重启Pod失败");
       }
@@ -196,235 +226,50 @@ function PodsPageContent() {
     }
   };
 
-  const handleViewLogs = (pod: PodInfo) => {
-    // 打开新窗口查看日志
-    const logsUrl = `/pods/${pod.namespace}/${pod.name}/logs?cluster_id=${pod.cluster_id}`;
-    window.open(logsUrl, '_blank', 'width=800,height=600');
-  };
-
-  const getStatusBadgeVariant = (status: string) => {
-    switch (status) {
-      case "Running":
-        return "default";
-      case "Pending":
-        return "secondary";
-      case "Succeeded":
-        return "default";
-      case "Failed":
-        return "destructive";
-      case "CrashLoopBackOff":
-        return "destructive";
-      default:
-        return "outline";
-    }
-  };
-
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="bg-card shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
-              <Link href="/" className="flex items-center">
-                <ArrowLeft className="h-5 w-5 mr-2" />
-                <span className="text-gray-600 dark:text-gray-400">返回仪表板</span>
-              </Link>
-            </div>
-            <div className="flex items-center space-x-4">
-              <ClusterSelector />
-              <Select value={selectedNamespace || "all"} onValueChange={(value) => setSelectedNamespace(value === "all" ? "" : value)}>
-                <SelectTrigger className="w-48">
-                  <SelectValue placeholder={t("selectNamespace")} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">{t("allNamespaces")}</SelectItem>
-                  {availableNamespaces.map((ns) => (
-                    <SelectItem key={ns} value={ns}>
-                      {ns}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button variant="outline" onClick={fetchPods} disabled={isLoading}>
-                {isLoading ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                )}
-                {t("refresh")}
-              </Button>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-3xl font-bold text-gray-900 dark:text-white">
-                {t("title")}
-              </h2>
-              <p className="mt-2 text-gray-600 dark:text-gray-400">
-                {t("description")}
-              </p>
-            </div>
-            <div className="flex items-center space-x-2">
-              {wsConnected ? (
-                <Badge variant="default" className="bg-green-500 hover:bg-green-600">
-                  <Wifi className="h-3 w-3 mr-1" />
-                  {t("realTimeConnected")}
-                </Badge>
-              ) : (
-                <Badge variant="secondary">
-                  <WifiOff className="h-3 w-3 mr-1" />
-                  {t("realTimeDisconnected")}
-                </Badge>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin mr-2" />
-            <span className="text-lg">{tCommon("loading")}</span>
-          </div>
-        ) : pods.length === 0 ? (
-          <Card>
-            <CardContent className="flex flex-col items-center justify-center py-12">
-              <Activity className="h-12 w-12 text-gray-400 mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                {t("noPods")}
-              </h3>
-              <p className="text-gray-600 dark:text-gray-400">
-                {t("noPodsDescription")}
-              </p>
-            </CardContent>
-          </Card>
-        ) : (
-          <>
-            <BatchOperations
-              items={pods}
-              selectedItems={selectedPods}
-              onSelectionChange={setSelectedPods}
-              onBatchDelete={handleBatchDelete}
-              onBatchRestart={handleBatchRestart}
-              resourceType="Pod"
-              supportedOperations={{
-                delete: true,
-                restart: true,
-                label: false,
-              }}
-            />
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {pods.map((pod) => (
-              <Card
-                key={`${pod.cluster_id}-${pod.namespace}-${pod.name}`}
-                className="hover:shadow-lg transition-shadow cursor-pointer"
-                onClick={() => {
-                  console.log("Pod clicked:", pod);
-                  console.log("Cluster ID:", pod.cluster_id);
-                  if (pod.cluster_id == null || pod.cluster_id === undefined) {
-                    toast.error("Pod缺少集群ID，无法查看详情");
-                    return;
-                  }
-                  router.push(`/pods/${pod.namespace}/${pod.name}?cluster_id=${pod.cluster_id}`);
-                }}
-              >
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <ItemCheckbox
-                        itemId={pod.id}
-                        isSelected={selectedPods.includes(pod.id)}
-                        onChange={(itemId, checked) => {
-                          if (checked) {
-                            setSelectedPods([...selectedPods, itemId]);
-                          } else {
-                            setSelectedPods(selectedPods.filter(id => id !== itemId));
-                          }
-                        }}
-                      />
-                      <CardTitle className="text-lg truncate max-w-[200px] overflow-hidden text-ellipsis whitespace-nowrap" title={pod.name}>
-                        {pod.name}
-                      </CardTitle>
-                    </div>
-                    <Badge variant={getStatusBadgeVariant(pod.status)}>
-                      {pod.status}
-                    </Badge>
-                  </div>
-                  <CardDescription>
-                    {pod.cluster_name} • {pod.namespace} • {pod.age}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {/* Pod信息 */}
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-gray-600 dark:text-gray-400">节点:</span>
-                        <span>{pod.node_name || "未调度"}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600 dark:text-gray-400">容器:</span>
-                        <span>{pod.ready_containers}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600 dark:text-gray-400">重启次数:</span>
-                        <span>{pod.restarts}</span>
-                      </div>
-                    </div>
-
-                    {/* 操作按钮 */}
-                    <div className="flex justify-end space-x-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleViewLogs(pod);
-                        }}
-                        title="查看日志"
-                      >
-                        <FileText className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeletePod(pod);
-                        }}
-                        title="删除Pod"
-                      >
-                        <Square className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-          </>
-        )}
-      </main>
-
-      <ConfirmDialog
-        open={confirmDialog.open}
-        onOpenChange={(open) => setConfirmDialog(prev => ({ ...prev, open }))}
-        title={confirmDialog.title}
-        description={confirmDialog.description}
-        onConfirm={confirmDialog.onConfirm}
-        variant="destructive"
-        showForceOption={confirmDialog.showForceOption}
-        forceOption={confirmDialog.forceOption}
-        onForceOptionChange={handleForceOptionChange}
-      />
-    </div>
+    <ResourceList<PodInfo>
+      key={refreshKey}
+      resourceType="Pod"
+      title={t("title")}
+      description={t("description")}
+      icon={Activity}
+      columns={columns}
+      actions={actions}
+      fetchFn={fetchPodsApi}
+      deleteFn={(clusterId, namespace, name) => podApi.deletePod(clusterId, namespace, name)}
+      batchDeleteFn={handleBatchDelete}
+      batchRestartFn={handleBatchRestart}
+      batchOperations={{
+        delete: true,
+        restart: true,
+        label: false,
+      }}
+      searchFields={["name", "namespace", "status", "node_name"]}
+      statusFilter={{
+        field: "status",
+        options: [
+          { value: "Running", label: "Running" },
+          { value: "Pending", label: "Pending" },
+          { value: "Succeeded", label: "Succeeded" },
+          { value: "Failed", label: "Failed" },
+          { value: "CrashLoopBackOff", label: "CrashLoopBackOff" },
+        ],
+      }}
+      requireNamespace={false}
+      namespaceSource="data"
+      showNamespaceInHeader={true}
+      defaultViewMode="card"
+      cardConfig={cardConfig}
+      allowViewToggle={true}
+      statusBadge={statusBadge}
+      detailLink={(item) => `/pods/${item.namespace}/${item.name}?cluster_id=${item.cluster_id}`}
+      deleteConfirm={{
+        title: "删除Pod",
+        description: (item) => `确定要删除Pod "${item.name}" 吗？此操作不可撤销。`,
+        showForceOption: true,
+      }}
+      emptyText={t("noPodsDescription")}
+    />
   );
 }
 
