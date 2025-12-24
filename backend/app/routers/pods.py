@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from ..database import get_db
 from ..models import Cluster, User
-from ..auth import get_current_user, require_namespace_access, require_cluster_access
+from ..auth import get_current_user, require_namespace_access, require_cluster_access, require_no_viewer
 from ..services.k8s import get_pods_page, get_pod_details, get_pod_logs, restart_pod, delete_pod, batch_delete_pods, batch_restart_pods
 from ..audit import log_action
 from pydantic import BaseModel
@@ -81,7 +81,7 @@ async def get_pods(
   limit: int = Query(200, description="每页数量", ge=1, le=1000),
   continue_token: Optional[str] = Query(None, description="分页游标"),
   db: Session = Depends(get_db),
-  current_user: dict = Depends(get_current_user),
+  current_user: User = Depends(require_cluster_access("read")),
 ):
   try:
     cluster = (
@@ -308,7 +308,7 @@ async def batch_delete_pods_endpoint(
   request_data: BatchOperationRequest,
   request: Request = None,
   db: Session = Depends(get_db),
-  current_user: dict = Depends(get_current_user),
+  current_user: User = Depends(require_no_viewer),
 ):
   cluster = None
   try:
@@ -377,7 +377,7 @@ async def batch_restart_pods_endpoint(
   request_data: BatchOperationRequest,
   request: Request = None,
   db: Session = Depends(get_db),
-  current_user: dict = Depends(get_current_user),
+  current_user: User = Depends(require_no_viewer),
 ):
   cluster = None
   try:

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import Cluster
-from ..auth import get_current_user
+from ..auth import require_cluster_access, require_cluster_management
 from ..services.k8s import (
     get_cluster_metrics,
     get_node_metrics,
@@ -62,7 +62,7 @@ class NamespaceMetrics(BaseModel):
 async def get_cluster_metrics_endpoint(
     cluster_id: int,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user=Depends(require_cluster_access("read"))
 ):
     """获取集群整体资源使用指标"""
     try:
@@ -87,7 +87,7 @@ async def get_cluster_metrics_endpoint(
 async def get_nodes_metrics_endpoint(
     cluster_id: int,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user=Depends(require_cluster_access("read"))
 ):
     """获取集群所有节点的资源使用指标"""
     try:
@@ -113,7 +113,7 @@ async def get_pods_metrics_endpoint(
     cluster_id: int,
     namespace: Optional[str] = Query(None, description="命名空间过滤"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user=Depends(require_cluster_access("read"))
 ):
     """获取Pod资源使用指标"""
     try:
@@ -138,7 +138,7 @@ async def get_pods_metrics_endpoint(
 async def get_namespaces_metrics_endpoint(
     cluster_id: int,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user=Depends(require_cluster_access("read"))
 ):
     """获取命名空间级别的资源使用汇总"""
     try:
@@ -163,7 +163,7 @@ async def get_namespaces_metrics_endpoint(
 async def check_metrics_server_health(
     cluster_id: int,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user=Depends(require_cluster_access("read"))
 ):
     """检查metrics-server是否可用"""
     try:
@@ -195,7 +195,7 @@ async def install_metrics_server_endpoint(
     cluster_id: int,
     request: MetricsServerInstallRequest,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user=Depends(require_cluster_management)
 ):
     """安装metrics-server到指定集群"""
     try:

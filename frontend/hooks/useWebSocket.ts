@@ -1,6 +1,5 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
-import { useAuth } from '../lib/auth-context';
-import { useCluster } from '../lib/cluster-context';
+import { useEffect, useRef, useState, useCallback } from "react";
+import { useAuthStore } from "@/lib/store/auth-store";
 
 export interface WebSocketMessage {
   type: string;
@@ -50,22 +49,18 @@ const getWebSocketBaseUrl = (): string => {
 };
 
 export function useWebSocket(): WebSocketHookReturn {
-  const [token, setToken] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const connectingRef = useRef(false);
   const reconnectAttempts = useRef(0);
   const maxReconnectAttempts = 5;
   const reconnectDelay = 3000; // 3秒
 
-  // 获取token
-  useEffect(() => {
-    const storedToken = localStorage.getItem('token');
-    setToken(storedToken);
-  }, []);
+  const getValidAccessToken = useAuthStore((s) => s.getValidAccessToken);
 
   // 消息处理器
   const messageHandlers = useRef<Map<string, (message: WebSocketMessage) => void>>(new Map());
@@ -81,11 +76,21 @@ export function useWebSocket(): WebSocketHookReturn {
   }, []);
 
   // 连接WebSocket
-  const connect = useCallback(() => {
-    if (!token || isConnecting) return;
+  const connect = useCallback(async () => {
+    if (connectingRef.current) return;
+    connectingRef.current = true;
 
     setIsConnecting(true);
     setError(null);
+
+    // 连接前确保 access token 有效（即将过期则先刷新）
+    const token = await getValidAccessToken({ skewSeconds: 60 });
+    if (!token) {
+      setIsConnecting(false);
+      connectingRef.current = false;
+      setError("Authentication required. Please login again.");
+      return;
+    }
 
     try {
       const wsBase = getWebSocketBaseUrl();
@@ -93,9 +98,10 @@ export function useWebSocket(): WebSocketHookReturn {
       const ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {
-        console.log('WebSocket connected');
+        console.log("WebSocket connected");
         setIsConnected(true);
         setIsConnecting(false);
+        connectingRef.current = false;
         setError(null);
         reconnectAttempts.current = 0;
       };
@@ -112,52 +118,55 @@ export function useWebSocket(): WebSocketHookReturn {
 
           // 处理特殊消息类型
           switch (message.type) {
-            case 'ping':
+            case "ping":
               // 响应心跳
-              sendMessage({ type: 'pong', data: { timestamp: new Date().toISOString() } });
+              sendMessage({ type: "pong", data: { timestamp: new Date().toISOString() } });
               break;
-            case 'status':
-              console.log('WebSocket status:', message.data);
+            case "status":
+              console.log("WebSocket status:", message.data);
               break;
-            case 'error':
-              console.error('WebSocket error:', message.data);
-              setError(message.data.message || 'WebSocket error');
+            case "error":
+              console.error("WebSocket error:", message.data);
+              setError(message.data.message || "WebSocket error");
               break;
-            case 'subscription_ack':
-              console.log('Subscription acknowledged:', message.data);
+            case "subscription_ack":
+              console.log("Subscription acknowledged:", message.data);
               break;
           }
         } catch (err) {
-          console.error('Failed to parse WebSocket message:', err);
+          console.error("Failed to parse WebSocket message:", err);
         }
       };
 
       ws.onclose = (event) => {
-        console.log('WebSocket disconnected:', event.code, event.reason);
+        console.log("WebSocket disconnected:", event.code, event.reason);
         setIsConnected(false);
         setIsConnecting(false);
+        connectingRef.current = false;
         wsRef.current = null;
 
         // 如果不是正常关闭，尝试重连
-        if (event.code !== 1000 && event.code !== 1008) {
+        if (event.code !== 1000) {
           scheduleReconnect();
         }
       };
 
       ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
-        setError('WebSocket connection error');
+        console.error("WebSocket error:", error);
+        setError("WebSocket connection error");
         setIsConnecting(false);
+        connectingRef.current = false;
       };
 
       wsRef.current = ws;
     } catch (err) {
-      console.error('Failed to create WebSocket connection:', err);
-      setError('Failed to create WebSocket connection');
+      console.error("Failed to create WebSocket connection:", err);
+      setError("Failed to create WebSocket connection");
       setIsConnecting(false);
+      connectingRef.current = false;
       scheduleReconnect();
     }
-  }, [token]);
+  }, [getValidAccessToken]);
 
   // 断开连接
   const disconnect = useCallback(() => {
@@ -167,12 +176,13 @@ export function useWebSocket(): WebSocketHookReturn {
     }
 
     if (wsRef.current) {
-      wsRef.current.close(1000, 'Client disconnect');
+      wsRef.current.close(1000, "Client disconnect");
       wsRef.current = null;
     }
 
     setIsConnected(false);
     setIsConnecting(false);
+    connectingRef.current = false;
     reconnectAttempts.current = 0;
   }, []);
 
@@ -189,16 +199,16 @@ export function useWebSocket(): WebSocketHookReturn {
     console.log(`Scheduling reconnect attempt ${reconnectAttempts.current} in ${delay}ms`);
 
     reconnectTimeoutRef.current = setTimeout(() => {
-      connect();
+      void connect();
     }, delay);
   }, [connect]);
 
   // 手动重连
   const reconnect = useCallback(() => {
-    console.log('Manual reconnect requested');
+    console.log("Manual reconnect requested");
     disconnect();
     reconnectAttempts.current = 0;
-    setTimeout(() => connect(), 100);
+    setTimeout(() => void connect(), 100);
   }, [disconnect, connect]);
 
   // 发送消息
@@ -207,20 +217,20 @@ export function useWebSocket(): WebSocketHookReturn {
       try {
         wsRef.current.send(JSON.stringify(message));
       } catch (err) {
-        console.error('Failed to send WebSocket message:', err);
-        setError('Failed to send message');
+        console.error("Failed to send WebSocket message:", err);
+        setError("Failed to send message");
       }
     } else {
-      console.warn('WebSocket is not connected, cannot send message');
+      console.warn("WebSocket is not connected, cannot send message");
     }
   }, []);
 
   // 订阅资源更新
   const subscribe = useCallback((options: SubscriptionOptions) => {
     sendMessage({
-      type: 'subscription',
+      type: "subscription",
       data: {
-        action: 'subscribe',
+        action: "subscribe",
         ...options
       }
     });
@@ -229,22 +239,25 @@ export function useWebSocket(): WebSocketHookReturn {
   // 取消订阅
   const unsubscribe = useCallback((options: SubscriptionOptions) => {
     sendMessage({
-      type: 'subscription',
+      type: "subscription",
       data: {
-        action: 'unsubscribe',
+        action: "unsubscribe",
         ...options
       }
     });
   }, [sendMessage]);
 
+  const storeToken = useAuthStore((s) => s.token);
+
   // 监听认证状态变化
   useEffect(() => {
-    if (token && !isConnected && !isConnecting) {
-      connect();
-    } else if (!token && isConnected) {
+    const hasToken = storeToken ?? (typeof window !== "undefined" ? localStorage.getItem("token") : null);
+    if (hasToken && !isConnected && !isConnecting) {
+      void connect();
+    } else if (!hasToken && isConnected) {
       disconnect();
     }
-  }, [token, isConnected, isConnecting, connect, disconnect]);
+  }, [storeToken, isConnected, isConnecting, connect, disconnect]);
 
 
   // 清理副作用
@@ -275,7 +288,7 @@ export function useResourceUpdates(resourceType?: string) {
 
   useEffect(() => {
     const handler = (message: WebSocketMessage) => {
-      if (message.type === 'resource_update') {
+      if (message.type === "resource_update") {
         // 如果指定了资源类型，只处理匹配的更新
         if (!resourceType || message.data.resource_type === resourceType) {
           setUpdates(prev => [...prev.slice(-49), message]); // 保留最近50条更新
@@ -283,10 +296,10 @@ export function useResourceUpdates(resourceType?: string) {
       }
     };
 
-    addMessageHandler('resource_update', handler);
+    addMessageHandler("resource_update", handler);
 
     return () => {
-      removeMessageHandler('resource_update');
+      removeMessageHandler("resource_update");
     };
   }, [resourceType, addMessageHandler, removeMessageHandler]);
 

@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from ..database import get_db
 from ..models import Cluster, AuditLog, User
-from ..auth import get_current_user, require_resource_management
+from ..auth import require_read_only, require_resource_management, check_cluster_access, get_viewer_allowed_cluster_ids
 from ..services.k8s import (
     get_namespace_services, create_service, delete_service,
     get_service_details, update_service, get_service_yaml, update_service_yaml
@@ -61,11 +61,14 @@ async def get_services(
     cluster_id: Optional[int] = Query(None, description="集群ID，不传则获取所有活跃集群"),
     namespace: Optional[str] = Query(None, description="命名空间名称"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_resource_management)
+    current_user: User = Depends(require_read_only)
 ):
     """获取服务列表"""
     try:
         if cluster_id:
+            if getattr(current_user, "role", None) == "viewer":
+                if not check_cluster_access(db, current_user, cluster_id, required_level="read"):
+                    raise HTTPException(status_code=403, detail="需要集群 read 权限")
             # 获取特定集群的服务
             cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
             if not cluster:
@@ -80,7 +83,13 @@ async def get_services(
                 raise HTTPException(status_code=400, detail="必须指定命名空间")
         else:
             # 获取所有活跃集群的服务
-            clusters = db.query(Cluster).filter(Cluster.is_active == True).all()
+            if getattr(current_user, "role", None) == "viewer":
+                allowed_ids = get_viewer_allowed_cluster_ids(db, current_user)
+                if not allowed_ids:
+                    return []
+                clusters = db.query(Cluster).filter(Cluster.is_active == True, Cluster.id.in_(allowed_ids)).all()
+            else:
+                clusters = db.query(Cluster).filter(Cluster.is_active == True).all()
             services = []
             for cluster in clusters:
                 if namespace:
@@ -99,10 +108,13 @@ async def get_service(
     service_name: str,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_resource_management)
+    current_user: User = Depends(require_read_only)
 ):
     """获取服务详细信息"""
     try:
+        if getattr(current_user, "role", None) == "viewer":
+            if not check_cluster_access(db, current_user, cluster_id, required_level="read"):
+                raise HTTPException(status_code=403, detail="需要集群 read 权限")
         cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
         if not cluster:
             raise HTTPException(status_code=404, detail="集群不存在或未激活")
@@ -280,10 +292,13 @@ async def get_service_yaml_config(
     service_name: str,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_resource_management)
+    current_user: User = Depends(require_read_only)
 ):
     """获取服务的YAML配置"""
     try:
+        if getattr(current_user, "role", None) == "viewer":
+            if not check_cluster_access(db, current_user, cluster_id, required_level="read"):
+                raise HTTPException(status_code=403, detail="需要集群 read 权限")
         cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
         if not cluster:
             raise HTTPException(status_code=404, detail="集群不存在或未激活")

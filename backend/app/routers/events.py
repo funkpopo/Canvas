@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from ..database import get_db
 from ..models import Cluster
-from ..auth import get_current_user
+from ..auth import require_cluster_access
 from ..services.k8s import get_cluster_events
 from ..core.logging import get_logger
 from pydantic import BaseModel
@@ -43,7 +43,7 @@ async def get_events(
     limit: int = Query(200, description="每页数量", ge=1, le=1000),
     continue_token: Optional[str] = Query(None, description="分页游标"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user=Depends(require_cluster_access("read")),
 ):
     try:
         cluster = (

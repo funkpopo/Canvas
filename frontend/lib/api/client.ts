@@ -53,6 +53,18 @@ export class ApiClient {
     }
 
     const errObj = (maybe as any).error as any;
+    const details = errObj && typeof errObj === "object" ? (errObj.details as any) : null;
+
+    // FastAPI 422 validation errors: {"details": {"errors": [{loc,msg,type}, ...]}}
+    const errorsArr = details && typeof details === "object" ? (details.errors as any) : null;
+    if (Array.isArray(errorsArr) && errorsArr.length > 0) {
+      const first = errorsArr[0] as any;
+      const loc = Array.isArray(first?.loc) ? first.loc : [];
+      const field = loc.length >= 2 ? String(loc[loc.length - 1]) : "body";
+      const msg = typeof first?.msg === "string" ? first.msg : "Validation error";
+      return { ok: false, message: `${field}: ${msg}` };
+    }
+
     const msg =
       (errObj && typeof errObj === "object" && (errObj.message as unknown)) ||
       (maybe as any).message ||

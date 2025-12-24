@@ -73,6 +73,13 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class UserRegister(BaseModel):
+    """用户自助注册（不允许指定role）"""
+    username: str = Field(..., min_length=3, max_length=50, description="用户名")
+    email: Optional[EmailStr] = None
+    password: str = Field(..., min_length=6, description="密码至少6位")
+
+
 class ClusterBase(BaseModel):
     name: str
     endpoint: str

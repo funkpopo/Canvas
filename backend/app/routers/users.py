@@ -21,6 +21,7 @@ def require_admin(current_user: models.User = Depends(get_current_user)):
     return current_user
 
 
+@router.get("", response_model=schemas.UserListResponse, include_in_schema=False)
 @router.get("/", response_model=schemas.UserListResponse)
 async def get_users(
     page: int = Query(1, ge=1),
@@ -70,6 +71,7 @@ async def get_user(
     return user
 
 
+@router.post("", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED, include_in_schema=False)
 @router.post("/", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED)
 async def create_user(
     user_data: schemas.UserCreate,
@@ -78,6 +80,12 @@ async def create_user(
     current_user: models.User = Depends(require_user_management)
 ):
     """创建新用户（需要管理员权限）"""
+    if (user_data.username or "").strip().lower() == "admin":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="用户名 admin 已被保留"
+        )
+
     existing_user = db.query(models.User).filter(models.User.username == user_data.username).first()
     if existing_user:
         raise HTTPException(
@@ -133,6 +141,19 @@ async def update_user(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="用户不存在"
         )
+
+    # 固定系统管理员账号约束：admin 用户不可删除/停用/降权
+    if user.username == "admin":
+        if user_data.role is not None and user_data.role != "admin":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="admin 账号的角色不可修改"
+            )
+        if user_data.is_active is not None and user_data.is_active is False:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="admin 账号不可停用"
+            )
     
     if user.role == "admin" and user_data.role and user_data.role != "admin":
         admin_count = db.query(func.count(models.User.id)).filter(
@@ -200,6 +221,12 @@ async def delete_user(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="用户不存在"
+        )
+
+    if user.username == "admin":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="admin 账号不可删除"
         )
     
     if user.id == current_user.id:

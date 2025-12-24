@@ -171,6 +171,12 @@ export default function Home() {
               </div>
               <LanguageToggle />
               <ThemeToggle />
+              <Button variant="outline" asChild>
+                <Link href="/user-center">
+                  <UserIcon className="h-4 w-4 mr-2" />
+                  用户中心
+                </Link>
+              </Button>
               <Button variant="outline" onClick={logout}>
                 <LogOut className="h-4 w-4 mr-2" />
                 {t("logout")}

@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from ..database import get_db
 from ..models import Cluster, AuditLog, User
-from ..auth import get_current_user
+from ..auth import require_read_only, require_resource_management, check_cluster_access, get_viewer_allowed_cluster_ids
 from ..services.k8s import (
     get_namespace_network_policies, get_network_policy_details, create_network_policy, update_network_policy, delete_network_policy
 )
@@ -63,11 +63,14 @@ async def get_network_policies(
     cluster_id: Optional[int] = Query(None, description="集群ID，不传则获取所有活跃集群"),
     namespace: Optional[str] = Query(None, description="命名空间名称"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_read_only)
 ):
     """获取Network Policy列表"""
     try:
         if cluster_id:
+            if getattr(current_user, "role", None) == "viewer":
+                if not check_cluster_access(db, current_user, cluster_id, required_level="read"):
+                    raise HTTPException(status_code=403, detail="需要集群 read 权限")
             # 获取特定集群的Network Policies
             cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
             if not cluster:
@@ -82,7 +85,13 @@ async def get_network_policies(
                 raise HTTPException(status_code=400, detail="必须指定命名空间")
         else:
             # 获取所有活跃集群的Network Policies
-            clusters = db.query(Cluster).filter(Cluster.is_active == True).all()
+            if getattr(current_user, "role", None) == "viewer":
+                allowed_ids = get_viewer_allowed_cluster_ids(db, current_user)
+                if not allowed_ids:
+                    return []
+                clusters = db.query(Cluster).filter(Cluster.is_active == True, Cluster.id.in_(allowed_ids)).all()
+            else:
+                clusters = db.query(Cluster).filter(Cluster.is_active == True).all()
             policies = []
             for cluster in clusters:
                 if namespace:
@@ -101,10 +110,13 @@ async def get_network_policy(
     policy_name: str,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_read_only)
 ):
     """获取Network Policy详细信息"""
     try:
+        if getattr(current_user, "role", None) == "viewer":
+            if not check_cluster_access(db, current_user, cluster_id, required_level="read"):
+                raise HTTPException(status_code=403, detail="需要集群 read 权限")
         cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
         if not cluster:
             raise HTTPException(status_code=404, detail="集群不存在或未激活")
@@ -126,7 +138,7 @@ async def create_new_network_policy(
     policy_data: NetworkPolicyCreate,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_resource_management)
 ):
     """创建Network Policy"""
     try:
@@ -177,7 +189,7 @@ async def update_existing_network_policy(
     updates: NetworkPolicyUpdate,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_resource_management)
 ):
     """更新Network Policy"""
     try:
@@ -231,7 +243,7 @@ async def delete_existing_network_policy(
     policy_name: str,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_resource_management)
 ):
     """删除Network Policy"""
     try:

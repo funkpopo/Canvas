@@ -7,7 +7,7 @@ from typing import List
 from .. import database, models
 from ..auth import get_current_user
 from ..schemas import (
-    Token, LoginRequest, RefreshTokenRequest,
+    Token, LoginRequest, RefreshTokenRequest, UserRegister, UserResponse,
     UserSessionResponse, UserSessionListResponse, SessionRevokeRequest,
     APIKeyCreate, APIKeyResponse, APIKeyCreateResponse, APIKeyListResponse
 )
@@ -16,6 +16,43 @@ from ..core.config import settings
 
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+
+@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+async def register(
+    register_data: UserRegister,
+    db: Session = Depends(database.get_db),
+):
+    """用户注册（默认创建为 viewer，只读；管理员可在用户中心调整权限）"""
+    username = (register_data.username or "").strip()
+    if not username:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="用户名不能为空")
+
+    if username.lower() == "admin":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="用户名 admin 已被保留")
+
+    existing_user = db.query(models.User).filter(models.User.username == username).first()
+    if existing_user:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="用户名已存在")
+
+    if register_data.email:
+        existing_email = db.query(models.User).filter(models.User.email == register_data.email).first()
+        if existing_email:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="邮箱已被使用")
+
+    hashed_password = models.User.get_password_hash(register_data.password)
+    new_user = models.User(
+        username=username,
+        email=register_data.email,
+        hashed_password=hashed_password,
+        role="viewer",
+        is_active=True,
+    )
+
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    return new_user
 
 
 @router.post("/login", response_model=Token)

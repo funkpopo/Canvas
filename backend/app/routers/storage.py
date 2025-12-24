@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from ..database import get_db
 from ..models import Cluster, AuditLog, User
-from ..auth import get_current_user
+from ..auth import require_read_only, require_resource_management, check_cluster_access, get_viewer_allowed_cluster_ids
 from ..services.k8s import (
     get_storage_classes, create_storage_class, delete_storage_class,
     get_persistent_volumes, get_pv_details, create_pv, delete_pv,
@@ -93,17 +93,26 @@ class FileItem(BaseModel):
 async def get_storage_classes_list(
     cluster_id: Optional[int] = Query(None, description="集群ID，不传则获取所有活跃集群"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_read_only)
 ):
     """获取存储类列表"""
     try:
         if cluster_id:
+            if getattr(current_user, "role", None) == "viewer":
+                if not check_cluster_access(db, current_user, cluster_id, required_level="read"):
+                    raise HTTPException(status_code=403, detail="需要集群 read 权限")
             cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
             if not cluster:
                 raise HTTPException(status_code=404, detail="集群不存在或未激活")
             clusters = [cluster]
         else:
-            clusters = db.query(Cluster).filter(Cluster.is_active == True).all()
+            if getattr(current_user, "role", None) == "viewer":
+                allowed_ids = get_viewer_allowed_cluster_ids(db, current_user)
+                if not allowed_ids:
+                    return []
+                clusters = db.query(Cluster).filter(Cluster.is_active == True, Cluster.id.in_(allowed_ids)).all()
+            else:
+                clusters = db.query(Cluster).filter(Cluster.is_active == True).all()
 
         all_storage_classes = []
         for cluster in clusters:
@@ -127,7 +136,7 @@ async def create_storage_class_endpoint(
     storage_class: StorageClassCreate,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_resource_management)
 ):
     """创建存储类"""
     try:
@@ -184,7 +193,7 @@ async def delete_storage_class_endpoint(
     storage_class_name: str,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_resource_management)
 ):
     """删除存储类"""
     try:
@@ -209,17 +218,26 @@ async def delete_storage_class_endpoint(
 async def get_persistent_volumes_list(
     cluster_id: Optional[int] = Query(None, description="集群ID，不传则获取所有活跃集群"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_read_only)
 ):
     """获取持久卷列表"""
     try:
         if cluster_id:
+            if getattr(current_user, "role", None) == "viewer":
+                if not check_cluster_access(db, current_user, cluster_id, required_level="read"):
+                    raise HTTPException(status_code=403, detail="需要集群 read 权限")
             cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
             if not cluster:
                 raise HTTPException(status_code=404, detail="集群不存在或未激活")
             clusters = [cluster]
         else:
-            clusters = db.query(Cluster).filter(Cluster.is_active == True).all()
+            if getattr(current_user, "role", None) == "viewer":
+                allowed_ids = get_viewer_allowed_cluster_ids(db, current_user)
+                if not allowed_ids:
+                    return []
+                clusters = db.query(Cluster).filter(Cluster.is_active == True, Cluster.id.in_(allowed_ids)).all()
+            else:
+                clusters = db.query(Cluster).filter(Cluster.is_active == True).all()
 
         all_pvs = []
         for cluster in clusters:
@@ -243,10 +261,13 @@ async def get_pv_details_endpoint(
     pv_name: str,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_read_only)
 ):
     """获取PV详情"""
     try:
+        if getattr(current_user, "role", None) == "viewer":
+            if not check_cluster_access(db, current_user, cluster_id, required_level="read"):
+                raise HTTPException(status_code=403, detail="需要集群 read 权限")
         cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
         if not cluster:
             raise HTTPException(status_code=404, detail="集群不存在或未激活")
@@ -269,7 +290,7 @@ async def create_pv_endpoint(
     pv: PVCreate,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_resource_management)
 ):
     """创建持久卷"""
     try:
@@ -298,7 +319,7 @@ async def delete_pv_endpoint(
     pv_name: str,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_resource_management)
 ):
     """删除持久卷"""
     try:
@@ -324,17 +345,26 @@ async def get_persistent_volume_claims_list(
     cluster_id: Optional[int] = Query(None, description="集群ID，不传则获取所有活跃集群"),
     namespace: Optional[str] = Query(None, description="命名空间过滤"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_read_only)
 ):
     """获取持久卷声明列表"""
     try:
         if cluster_id:
+            if getattr(current_user, "role", None) == "viewer":
+                if not check_cluster_access(db, current_user, cluster_id, required_level="read"):
+                    raise HTTPException(status_code=403, detail="需要集群 read 权限")
             cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
             if not cluster:
                 raise HTTPException(status_code=404, detail="集群不存在或未激活")
             clusters = [cluster]
         else:
-            clusters = db.query(Cluster).filter(Cluster.is_active == True).all()
+            if getattr(current_user, "role", None) == "viewer":
+                allowed_ids = get_viewer_allowed_cluster_ids(db, current_user)
+                if not allowed_ids:
+                    return []
+                clusters = db.query(Cluster).filter(Cluster.is_active == True, Cluster.id.in_(allowed_ids)).all()
+            else:
+                clusters = db.query(Cluster).filter(Cluster.is_active == True).all()
 
         all_pvcs = []
         for cluster in clusters:
@@ -362,10 +392,13 @@ async def get_pvc_details_endpoint(
     pvc_name: str,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_read_only)
 ):
     """获取PVC详情"""
     try:
+        if getattr(current_user, "role", None) == "viewer":
+            if not check_cluster_access(db, current_user, cluster_id, required_level="read"):
+                raise HTTPException(status_code=403, detail="需要集群 read 权限")
         cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
         if not cluster:
             raise HTTPException(status_code=404, detail="集群不存在或未激活")
@@ -388,7 +421,7 @@ async def create_pvc_endpoint(
     pvc: PVCCreate,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_resource_management)
 ):
     """创建持久卷声明"""
     try:
@@ -418,7 +451,7 @@ async def delete_pvc_endpoint(
     pvc_name: str,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_resource_management)
 ):
     """删除持久卷声明"""
     try:
@@ -445,10 +478,13 @@ async def browse_volume_files_endpoint(
     path: str = Query("/", description="浏览路径"),
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_read_only)
 ):
     """浏览卷内文件"""
     try:
+        if getattr(current_user, "role", None) == "viewer":
+            if not check_cluster_access(db, current_user, cluster_id, required_level="read"):
+                raise HTTPException(status_code=403, detail="需要集群 read 权限")
         cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
         if not cluster:
             raise HTTPException(status_code=404, detail="集群不存在或未激活")
@@ -497,10 +533,13 @@ async def read_volume_file_endpoint(
     cluster_id: int = Query(..., description="集群ID"),
     max_lines: Optional[int] = Query(None, description="最大行数限制"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_read_only)
 ):
     """读取卷内文件内容"""
     try:
+        if getattr(current_user, "role", None) == "viewer":
+            if not check_cluster_access(db, current_user, cluster_id, required_level="read"):
+                raise HTTPException(status_code=403, detail="需要集群 read 权限")
         cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
         if not cluster:
             raise HTTPException(status_code=404, detail="集群不存在或未激活")

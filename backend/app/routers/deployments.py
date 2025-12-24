@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from ..database import get_db
 from ..models import Cluster
-from ..auth import get_current_user, require_resource_management
+from ..auth import get_current_user, require_resource_management, check_cluster_access, get_viewer_allowed_cluster_ids
 from ..services.k8s import (
     get_deployment_details, get_deployment_pods, scale_deployment, restart_deployment, delete_deployment,
     get_namespace_deployments, update_deployment, get_deployment_yaml, update_deployment_yaml,
@@ -116,12 +116,21 @@ async def get_deployments(
     """获取部署列表"""
     try:
         if cluster_id:
+            if getattr(current_user, "role", None) == "viewer":
+                if not check_cluster_access(db, current_user, cluster_id, required_level="read"):
+                    raise HTTPException(status_code=403, detail="需要集群 read 权限")
             cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
             if not cluster:
                 raise HTTPException(status_code=404, detail="集群不存在或未激活")
             clusters = [cluster]
         else:
-            clusters = db.query(Cluster).filter(Cluster.is_active == True).all()
+            if getattr(current_user, "role", None) == "viewer":
+                allowed_ids = get_viewer_allowed_cluster_ids(db, current_user)
+                if not allowed_ids:
+                    return []
+                clusters = db.query(Cluster).filter(Cluster.is_active == True, Cluster.id.in_(allowed_ids)).all()
+            else:
+                clusters = db.query(Cluster).filter(Cluster.is_active == True).all()
 
         all_deployments = []
         for cluster in clusters:
@@ -164,6 +173,10 @@ async def get_deployment_detail(
         if not isinstance(cluster_id, int) or cluster_id <= 0:
             raise HTTPException(status_code=422, detail="无效的集群ID")
 
+        if getattr(current_user, "role", None) == "viewer":
+            if not check_cluster_access(db, current_user, cluster_id, required_level="read"):
+                raise HTTPException(status_code=403, detail="需要集群 read 权限")
+
         cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
         if not cluster:
             raise HTTPException(status_code=404, detail="集群不存在或未激活")
@@ -192,6 +205,10 @@ async def get_deployment_pods_endpoint(
     try:
         if not isinstance(cluster_id, int) or cluster_id <= 0:
             raise HTTPException(status_code=422, detail="无效的集群ID")
+
+        if getattr(current_user, "role", None) == "viewer":
+            if not check_cluster_access(db, current_user, cluster_id, required_level="read"):
+                raise HTTPException(status_code=403, detail="需要集群 read 权限")
 
         cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
         if not cluster:
@@ -490,6 +507,10 @@ async def get_deployment_yaml_endpoint(
         if cluster_id_int <= 0:
             raise HTTPException(status_code=422, detail="无效的集群ID")
 
+        if getattr(current_user, "role", None) == "viewer":
+            if not check_cluster_access(db, current_user, cluster_id_int, required_level="read"):
+                raise HTTPException(status_code=403, detail="需要集群 read 权限")
+
         cluster = db.query(Cluster).filter(Cluster.id == cluster_id_int, Cluster.is_active == True).first()
         if not cluster:
             raise HTTPException(status_code=404, detail="集群不存在或未激活")
@@ -589,6 +610,10 @@ async def get_deployment_services_endpoint(
         if not isinstance(cluster_id, int) or cluster_id <= 0:
             raise HTTPException(status_code=422, detail="无效的集群ID")
 
+        if getattr(current_user, "role", None) == "viewer":
+            if not check_cluster_access(db, current_user, cluster_id, required_level="read"):
+                raise HTTPException(status_code=403, detail="需要集群 read 权限")
+
         cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
         if not cluster:
             raise HTTPException(status_code=404, detail="集群不存在或未激活")
@@ -613,6 +638,10 @@ async def get_service_detail_endpoint(
     try:
         if not isinstance(cluster_id, int) or cluster_id <= 0:
             raise HTTPException(status_code=422, detail="无效的集群ID")
+
+        if getattr(current_user, "role", None) == "viewer":
+            if not check_cluster_access(db, current_user, cluster_id, required_level="read"):
+                raise HTTPException(status_code=403, detail="需要集群 read 权限")
 
         cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
         if not cluster:
@@ -672,6 +701,10 @@ async def get_service_yaml_endpoint(
     try:
         if not isinstance(cluster_id, int) or cluster_id <= 0:
             raise HTTPException(status_code=422, detail="无效的集群ID")
+
+        if getattr(current_user, "role", None) == "viewer":
+            if not check_cluster_access(db, current_user, cluster_id, required_level="read"):
+                raise HTTPException(status_code=403, detail="需要集群 read 权限")
 
         cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
         if not cluster:

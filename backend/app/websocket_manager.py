@@ -100,8 +100,16 @@ class ConnectionManager:
                     try:
                         await websocket.close()
                     except RuntimeError as e:
-                        # 忽略已关闭的连接错误
-                        if "Cannot call" not in str(e):
+                        # 忽略已关闭/重复关闭的连接错误（ASGI 会在重复 close 时抛 RuntimeError）
+                        msg = str(e)
+                        if (
+                            "Cannot call" in msg
+                            or "Unexpected ASGI message 'websocket.close'" in msg
+                            or "after sending 'websocket.close'" in msg
+                            or "response already completed" in msg
+                        ):
+                            pass
+                        else:
                             raise
 
                 logger.info(f"WebSocket connection closed: {connection_id}")

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import Cluster
-from ..auth import get_current_user
+from ..auth import require_read_only, require_admin, get_viewer_allowed_cluster_ids
 from ..services.k8s import get_cluster_stats, _client_pool
 from pydantic import BaseModel
 from typing import Dict, Any
@@ -31,12 +31,20 @@ class ConnectionPoolStats(BaseModel):
 @router.get("/dashboard", response_model=DashboardStats)
 async def get_dashboard_stats(
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user=Depends(require_read_only)
 ):
     """获取仪表板统计信息"""
     try:
         # 获取集群基本信息
-        clusters = db.query(Cluster).filter(Cluster.is_active == True).all()
+        clusters_query = db.query(Cluster).filter(Cluster.is_active == True)
+        if getattr(current_user, "role", None) == "viewer":
+            allowed_ids = get_viewer_allowed_cluster_ids(db, current_user)
+            if not allowed_ids:
+                clusters = []
+            else:
+                clusters = clusters_query.filter(Cluster.id.in_(allowed_ids)).all()
+        else:
+            clusters = clusters_query.all()
         total_clusters = len(clusters)
         active_clusters = total_clusters
 
@@ -77,7 +85,7 @@ async def get_dashboard_stats(
 
 @router.get("/connection-pool", response_model=ConnectionPoolStats)
 async def get_connection_pool_stats(
-    current_user: dict = Depends(get_current_user)
+    current_user=Depends(require_admin)
 ):
     """获取Kubernetes连接池统计信息"""
     try:

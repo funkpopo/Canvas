@@ -33,8 +33,8 @@ export function useAuth() {
   const logoutAction = useAuthStore((s) => s.logout);
 
   const login = useCallback(
-    async (token: string) => {
-      await loginAction(token);
+    async (token: string, refreshToken?: string | null) => {
+      await loginAction(token, refreshToken);
     },
     [loginAction]
   );

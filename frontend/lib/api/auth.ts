@@ -34,13 +34,48 @@ export const authApi = {
       return { valid: false };
     }
   },
+
+  async register(data: { username: string; password: string; email?: string }): Promise<
+    ApiResponse<{
+      id: number;
+      username: string;
+      email?: string;
+      role: string;
+      is_active: boolean;
+      created_at: string;
+      updated_at?: string;
+      last_login?: string;
+    }>
+  > {
+    return apiClient.post("auth/register", data);
+  },
+
+  async refreshToken(refresh_token: string): Promise<
+    ApiResponse<{
+      access_token: string;
+      token_type: string;
+      expires_in: number;
+    }>
+  > {
+    return apiClient.post("auth/refresh", { refresh_token });
+  },
 };
 
 // ===== Login API =====
 export const loginApi = {
-  async login(username: string, password: string): Promise<ApiResponse<{ access_token: string; token_type: string }>> {
+  async login(
+    username: string,
+    password: string
+  ): Promise<
+    ApiResponse<{
+      access_token: string;
+      token_type: string;
+      refresh_token?: string;
+      expires_in?: number;
+    }>
+  > {
     // 后端 `/api/auth/login` 使用 JSON body（LoginRequest）
-    return apiClient.post<{ access_token: string; token_type: string }>("auth/login", { username, password });
+    return apiClient.post("auth/login", { username, password });
   },
 };
 

@@ -60,6 +60,29 @@ def authenticate_user(db: Session, username: str, password: str):
 security = HTTPBearer()
 
 
+def get_viewer_allowed_cluster_ids(db: Session, user: models.User) -> list[int]:
+    """
+    viewer 用户允许访问的集群ID集合（来自 cluster / namespace 显式授权）
+    """
+    if user.role != "viewer":
+        return []
+
+    ids: set[int] = set()
+
+    # 集群级授权
+    for (cid,) in db.query(models.UserClusterPermission.cluster_id).filter(
+        models.UserClusterPermission.user_id == user.id
+    ).all():
+        ids.add(cid)
+
+    # 命名空间级授权（也隐含该集群可访问）
+    for (cid,) in db.query(models.UserNamespacePermission.cluster_id).filter(
+        models.UserNamespacePermission.user_id == user.id
+    ).all():
+        ids.add(cid)
+
+    return sorted(ids)
+
 def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     x_api_key: Optional[str] = Header(None),
@@ -313,9 +336,15 @@ def check_cluster_access(db: Session, user: models.User, cluster_id: int, requir
     if user.role == "admin":
         return True
 
-    # viewer用户只能查看，不能管理
+    # viewer 用户：必须显式授予集群权限；且只能 read
     if user.role == "viewer":
-        return required_level == "read"
+        if required_level != "read":
+            return False
+        permission = db.query(models.UserClusterPermission).filter(
+            models.UserClusterPermission.user_id == user.id,
+            models.UserClusterPermission.cluster_id == cluster_id,
+        ).first()
+        return bool(permission and permission.permission_level in ["read", "manage"])
 
     # 检查是否有该集群的权限
     permission = db.query(models.UserClusterPermission).filter(
@@ -330,8 +359,7 @@ def check_cluster_access(db: Session, user: models.User, cluster_id: int, requir
         elif required_level == "manage":
             return permission.permission_level == "manage"
 
-    # 如果没有明确权限，普通用户默认可以访问，viewer用户只能查看
-    # 这里返回False让调用方处理默认行为
+    # 如果没有明确权限，返回False让调用方处理默认行为
     return False
 
 
@@ -350,9 +378,9 @@ def check_namespace_access(db: Session, user: models.User, cluster_id: int, name
     if user.role == "admin":
         return True
 
-    # viewer用户只能查看，不能管理
-    if user.role == "viewer":
-        return required_level == "read"
+    # viewer 用户：必须显式授权（namespace 或 cluster）；且只能 read
+    if user.role == "viewer" and required_level != "read":
+        return False
 
     # 首先检查是否有该namespace的直接权限
     permission = db.query(models.UserNamespacePermission).filter(
@@ -373,8 +401,7 @@ def check_namespace_access(db: Session, user: models.User, cluster_id: int, name
     if cluster_access:
         return True
 
-    # 如果没有明确权限，普通用户默认可以访问，viewer用户只能查看
-    # 这里返回False让调用方处理默认行为
+    # 如果没有明确权限，返回False让调用方处理默认行为
     return False
 
 
@@ -394,19 +421,15 @@ def require_cluster_access(required_level: str = "read"):
         if not access_granted:
             # 如果没有明确权限，根据角色决定默认行为
             if current_user.role == "admin":
-                # admin总是允许
                 return current_user
             elif current_user.role == "viewer":
-                # viewer只允许查看
-                if required_level == "read":
-                    return current_user
-                else:
-                    raise HTTPException(
-                        status_code=status.HTTP_403_FORBIDDEN,
-                        detail=f"只读用户无权执行此操作"
-                    )
+                # viewer 默认无集群权限，必须显式授予
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"需要集群 {required_level} 权限"
+                )
             elif current_user.role == "user":
-                # 普通用户默认允许
+                # 普通用户默认允许（保持现有逻辑）
                 return current_user
             else:
                 raise HTTPException(
@@ -434,19 +457,15 @@ def require_namespace_access(required_level: str = "read"):
         if not access_granted:
             # 如果没有明确权限，根据角色决定默认行为
             if current_user.role == "admin":
-                # admin总是允许
                 return current_user
             elif current_user.role == "viewer":
-                # viewer只允许查看
-                if required_level == "read":
-                    return current_user
-                else:
-                    raise HTTPException(
-                        status_code=status.HTTP_403_FORBIDDEN,
-                        detail=f"只读用户无权执行此操作"
-                    )
+                # viewer 默认无 namespace 权限，必须显式授予（namespace 或 cluster read）
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"需要命名空间 {namespace} 的 {required_level} 权限"
+                )
             elif current_user.role == "user":
-                # 普通用户默认允许
+                # 普通用户默认允许（保持现有逻辑）
                 return current_user
             else:
                 raise HTTPException(

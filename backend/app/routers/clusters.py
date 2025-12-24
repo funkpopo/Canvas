@@ -4,7 +4,7 @@ from typing import List
 from ..database import get_db
 from ..models import Cluster
 from ..schemas import ClusterCreate, ClusterUpdate, ClusterResponse
-from ..auth import get_current_user, require_cluster_management, require_read_only
+from ..auth import get_current_user, require_cluster_management, require_read_only, check_cluster_access, get_viewer_allowed_cluster_ids
 from ..cache import cache_manager, CLUSTER_LIST_TTL, invalidate_cache
 
 router = APIRouter()
@@ -59,18 +59,27 @@ async def get_clusters(
     db: Session = Depends(get_db),
     current_user: dict = Depends(require_read_only),
 ):
-    # 尝试从缓存获取
+    # viewer：默认无任何集群权限，仅返回显式授权的集群（无缓存或按用户缓存）
+    if getattr(current_user, "role", None) == "viewer":
+        allowed_ids = get_viewer_allowed_cluster_ids(db, current_user)
+        if not allowed_ids:
+            return []
+        return (
+            db.query(Cluster)
+            .filter(Cluster.id.in_(allowed_ids))
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+
+    # 其他角色：保持原行为（全量列表 + 缓存）
     cache_key = f"cluster_list:skip:{skip}:limit:{limit}"
     cached_clusters = cache_manager.get(cache_key)
     if cached_clusters is not None:
         return cached_clusters
 
-    # 从数据库查询
     clusters = db.query(Cluster).offset(skip).limit(limit).all()
-
-    # 缓存结果
     cache_manager.set(cache_key, clusters, CLUSTER_LIST_TTL)
-
     return clusters
 
 
@@ -80,6 +89,11 @@ async def get_cluster(
     db: Session = Depends(get_db),
     current_user: dict = Depends(require_read_only),
 ):
+    # viewer：必须显式授权后才能访问集群详情
+    if getattr(current_user, "role", None) == "viewer":
+        if not check_cluster_access(db, current_user, cluster_id, required_level="read"):
+            raise HTTPException(status_code=403, detail="需要集群 read 权限")
+
     cluster = db.query(Cluster).filter(Cluster.id == cluster_id).first()
     if not cluster:
         raise HTTPException(status_code=404, detail="集群不存在")
@@ -158,6 +172,11 @@ async def test_cluster_connection(
     current_user: dict = Depends(require_read_only),
 ):
     from ..services.k8s import test_cluster_connection as test_conn
+
+    if getattr(current_user, "role", None) == "viewer":
+        if not check_cluster_access(db, current_user, cluster_id, required_level="read"):
+            raise HTTPException(status_code=403, detail="需要集群 read 权限")
+
     cluster = db.query(Cluster).filter(Cluster.id == cluster_id).first()
     if not cluster:
         raise HTTPException(status_code=404, detail="集群不存在")
