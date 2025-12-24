@@ -38,12 +38,19 @@ function transformPod(pod: Pod): PodInfo {
   };
 }
 
-// 自定义 fetch 函数 - 转换 API 响应
-async function fetchPodsApi(clusterId: number, namespace?: string): Promise<ApiResponse<PodInfo[]>> {
-  const result = await podApi.getPods(clusterId, namespace);
+// 分页 fetch（用于 ResourceList 无限加载）
+async function fetchPodsPage(
+  clusterId: number,
+  namespace: string | undefined,
+  continueToken: string | null
+): Promise<ApiResponse<{ items: PodInfo[]; continue_token: string | null }>> {
+  const result = await podApi.getPods(clusterId, namespace, 200, continueToken);
   if (result.data) {
     return {
-      data: result.data.map(transformPod),
+      data: {
+        items: result.data.items.map(transformPod),
+        continue_token: result.data.continue_token ?? null,
+      },
     };
   }
   return { error: result.error };
@@ -235,7 +242,8 @@ function PodsPageContent() {
       icon={Activity}
       columns={columns}
       actions={actions}
-      fetchFn={fetchPodsApi}
+      fetchPageFn={fetchPodsPage}
+      pageSize={200}
       deleteFn={(clusterId, namespace, name) => podApi.deletePod(clusterId, namespace, name)}
       batchDeleteFn={handleBatchDelete}
       batchRestartFn={handleBatchRestart}

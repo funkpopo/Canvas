@@ -10,7 +10,7 @@ from kubernetes.client.rest import ApiException
 
 from ...models import Cluster
 from ...core.logging import get_logger
-from .client_pool import create_k8s_client
+from .client_pool import create_k8s_client, KubernetesClientContext
 from .utils import calculate_age
 
 
@@ -70,6 +70,59 @@ def get_pods_info(cluster: Cluster, namespace: Optional[str] = None) -> List[Dic
     finally:
         if client_instance:
             client_instance.close()
+
+
+def get_pods_page(
+    cluster: Cluster,
+    namespace: Optional[str] = None,
+    limit: int = 200,
+    continue_token: Optional[str] = None,
+) -> Dict[str, Any]:
+    """分页获取Pod信息（使用K8s API limit/_continue）"""
+    with KubernetesClientContext(cluster) as client_instance:
+        if not client_instance:
+            return {"items": [], "continue_token": None}
+
+        try:
+            core_v1 = client.CoreV1Api(client_instance)
+
+            if namespace:
+                pods = core_v1.list_namespaced_pod(namespace, limit=limit, _continue=continue_token)
+            else:
+                pods = core_v1.list_pod_for_all_namespaces(limit=limit, _continue=continue_token)
+
+            next_token = getattr(getattr(pods, "metadata", None), "_continue", None)
+
+            pod_list: List[Dict[str, Any]] = []
+            for pod in pods.items:
+                status = pod.status.phase
+
+                restarts = 0
+                ready_containers = "0/0"
+                if pod.status.container_statuses:
+                    total_containers = len(pod.status.container_statuses)
+                    ready_count = sum(1 for cs in pod.status.container_statuses if cs.ready)
+                    ready_containers = f"{ready_count}/{total_containers}"
+                    restarts = sum(cs.restart_count for cs in pod.status.container_statuses if cs.restart_count)
+
+                age = calculate_age(pod.metadata.creation_timestamp)
+
+                pod_info = {
+                    "name": pod.metadata.name,
+                    "namespace": pod.metadata.namespace,
+                    "status": status,
+                    "node_name": pod.spec.node_name,
+                    "age": age,
+                    "restarts": restarts,
+                    "ready_containers": ready_containers,
+                    "labels": dict(pod.metadata.labels) if pod.metadata.labels else {},
+                }
+                pod_list.append(pod_info)
+
+            return {"items": pod_list, "continue_token": next_token}
+        except Exception as e:
+            logger.exception("分页获取Pod信息失败: %s", e)
+            return {"items": [], "continue_token": None}
 
 
 def get_pod_details(cluster: Cluster, namespace: str, pod_name: str) -> Optional[Dict[str, Any]]:

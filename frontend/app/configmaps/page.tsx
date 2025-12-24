@@ -32,9 +32,7 @@ import { toast } from "sonner";
 
 // ============ 类型定义 ============
 
-interface ConfigMap extends BaseResource, Omit<ApiConfigMap, "id"> {
-  id: string;
-}
+type ConfigMap = ApiConfigMap;
 
 // ============ 页面组件 ============
 

@@ -5,7 +5,7 @@ from typing import List, Optional
 from ..database import get_db
 from ..models import Cluster, User
 from ..auth import get_current_user, require_namespace_access, require_cluster_access
-from ..services.k8s import get_pods_info, get_pod_details, get_pod_logs, restart_pod, delete_pod, batch_delete_pods, batch_restart_pods
+from ..services.k8s import get_pods_page, get_pod_details, get_pod_logs, restart_pod, delete_pod, batch_delete_pods, batch_restart_pods
 from ..audit import log_action
 from pydantic import BaseModel
 from ..core.logging import get_logger
@@ -26,6 +26,12 @@ class PodInfo(BaseModel):
   cluster_name: str
   labels: dict
   cluster_id: int
+
+
+class PodPageResponse(BaseModel):
+  items: List[PodInfo]
+  continue_token: Optional[str] = None
+  limit: int
 
 
 class PodDetails(BaseModel):
@@ -67,42 +73,33 @@ class BatchOperationResponse(BaseModel):
   failure_count: int
 
 
-@router.get("/", response_model=List[PodInfo])
-@router.get("", response_model=List[PodInfo])
+@router.get("/", response_model=PodPageResponse)
+@router.get("", response_model=PodPageResponse)
 async def get_pods(
   namespace: Optional[str] = None,
-  cluster_id: Optional[int] = None,
+  cluster_id: int = Query(..., description="集群ID"),
+  limit: int = Query(200, description="每页数量", ge=1, le=1000),
+  continue_token: Optional[str] = Query(None, description="分页游标"),
   db: Session = Depends(get_db),
   current_user: dict = Depends(get_current_user),
 ):
   try:
-    if cluster_id:
-      cluster = (
-        db.query(Cluster)
-        .filter(Cluster.id == cluster_id, Cluster.is_active == True)
-        .first()
-      )
-      if not cluster:
-        raise HTTPException(status_code=404, detail="集群不存在或未激活")
-      clusters = [cluster]
-    else:
-      clusters = db.query(Cluster).filter(Cluster.is_active == True).all()
+    cluster = (
+      db.query(Cluster)
+      .filter(Cluster.id == cluster_id, Cluster.is_active == True)
+      .first()
+    )
+    if not cluster:
+      raise HTTPException(status_code=404, detail="集群不存在或未激活")
 
-    all_pods = []
-    for cluster in clusters:
-      try:
-        pods = get_pods_info(cluster, namespace)
-        if pods:
-          for pod in pods:
-            pod["cluster_id"] = cluster.id
-            pod["cluster_name"] = cluster.name
-            # 确保所有必需字段都存在
-            all_pods.append(PodInfo(**pod))
-      except Exception as e:
-        logger.warning("获取集群Pod信息失败: cluster=%s error=%s", cluster.name, e)
-        continue
+    page = get_pods_page(cluster, namespace=namespace, limit=limit, continue_token=continue_token)
+    items = []
+    for pod in page.get("items", []):
+      pod["cluster_id"] = cluster.id
+      pod["cluster_name"] = cluster.name
+      items.append(PodInfo(**pod))
 
-    return all_pods
+    return PodPageResponse(items=items, continue_token=page.get("continue_token"), limit=limit)
   except Exception as e:
     raise HTTPException(status_code=500, detail=f"获取Pod信息失败: {str(e)}")
 

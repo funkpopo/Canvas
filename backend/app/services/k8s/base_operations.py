@@ -297,22 +297,27 @@ def get_node_details(cluster: Cluster, node_name: str) -> Optional[Dict[str, Any
             client_instance.close()
 
 
-def get_cluster_events(cluster: Cluster, namespace: Optional[str] = None, limit: int = 100) -> List[Dict[str, Any]]:
-    """获取集群或命名空间的事件"""
+def get_cluster_events(
+    cluster: Cluster,
+    namespace: Optional[str] = None,
+    limit: int = 200,
+    continue_token: Optional[str] = None,
+) -> Dict[str, Any]:
+    """分页获取集群或命名空间的事件（使用K8s API limit/_continue）"""
     client_instance = create_k8s_client(cluster)
     if not client_instance:
-        return []
+        return {"items": [], "continue_token": None}
 
     try:
         core_v1 = client.CoreV1Api(client_instance)
         events = []
 
         if namespace:
-            # 获取指定命名空间的事件
-            event_list = core_v1.list_namespaced_event(namespace)
+            event_list = core_v1.list_namespaced_event(namespace, limit=limit, _continue=continue_token)
         else:
-            # 获取集群级别的事件（所有命名空间）
-            event_list = core_v1.list_event_for_all_namespaces()
+            event_list = core_v1.list_event_for_all_namespaces(limit=limit, _continue=continue_token)
+
+        next_token = getattr(getattr(event_list, "metadata", None), "_continue", None)
 
         # 按时间排序，最新的在前
         def get_event_time(event):
@@ -333,7 +338,7 @@ def get_cluster_events(cluster: Cluster, namespace: Optional[str] = None, limit:
 
         sorted_events = sorted(event_list.items, key=get_event_time, reverse=True)
 
-        for event in sorted_events[:limit]:
+        for event in sorted_events:
             # 计算事件年龄
             age = "Unknown"
             if event.last_timestamp:
@@ -371,11 +376,11 @@ def get_cluster_events(cluster: Cluster, namespace: Optional[str] = None, limit:
                 } if event.involved_object else None
             })
 
-        return events
+        return {"items": events, "continue_token": next_token}
 
     except Exception as e:
         logger.exception("获取集群事件失败: %s", e)
-        return []
+        return {"items": [], "continue_token": None}
     finally:
         if client_instance:
             client_instance.close()

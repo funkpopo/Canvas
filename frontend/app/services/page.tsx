@@ -32,9 +32,7 @@ import { useTranslations } from "@/hooks/use-translations";
 
 // ============ 类型定义 ============
 
-interface Service extends BaseResource, Omit<ApiService, "id"> {
-  id: string;
-}
+type Service = ApiService;
 
 // ============ 页面组件 ============
 

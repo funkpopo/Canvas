@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, ReactNode } from "react";
+import { useState, useEffect, useMemo, useRef, ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useCluster } from "@/lib/cluster-context";
 import { namespaceApi } from "@/lib/api";
 import { toast } from "sonner";
+import { type InfiniteData, useInfiniteQuery, useQuery } from "@tanstack/react-query";
 
 // ============ 类型定义 ============
 
@@ -116,8 +117,16 @@ export interface ResourceListProps<T extends BaseResource> {
   columns: ColumnDef<T>[];
   /** 操作按钮定义 */
   actions?: ActionDef<T>[];
-  /** 获取资源列表的 API 函数 */
-  fetchFn: (clusterId: number, namespace?: string) => Promise<ApiResponse<T[]>>;
+  /** 获取资源列表的 API 函数（非分页） */
+  fetchFn?: (clusterId: number, namespace?: string) => Promise<ApiResponse<T[]>>;
+  /** 分页获取资源列表的 API 函数（用于大数据量） */
+  fetchPageFn?: (
+    clusterId: number,
+    namespace: string | undefined,
+    continueToken: string | null
+  ) => Promise<ApiResponse<{ items: T[]; continue_token: string | null }>>;
+  /** 分页大小（仅在 fetchPageFn 存在时生效） */
+  pageSize?: number;
   /** 删除资源的 API 函数 */
   deleteFn?: (clusterId: number, namespace: string, name: string) => Promise<ApiResponse<unknown>>;
   /** 批量删除资源的 API 函数 */
@@ -204,6 +213,8 @@ export function ResourceList<T extends BaseResource>({
   columns,
   actions = [],
   fetchFn,
+  fetchPageFn,
+  pageSize = 200,
   deleteFn,
   batchDeleteFn,
   batchRestartFn,
@@ -228,8 +239,6 @@ export function ResourceList<T extends BaseResource>({
   showNamespaceInHeader = false,
 }: ResourceListProps<T>) {
   // ============ 状态 ============
-  const [items, setItems] = useState<T[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
@@ -263,60 +272,114 @@ export function ResourceList<T extends BaseResource>({
 
   // ============ 数据获取 ============
 
-  /** 获取命名空间列表 (从 API) */
-  const fetchNamespacesFromApi = useCallback(async () => {
-    if (!selectedClusterId) return;
-    try {
-      const result = await namespaceApi.getNamespaces(selectedClusterId);
-      if (result.data) {
-        const namespaceNames = (result.data as { name: string }[]).map((ns) => ns.name);
-        setNamespaces(namespaceNames);
-      } else {
-        setNamespaces(["default"]);
+  const namespacesQuery = useQuery<string[], Error>({
+    queryKey: ["namespaces", selectedClusterId],
+    enabled: !!selectedClusterId && requireNamespace && namespaceSource === "api",
+    queryFn: async () => {
+      const result = await namespaceApi.getNamespaces(selectedClusterId as number);
+      if (result.error) {
+        throw new Error(result.error);
       }
-    } catch {
-      setNamespaces(["default"]);
-    }
-  }, [selectedClusterId]);
+      const list = (result.data ?? []) as { name: string }[];
+      return list.map((ns) => ns.name);
+    },
+    staleTime: 60_000,
+    placeholderData: (previousData) => previousData,
+  });
 
-  /** 获取资源列表 */
-  const fetchItems = useCallback(async () => {
-    if (!selectedClusterId) return;
-    // 如果从 API 获取命名空间且必须选择命名空间，则检查
-    if (namespaceSource === "api" && requireNamespace && !selectedNamespace) return;
+  useEffect(() => {
+    if (!namespacesQuery.error) return;
+    toast.error(`获取命名空间失败: ${namespacesQuery.error.message}`);
+  }, [namespacesQuery.errorUpdatedAt]);
 
-    setIsLoading(true);
-    try {
-      const response = await fetchFn(
-        selectedClusterId,
-        // 如果从数据中提取命名空间，不传命名空间参数获取所有数据
-        namespaceSource === "data" ? undefined : (requireNamespace ? selectedNamespace : undefined)
-      );
+  const itemsQueryEnabled =
+    !!selectedClusterId &&
+    (namespaceSource === "data" || !requireNamespace || (requireNamespace && !!selectedNamespace));
 
-      if (response.data) {
-        // 为每个资源添加唯一 ID
-        const itemsWithIds = response.data.map((item) => ({
-          ...item,
-          id: getItemId(item),
-        }));
-        setItems(itemsWithIds);
+  const itemsQueryKey = useMemo(
+    () => [
+      "resourceList",
+      resourceType,
+      selectedClusterId,
+      namespaceSource,
+      requireNamespace ? selectedNamespace : "",
+      requireNamespace,
+    ],
+    [resourceType, selectedClusterId, namespaceSource, requireNamespace, selectedNamespace]
+  );
 
-        // 如果从数据中提取命名空间
-        if (namespaceSource === "data") {
-          const uniqueNamespaces = Array.from(
-            new Set(itemsWithIds.map((item) => item.namespace).filter(Boolean))
-          ) as string[];
-          setNamespaces(uniqueNamespaces);
-        }
-      } else if (response.error) {
-        toast.error(`获取${resourceType}列表失败: ${response.error}`);
-      }
-    } catch {
-      toast.error(`获取${resourceType}列表失败`);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [selectedClusterId, selectedNamespace, requireNamespace, fetchFn, resourceType, getItemId, namespaceSource]);
+  type ItemWithId = T & { id: string };
+
+  const namespaceParam =
+    namespaceSource === "data" ? undefined : requireNamespace ? selectedNamespace : undefined;
+
+  const isPaginated = !!fetchPageFn;
+
+  const itemsQuery = useQuery<ItemWithId[], Error>({
+    queryKey: itemsQueryKey,
+    enabled: itemsQueryEnabled && !isPaginated,
+    queryFn: async () => {
+      if (!fetchFn) return [];
+      const response = await fetchFn(selectedClusterId as number, namespaceParam);
+      if (response.error) throw new Error(response.error);
+      const data = response.data ?? [];
+      return data.map((item) => ({ ...item, id: getItemId(item) }));
+    },
+    placeholderData: (previousData) => previousData,
+  });
+
+  const paginatedQuery = useInfiniteQuery<
+    { items: ItemWithId[]; continue_token: string | null },
+    Error,
+    InfiniteData<{ items: ItemWithId[]; continue_token: string | null }, string | null>,
+    (string | number | boolean | null)[],
+    string | null
+  >({
+    queryKey: [...itemsQueryKey, "infinite", pageSize],
+    enabled: itemsQueryEnabled && isPaginated,
+    initialPageParam: null as string | null,
+    queryFn: async ({ pageParam }) => {
+      if (!fetchPageFn) return { items: [], continue_token: null };
+      const resp = await fetchPageFn(selectedClusterId as number, namespaceParam, pageParam);
+      if (resp.error) throw new Error(resp.error);
+      const data = resp.data ?? { items: [], continue_token: null };
+      return {
+        items: (data.items ?? []).map((item) => ({ ...item, id: getItemId(item) })),
+        continue_token: data.continue_token ?? null,
+      };
+    },
+    getNextPageParam: (lastPage) => lastPage.continue_token ?? undefined,
+    placeholderData: (previousData) => previousData,
+  });
+
+  useEffect(() => {
+    const err = isPaginated ? paginatedQuery.error : itemsQuery.error;
+    if (!err) return;
+    toast.error(`获取${resourceType}列表失败: ${err.message}`);
+  }, [
+    resourceType,
+    isPaginated,
+    itemsQuery.errorUpdatedAt,
+    paginatedQuery.errorUpdatedAt,
+  ]);
+
+  const items = useMemo(() => {
+    if (!isPaginated) return itemsQuery.data ?? [];
+    return paginatedQuery.data?.pages.flatMap((p) => p.items) ?? [];
+  }, [isPaginated, itemsQuery.data, paginatedQuery.data]);
+
+  const isLoading = authLoading || (isPaginated ? paginatedQuery.isLoading : itemsQuery.isLoading);
+  const isFetching = isPaginated ? paginatedQuery.isFetching : itemsQuery.isFetching;
+  const hasNextPage = isPaginated ? !!paginatedQuery.hasNextPage : false;
+  const isFetchingNextPage = isPaginated ? paginatedQuery.isFetchingNextPage : false;
+  const fetchNextPage = isPaginated ? paginatedQuery.fetchNextPage : undefined;
+  const refetchItems = isPaginated ? paginatedQuery.refetch : itemsQuery.refetch;
+
+  // ============ 表格虚拟滚动 (大数据量优化) ============
+  const tableContainerRef = useRef<HTMLDivElement | null>(null);
+  const scrollRafRef = useRef<number | null>(null);
+  const [tableScrollTop, setTableScrollTop] = useState(0);
+  const [tableViewportHeight, setTableViewportHeight] = useState(600);
 
   // ============ Effects ============
 
@@ -331,26 +394,44 @@ export function ResourceList<T extends BaseResource>({
     }
   }, [user, clusters, activeCluster, selectedClusterId]);
 
-  // 集群变化时获取命名空间 (仅从 API 获取时)
+  // 同步命名空间列表
   useEffect(() => {
-    if (selectedClusterId && requireNamespace && namespaceSource === "api") {
-      fetchNamespacesFromApi();
-    }
-  }, [selectedClusterId, requireNamespace, namespaceSource, fetchNamespacesFromApi]);
-
-  // 集群/命名空间变化时获取资源
-  useEffect(() => {
-    if (selectedClusterId) {
-      if (namespaceSource === "data") {
-        // 从数据中提取命名空间，直接获取
-        fetchItems();
-      } else if (requireNamespace && selectedNamespace) {
-        fetchItems();
-      } else if (!requireNamespace) {
-        fetchItems();
+    if (namespaceSource === "api") {
+      if (namespacesQuery.data && namespacesQuery.data.length > 0) {
+        setNamespaces(namespacesQuery.data);
+      } else if (!namespacesQuery.isLoading && requireNamespace) {
+        setNamespaces(["default"]);
       }
+      return;
     }
-  }, [selectedClusterId, selectedNamespace, requireNamespace, namespaceSource, fetchItems]);
+
+    // namespaceSource === "data"
+    const uniqueNamespaces = Array.from(
+      new Set(items.map((item) => item.namespace).filter(Boolean))
+    ) as string[];
+    setNamespaces(uniqueNamespaces);
+  }, [namespaceSource, namespacesQuery.data, namespacesQuery.isLoading, requireNamespace, items]);
+
+  // 表格容器尺寸/滚动位置采样（用于虚拟滚动）
+  useEffect(() => {
+    const el = tableContainerRef.current;
+    if (!el) return;
+
+    const update = () => setTableViewportHeight(el.clientHeight || 600);
+    update();
+
+    const onResize = () => update();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [viewMode]);
+
+  useEffect(() => {
+    return () => {
+      if (scrollRafRef.current) {
+        cancelAnimationFrame(scrollRafRef.current);
+      }
+    };
+  }, []);
 
   // ============ 过滤逻辑 ============
 
@@ -381,6 +462,43 @@ export function ResourceList<T extends BaseResource>({
     return matchesSearch && matchesStatus;
   });
 
+  const batchOpsEnabled = batchOperations.delete || batchOperations.restart || batchOperations.label;
+  const tableColSpan = columns.length + (batchOpsEnabled ? 1 : 0) + (actions.length > 0 ? 1 : 0);
+
+  const shouldVirtualizeTable = viewMode === "table" && filteredItems.length > 200;
+  const tableRowHeight = 44; // px，接近 TableRow 默认高度
+  const tableOverscan = 8;
+
+  const { virtualItems, paddingTop, paddingBottom } = useMemo(() => {
+    if (!shouldVirtualizeTable) {
+      return {
+        virtualItems: filteredItems,
+        paddingTop: 0,
+        paddingBottom: 0,
+      };
+    }
+
+    const total = filteredItems.length;
+    const startIndex = Math.max(0, Math.floor(tableScrollTop / tableRowHeight) - tableOverscan);
+    const endIndex = Math.min(
+      total,
+      Math.ceil((tableScrollTop + tableViewportHeight) / tableRowHeight) + tableOverscan
+    );
+
+    return {
+      virtualItems: filteredItems.slice(startIndex, endIndex),
+      paddingTop: startIndex * tableRowHeight,
+      paddingBottom: (total - endIndex) * tableRowHeight,
+    };
+  }, [
+    filteredItems,
+    shouldVirtualizeTable,
+    tableScrollTop,
+    tableViewportHeight,
+    tableRowHeight,
+    tableOverscan,
+  ]);
+
   // ============ 事件处理 ============
 
   /** 处理删除 */
@@ -401,7 +519,7 @@ export function ResourceList<T extends BaseResource>({
           const result = await deleteFn(item.cluster_id, item.namespace, item.name);
           if (!result.error) {
             toast.success(`${resourceType}删除成功`);
-            fetchItems();
+            await refetchItems();
           } else {
             toast.error(`删除${resourceType}失败: ${result.error}`);
           }
@@ -419,7 +537,7 @@ export function ResourceList<T extends BaseResource>({
   const handleBatchDelete = async (selectedItemsData: T[]) => {
     if (batchDeleteFn) {
       await batchDeleteFn(selectedItemsData);
-      fetchItems();
+      await refetchItems();
     } else if (deleteFn) {
       // 逐个删除
       for (const item of selectedItemsData) {
@@ -429,7 +547,7 @@ export function ResourceList<T extends BaseResource>({
         }
       }
       toast.success(`批量删除成功，共删除 ${selectedItemsData.length} 个${resourceType}`);
-      fetchItems();
+      await refetchItems();
     }
   };
 
@@ -437,7 +555,7 @@ export function ResourceList<T extends BaseResource>({
   const handleBatchRestart = async (selectedItemsData: T[]) => {
     if (batchRestartFn) {
       await batchRestartFn(selectedItemsData);
-      fetchItems();
+      await refetchItems();
     }
   };
 
@@ -514,8 +632,8 @@ export function ResourceList<T extends BaseResource>({
                   </SelectContent>
                 </Select>
               )}
-              <Button onClick={fetchItems} variant="outline" disabled={isLoading}>
-                <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
+              <Button onClick={() => refetchItems()} variant="outline" disabled={isFetching}>
+                <RefreshCw className={`h-4 w-4 mr-2 ${isFetching ? "animate-spin" : ""}`} />
                 刷新
               </Button>
             </div>
@@ -733,11 +851,19 @@ export function ResourceList<T extends BaseResource>({
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="overflow-x-auto">
+                  <div
+                    ref={tableContainerRef}
+                    className="overflow-auto max-h-[70vh]"
+                    onScroll={(e) => {
+                      const top = (e.currentTarget as HTMLDivElement).scrollTop;
+                      if (scrollRafRef.current) cancelAnimationFrame(scrollRafRef.current);
+                      scrollRafRef.current = requestAnimationFrame(() => setTableScrollTop(top));
+                    }}
+                  >
                     <Table>
-                      <TableHeader>
+                      <TableHeader className="sticky top-0 bg-card z-10">
                         <TableRow>
-                          {(batchOperations.delete || batchOperations.restart || batchOperations.label) && (
+                          {batchOpsEnabled && (
                             <TableHead className="w-12"></TableHead>
                           )}
                           {columns.map((col) => (
@@ -749,13 +875,19 @@ export function ResourceList<T extends BaseResource>({
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {filteredItems.map((item) => (
+                        {shouldVirtualizeTable && paddingTop > 0 && (
+                          <TableRow>
+                            <TableCell colSpan={tableColSpan} className="p-0" style={{ height: paddingTop }} />
+                          </TableRow>
+                        )}
+
+                        {virtualItems.map((item) => (
                           <TableRow
                             key={item.id}
                             className={detailLink ? "cursor-pointer hover:bg-muted/50" : ""}
                             onClick={detailLink ? () => router.push(detailLink(item)) : undefined}
                           >
-                            {(batchOperations.delete || batchOperations.restart || batchOperations.label) && (
+                            {batchOpsEnabled && (
                               <TableCell onClick={(e) => e.stopPropagation()}>
                                 <ItemCheckbox
                                   itemId={item.id}
@@ -803,11 +935,43 @@ export function ResourceList<T extends BaseResource>({
                             )}
                           </TableRow>
                         ))}
+
+                        {shouldVirtualizeTable && paddingBottom > 0 && (
+                          <TableRow>
+                            <TableCell
+                              colSpan={tableColSpan}
+                              className="p-0"
+                              style={{ height: paddingBottom }}
+                            />
+                          </TableRow>
+                        )}
                       </TableBody>
                     </Table>
                   </div>
                 </CardContent>
               </Card>
+            )}
+
+            {/* 分页加载更多（大数据量） */}
+            {fetchNextPage && (
+              <div className="flex justify-center mt-6">
+                <Button
+                  variant="outline"
+                  onClick={() => fetchNextPage()}
+                  disabled={!hasNextPage || isFetchingNextPage}
+                >
+                  {isFetchingNextPage ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      加载中...
+                    </>
+                  ) : hasNextPage ? (
+                    "加载更多"
+                  ) : (
+                    "没有更多了"
+                  )}
+                </Button>
+              </div>
             )}
           </>
         )}

@@ -32,9 +32,7 @@ import { toast } from "sonner";
 
 // ============ 类型定义 ============
 
-interface Job extends BaseResource, Omit<ApiJob, "id"> {
-  id: string;
-}
+type Job = ApiJob & BaseResource;
 
 // ============ 内容组件 ============
 

@@ -7,13 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { api } from "@/lib/api";
+import { apiClient, clusterApi, Cluster } from "@/lib/api";
 import { toast } from "sonner";
-
-interface Cluster {
-  id: number;
-  name: string;
-}
 
 interface AlertRule {
   id?: number;
@@ -71,10 +66,14 @@ export function AlertRuleDialog({ open, rule, onClose, onSuccess }: AlertRuleDia
 
   const fetchClusters = async () => {
     try {
-      const response = await api.get("/clusters");
-      setClusters(response.data);
-    } catch (error) {
-      toast.error("获取集群列表失败");
+      const res = await clusterApi.getClusters();
+      if (res.error) {
+        toast.error(`获取集群列表失败: ${res.error}`);
+        return;
+      }
+      setClusters(res.data ?? []);
+    } catch {
+      toast.error("获取集群列表失败: 网络错误");
     }
   };
 
@@ -84,15 +83,23 @@ export function AlertRuleDialog({ open, rule, onClose, onSuccess }: AlertRuleDia
 
     try {
       if (rule?.id) {
-        await api.put(`/alerts/rules/${rule.id}`, formData);
+        const res = await apiClient.put(`/alerts/rules/${rule.id}`, formData);
+        if (res.error) {
+          toast.error(res.error);
+          return;
+        }
         toast.success("告警规则已更新");
       } else {
-        await api.post("/alerts/rules", formData);
+        const res = await apiClient.post("/alerts/rules", formData);
+        if (res.error) {
+          toast.error(res.error);
+          return;
+        }
         toast.success("告警规则已创建");
       }
       onSuccess();
-    } catch (error: any) {
-      toast.error(error.response?.data?.detail || "操作失败");
+    } catch {
+      toast.error("操作失败: 网络错误");
     } finally {
       setIsSubmitting(false);
     }
@@ -227,7 +234,7 @@ export function AlertRuleDialog({ open, rule, onClose, onSuccess }: AlertRuleDia
               <Switch
                 id="enabled"
                 checked={formData.enabled}
-                onCheckedChange={(checked) => setFormData({ ...formData, enabled: checked })}
+                onCheckedChange={(checked: boolean) => setFormData({ ...formData, enabled: checked })}
               />
               <Label htmlFor="enabled">启用规则</Label>
             </div>

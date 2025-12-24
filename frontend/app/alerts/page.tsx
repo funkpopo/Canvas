@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Plus, Edit, Trash2, Bell, BellOff, Activity, AlertTriangle } from "lucide-react";
 import AuthGuard from "@/components/AuthGuard";
-import { api } from "@/lib/api";
+import { apiClient } from "@/lib/api";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { AlertRuleDialog } from "@/components/AlertRuleDialog";
@@ -82,59 +82,83 @@ function AlertsPageContent() {
 
   const fetchRules = async () => {
     try {
-      const response = await api.get("/alerts/rules");
-      setRules(response.data);
-    } catch (error) {
-      toast.error("获取告警规则失败");
+      const response = await apiClient.get<AlertRule[]>("/alerts/rules");
+      if (response.error) {
+        toast.error(`获取告警规则失败: ${response.error}`);
+        return;
+      }
+      setRules(response.data ?? []);
+    } catch {
+      toast.error("获取告警规则失败: 网络错误");
     }
   };
 
   const fetchEvents = async () => {
     try {
-      const response = await api.get("/alerts/events", { params: { status: "firing", limit: 50 } });
-      setEvents(response.data);
-    } catch (error) {
-      toast.error("获取告警事件失败");
+      const response = await apiClient.get<AlertEvent[]>("/alerts/events?status=firing&limit=50");
+      if (response.error) {
+        toast.error(`获取告警事件失败: ${response.error}`);
+        return;
+      }
+      setEvents(response.data ?? []);
+    } catch {
+      toast.error("获取告警事件失败: 网络错误");
     }
   };
 
   const fetchStats = async () => {
     try {
-      const response = await api.get("/alerts/stats");
-      setStats(response.data);
-    } catch (error) {
-      toast.error("获取告警统计失败");
+      const response = await apiClient.get<AlertStats>("/alerts/stats");
+      if (response.error) {
+        toast.error(`获取告警统计失败: ${response.error}`);
+        return;
+      }
+      setStats(response.data ?? null);
+    } catch {
+      toast.error("获取告警统计失败: 网络错误");
     }
   };
 
   const handleToggleRule = async (rule: AlertRule) => {
     try {
-      await api.put(`/alerts/rules/${rule.id}`, { enabled: !rule.enabled });
+      const result = await apiClient.put(`/alerts/rules/${rule.id}`, { enabled: !rule.enabled });
+      if (result.error) {
+        toast.error(`操作失败: ${result.error}`);
+        return;
+      }
       toast.success(rule.enabled ? "告警规则已禁用" : "告警规则已启用");
       fetchRules();
-    } catch (error) {
-      toast.error("操作失败");
+    } catch {
+      toast.error("操作失败: 网络错误");
     }
   };
 
   const handleDeleteRule = async (ruleId: number) => {
     try {
-      await api.delete(`/alerts/rules/${ruleId}`);
+      const result = await apiClient.delete(`/alerts/rules/${ruleId}`);
+      if (result.error) {
+        toast.error(`删除失败: ${result.error}`);
+        return;
+      }
       toast.success("告警规则已删除");
       fetchRules();
-    } catch (error) {
-      toast.error("删除失败");
+    } catch {
+      toast.error("删除失败: 网络错误");
     }
   };
 
   const handleResolveEvent = async (eventId: number) => {
     try {
-      await api.post(`/alerts/events/${eventId}/resolve`);
+      const result = await apiClient.post(`/alerts/events/${eventId}/resolve`, {});
+      if (result.error) {
+        toast.error(`操作失败: ${result.error}`);
+        return;
+      }
       toast.success("告警已标记为已解决");
       fetchEvents();
       fetchStats();
-    } catch (error) {
-      toast.error("操作失败");
+    } catch {
+      toast.error("操作失败: 网络错误");
     }
   };
 
@@ -330,13 +354,13 @@ function AlertsPageContent() {
 
         <ConfirmDialog
           open={confirmDialog.open}
+          onOpenChange={(open) => setConfirmDialog((prev) => ({ ...prev, open }))}
           title={confirmDialog.title}
           description={confirmDialog.description}
           onConfirm={() => {
             confirmDialog.onConfirm();
             setConfirmDialog({ ...confirmDialog, open: false });
           }}
-          onCancel={() => setConfirmDialog({ ...confirmDialog, open: false })}
         />
       </div>
     </AuthGuard>

@@ -25,45 +25,43 @@ class EventInfo(BaseModel):
     last_timestamp: Optional[str]
     age: str
     involved_object: Optional[dict]
+    cluster_id: int
+    cluster_name: str
 
 
-@router.get("/", response_model=List[EventInfo])
-@router.get("", response_model=List[EventInfo])
+class EventPageResponse(BaseModel):
+    items: List[EventInfo]
+    continue_token: Optional[str] = None
+    limit: int
+
+
+@router.get("/", response_model=EventPageResponse)
+@router.get("", response_model=EventPageResponse)
 async def get_events(
     namespace: Optional[str] = None,
-    cluster_id: Optional[int] = None,
-    limit: int = Query(100, description="返回的事件数量限制", ge=1, le=1000),
+    cluster_id: int = Query(..., description="集群ID"),
+    limit: int = Query(200, description="每页数量", ge=1, le=1000),
+    continue_token: Optional[str] = Query(None, description="分页游标"),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     try:
-        if cluster_id:
-            cluster = (
-                db.query(Cluster)
-                .filter(Cluster.id == cluster_id, Cluster.is_active == True)
-                .first()
-            )
-            if not cluster:
-                raise HTTPException(status_code=404, detail="集群不存在或未激活")
-            clusters = [cluster]
-        else:
-            clusters = db.query(Cluster).filter(Cluster.is_active == True).all()
+        cluster = (
+            db.query(Cluster)
+            .filter(Cluster.id == cluster_id, Cluster.is_active == True)
+            .first()
+        )
+        if not cluster:
+            raise HTTPException(status_code=404, detail="集群不存在或未激活")
 
-        all_events = []
-        for cluster in clusters:
-            try:
-                events = get_cluster_events(cluster, namespace, limit)
-                if events:
-                    for event in events:
-                        # 添加集群信息
-                        event["cluster_id"] = cluster.id
-                        event["cluster_name"] = cluster.name
-                        all_events.append(EventInfo(**event))
-            except Exception as e:
-                logger.warning("获取集群事件失败: cluster=%s error=%s", cluster.name, e)
-                continue
+        page = get_cluster_events(cluster, namespace=namespace, limit=limit, continue_token=continue_token)
+        items = []
+        for event in page.get("items", []):
+            event["cluster_id"] = cluster.id
+            event["cluster_name"] = cluster.name
+            items.append(EventInfo(**event))
 
-        return all_events
+        return EventPageResponse(items=items, continue_token=page.get("continue_token"), limit=limit)
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取事件信息失败: {str(e)}")

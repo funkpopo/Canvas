@@ -1191,12 +1191,14 @@ export interface PodDetails extends Pod {
 
 // ===== Pod API =====
 export const podApi = {
-  async getPods(clusterId?: number, namespace?: string): Promise<ApiResponse<Pod[]>> {
+  async getPods(clusterId: number, namespace: string | undefined, limit: number, continueToken: string | null): Promise<ApiResponse<{ items: Pod[]; continue_token: string | null }>> {
     const params = new URLSearchParams();
-    if (clusterId) params.append('cluster_id', clusterId.toString());
+    params.append('cluster_id', clusterId.toString());
     if (namespace) params.append('namespace', namespace);
+    params.append('limit', limit.toString());
+    if (continueToken) params.append('continue_token', continueToken);
     const query = params.toString() ? `?${params.toString()}` : '';
-    return apiClient.get<Pod[]>(`/pods${query}`);
+    return apiClient.get<{ items: Pod[]; continue_token: string | null }>(`/pods${query}`);
   },
 
   async getPod(clusterId: number, namespace: string, podName: string): Promise<ApiResponse<PodDetails>> {
@@ -1352,27 +1354,35 @@ export interface Event {
   type: string;
   reason: string;
   message: string;
-  source: string;
-  first_timestamp: string;
-  last_timestamp: string;
+  source: string | null;
+  first_timestamp: string | null;
+  last_timestamp: string | null;
+  age: string;
   count: number;
   involved_object: {
     kind: string;
     name: string;
     namespace: string;
-  };
+  } | null;
   cluster_id: number;
   cluster_name: string;
 }
 
 // ===== Event API =====
 export const eventApi = {
-  async getEvents(clusterId?: number, namespace?: string): Promise<ApiResponse<Event[]>> {
+  async getEvents(
+    clusterId: number,
+    namespace: string | undefined,
+    limit: number,
+    continueToken: string | null
+  ): Promise<ApiResponse<{ items: Event[]; continue_token: string | null }>> {
     const params = new URLSearchParams();
-    if (clusterId) params.append('cluster_id', clusterId.toString());
+    params.append('cluster_id', clusterId.toString());
     if (namespace) params.append('namespace', namespace);
+    params.append('limit', limit.toString());
+    if (continueToken) params.append('continue_token', continueToken);
     const query = params.toString() ? `?${params.toString()}` : '';
-    return apiClient.get<Event[]>(`/events${query}`);
+    return apiClient.get<{ items: Event[]; continue_token: string | null }>(`/events${query}`);
   },
 };
 
@@ -1383,7 +1393,7 @@ export interface CronJob {
   schedule: string;
   suspend: boolean;
   active: number;
-  last_schedule: string;
+  last_schedule_time: string | null;
   age: string;
   labels: Record<string, string>;
   cluster_id: number;

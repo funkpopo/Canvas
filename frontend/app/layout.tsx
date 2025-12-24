@@ -8,6 +8,7 @@ import { ThemeProvider } from "next-themes";
 import { Toaster } from "sonner";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ClientOnly } from "@/components/ClientOnly";
+import { QueryProvider } from "@/components/QueryProvider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -48,14 +49,16 @@ export default function RootLayout({
             disableTransitionOnChange
           >
             <ErrorBoundary>
-              <AuthProvider>
-                <ClusterProvider>
-                  {children}
-                  <ClientOnly>
-                    <Toaster />
-                  </ClientOnly>
-                </ClusterProvider>
-              </AuthProvider>
+              <QueryProvider>
+                <AuthProvider>
+                  <ClusterProvider>
+                    {children}
+                    <ClientOnly>
+                      <Toaster />
+                    </ClientOnly>
+                  </ClusterProvider>
+                </AuthProvider>
+              </QueryProvider>
             </ErrorBoundary>
           </ThemeProvider>
         </LanguageProvider>
