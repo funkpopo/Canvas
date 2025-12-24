@@ -12,6 +12,7 @@ from .database import create_tables, init_default_user
 from .routers import auth, clusters, stats, nodes, namespaces, pods, deployments, storage, services, configmaps, secrets, network_policies, resource_quotas, events, jobs, websocket, users, audit_logs, rbac, permissions, app_rbac, statefulsets, daemonsets, hpas, cronjobs, ingresses, limit_ranges, pdbs, metrics, alerts, monitoring
 from .exceptions import register_exception_handlers
 from .core.logging import setup_logging, get_logger
+from .core.request_context import request_id_var
 from .observability import request_metrics
 
 @asynccontextmanager
@@ -94,6 +95,7 @@ async def request_id_metrics_and_envelope(request, call_next):
     start = time.perf_counter()
     request_id = str(uuid.uuid4())
     request.state.request_id = request_id
+    token = request_id_var.set(request_id)
 
     response = None
     final_response = None
@@ -138,6 +140,10 @@ async def request_id_metrics_and_envelope(request, call_next):
         return final_response
 
     finally:
+        try:
+            request_id_var.reset(token)
+        except Exception:
+            pass
         try:
             end = time.perf_counter()
             status_code = (final_response or response).status_code if (final_response or response) else 500

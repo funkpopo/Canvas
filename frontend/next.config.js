@@ -1,13 +1,16 @@
+const withBundleAnalyzer = require("@next/bundle-analyzer")({
+  enabled: process.env.ANALYZE === "true",
+});
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // 生产环境优化
   reactStrictMode: true,
 
+  poweredByHeader: false, // 移除 X-Powered-By header
+
   // 压缩配置
   compress: true,
-
-  // 性能优化
-  swcMinify: true,
 
   // 图片优化
   images: {
@@ -19,56 +22,17 @@ const nextConfig = {
 
   // 实验性功能
   experimental: {
-    // 启用React编译器（需要React 19）
-    reactCompiler: true,
-    // 部分预渲染
-    ppr: 'incremental',
     // 优化字体加载
     optimizePackageImports: ['lucide-react', 'recharts'],
   },
 
-  // Webpack优化
-  webpack: (config, { isServer }) => {
-    // 生产环境优化
-    if (!isServer) {
-      config.optimization = {
-        ...config.optimization,
-        splitChunks: {
-          chunks: 'all',
-          cacheGroups: {
-            default: false,
-            vendors: false,
-            // 第三方库单独打包
-            vendor: {
-              name: 'vendor',
-              chunks: 'all',
-              test: /node_modules/,
-              priority: 20
-            },
-            // UI组件库单独打包
-            ui: {
-              name: 'ui',
-              test: /[\\/]node_modules[\\/](@radix-ui|lucide-react)[\\/]/,
-              priority: 30,
-            },
-            // 图表库单独打包
-            charts: {
-              name: 'charts',
-              test: /[\\/]node_modules[\\/](recharts)[\\/]/,
-              priority: 30,
-            },
-            // 公共代码
-            common: {
-              minChunks: 2,
-              priority: 10,
-              reuseExistingChunk: true,
-            },
-          },
-        },
-      };
-    }
-
-    return config;
+  async rewrites() {
+    return [
+      {
+        source: "/api/:path*",
+        destination: process.env.API_URL || "http://backend:8000/api/:path*",
+      },
+    ];
   },
 
   // 环境变量
@@ -114,4 +78,4 @@ const nextConfig = {
   },
 };
 
-module.exports = nextConfig;
+module.exports = process.env.ANALYZE === "true" ? withBundleAnalyzer(nextConfig) : nextConfig;

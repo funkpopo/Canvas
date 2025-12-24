@@ -3,19 +3,24 @@
 import { useEffect, useState, use } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Activity, Cpu, MemoryStick, Loader2, RefreshCw, AlertCircle, Square, Server, LogOut } from "lucide-react";
+import { ArrowLeft, Activity, Loader2, RefreshCw, AlertCircle, Square, Server, LogOut } from "lucide-react";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { LanguageToggle } from "@/components/ui/language-toggle";
 import ClusterSelector from "@/components/ClusterSelector";
 import { useAuth } from "@/lib/auth-context";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { podApi } from "@/lib/api";
+
+const PodMetricsCharts = dynamic(
+  () => import("@/components/pods/PodMetricsCharts").then((m) => m.PodMetricsCharts),
+  { ssr: false, loading: () => <div className="h-64" /> }
+);
 
 interface PodDetails {
   name: string;
@@ -367,78 +372,8 @@ export default function PodDetailsPage({ params }: { params: Promise<{ namespace
               </CardContent>
             </Card>
 
-            {/* 监控图表 */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              {/* CPU使用率图表 */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <Cpu className="h-5 w-5 mr-2" />
-                    CPU使用率
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {isMetricsLoading ? (
-                    <div className="flex items-center justify-center h-64">
-                      <Loader2 className="h-8 w-8 animate-spin" />
-                    </div>
-                  ) : (
-                    <ResponsiveContainer width="100%" height={300}>
-                      <LineChart data={metricsData}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="timestamp" />
-                        <YAxis domain={[0, 120]} />
-                        <Tooltip formatter={(value) => [`${Number(value).toFixed(1)}%`, 'CPU使用率']} />
-                        <Legend />
-                        <Line
-                          type="monotone"
-                          dataKey="cpu"
-                          stroke="#71717a"
-                          strokeWidth={2}
-                          dot={false}
-                          name="CPU使用率 (%)"
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* 内存使用图表 */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <MemoryStick className="h-5 w-5 mr-2" />
-                    内存使用
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {isMetricsLoading ? (
-                    <div className="flex items-center justify-center h-64">
-                      <Loader2 className="h-8 w-8 animate-spin" />
-                    </div>
-                  ) : (
-                    <ResponsiveContainer width="100%" height={300}>
-                      <LineChart data={metricsData}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="timestamp" />
-                        <YAxis domain={[0, 'dataMax + 50']} />
-                        <Tooltip formatter={(value) => [`${Number(value).toFixed(0)} MB`, '内存使用']} />
-                        <Legend />
-                        <Line
-                          type="monotone"
-                          dataKey="memory"
-                          stroke="#10b981"
-                          strokeWidth={2}
-                          dot={false}
-                          name="内存使用 (MB)"
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
+            {/* 监控图表（Recharts 动态加载，减少首屏 bundle） */}
+            <PodMetricsCharts metricsData={metricsData} isLoading={isMetricsLoading} />
 
             {/* 容器信息 */}
             <Card>

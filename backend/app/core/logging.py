@@ -9,6 +9,32 @@ from pathlib import Path
 from logging.handlers import RotatingFileHandler, TimedRotatingFileHandler
 from typing import Any, Dict, Optional
 from .config import settings
+from .request_context import request_id_var, trace_id_var, span_id_var
+
+_CONFIGURED = False
+
+
+class ContextFilter(logging.Filter):
+    """把 request_id/trace_id/span_id 自动注入 LogRecord。"""
+
+    def filter(self, record: logging.LogRecord) -> bool:  # noqa: A003
+        rid = getattr(record, "request_id", None) or request_id_var.get()
+        tid = getattr(record, "trace_id", None) or trace_id_var.get()
+        sid = getattr(record, "span_id", None) or span_id_var.get()
+
+        if rid is not None:
+            record.request_id = rid
+        if tid is not None:
+            record.trace_id = tid
+        if sid is not None:
+            record.span_id = sid
+
+        # 统一服务/环境字段（便于日志检索）
+        if not hasattr(record, "service"):
+            record.service = "canvas"
+        if not hasattr(record, "env"):
+            record.env = settings.ENVIRONMENT
+        return True
 
 
 class ColoredFormatter(logging.Formatter):
@@ -49,6 +75,17 @@ class JSONFormatter(logging.Formatter):
             "message": record.getMessage(),
         }
 
+        # 注入上下文字段（优先 LogRecord，其次 contextvars）
+        rid = getattr(record, "request_id", None) or request_id_var.get()
+        if rid:
+            payload["request_id"] = rid
+        tid = getattr(record, "trace_id", None) or trace_id_var.get()
+        if tid:
+            payload["trace_id"] = tid
+        sid = getattr(record, "span_id", None) or span_id_var.get()
+        if sid:
+            payload["span_id"] = sid
+
         # 合并额外属性
         for key, value in record.__dict__.items():
             if key in {"args", "asctime", "created", "exc_info", "exc_text", "filename", "funcName", "levelname", "levelno", "lineno", "module", "msecs", "message", "msg", "name", "pathname", "process", "processName", "relativeCreated", "stack_info", "thread", "threadName"}:
@@ -77,7 +114,7 @@ def setup_logging(
     log_file: Optional[str] = None,
     use_color: bool = True,
 ) -> logging.Logger:
-    """配置日志系统
+    """配置日志系统（统一配置 root logger）
 
     Args:
         name: 日志记录器名称
@@ -88,54 +125,71 @@ def setup_logging(
     Returns:
         logging.Logger: 配置好的日志记录器
     """
+    global _CONFIGURED
     logger = logging.getLogger(name or "canvas")
-    logger.setLevel(level or settings.LOG_LEVEL)
 
-    # 避免重复添加处理器
-    if logger.handlers:
+    if _CONFIGURED:
         return logger
 
-    # 控制台处理器
+    root = logging.getLogger()
+    root.setLevel(level or settings.LOG_LEVEL)
+
+    # 清理默认 handler，避免重复输出
+    for h in list(root.handlers):
+        root.removeHandler(h)
+
+    context_filter = ContextFilter()
+
+    # 控制台 handler
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(logging.DEBUG if settings.DEBUG else logging.INFO)
+    console_handler.addFilter(context_filter)
 
     if getattr(settings, "LOG_JSON", False):
         console_formatter = JSONFormatter(datefmt=settings.LOG_DATE_FORMAT)
     elif use_color and sys.stdout.isatty():
-        console_formatter = ColoredFormatter(
-            settings.LOG_FORMAT, datefmt=settings.LOG_DATE_FORMAT
-        )
+        console_formatter = ColoredFormatter(settings.LOG_FORMAT, datefmt=settings.LOG_DATE_FORMAT)
     else:
-        console_formatter = logging.Formatter(
-            settings.LOG_FORMAT, datefmt=settings.LOG_DATE_FORMAT
-        )
+        console_formatter = logging.Formatter(settings.LOG_FORMAT, datefmt=settings.LOG_DATE_FORMAT)
 
     console_handler.setFormatter(console_formatter)
-    logger.addHandler(console_handler)
+    root.addHandler(console_handler)
 
-    # 文件处理器
+    # 文件 handler（可选）
     file_path = log_file or settings.LOG_FILE
     if file_path:
-        # 确保日志目录存在
         log_path = Path(file_path)
         log_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # 使用RotatingFileHandler进行日志轮转
         file_handler = RotatingFileHandler(
             file_path,
-            maxBytes=10 * 1024 * 1024,  # 10MB
-            backupCount=5,  # 保留5个备份
+            maxBytes=10 * 1024 * 1024,
+            backupCount=5,
             encoding="utf-8",
         )
         file_handler.setLevel(logging.DEBUG)
+        file_handler.addFilter(context_filter)
 
         if getattr(settings, "LOG_JSON", False):
             file_formatter = JSONFormatter(datefmt=settings.LOG_DATE_FORMAT)
         else:
             file_formatter = logging.Formatter(settings.LOG_FORMAT, datefmt=settings.LOG_DATE_FORMAT)
         file_handler.setFormatter(file_formatter)
-        logger.addHandler(file_handler)
+        root.addHandler(file_handler)
 
+    # 让常见 logger 走 root handlers
+    for log_name in ("uvicorn", "uvicorn.error", "uvicorn.access", "fastapi"):
+        l = logging.getLogger(log_name)
+        l.handlers = []
+        l.propagate = True
+
+    if getattr(settings, "LOG_SQL_QUERIES", False):
+        sqlalchemy_logger = logging.getLogger("sqlalchemy.engine")
+        sqlalchemy_logger.setLevel(logging.INFO)
+        sqlalchemy_logger.handlers = []
+        sqlalchemy_logger.propagate = True
+
+    _CONFIGURED = True
     return logger
 
 

@@ -1,105 +1,57 @@
 "use client";
 
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { authApi } from './api';
+import { useCallback, useEffect, useMemo } from "react";
+import { useRouter } from "next/navigation";
+import { useAuthStore } from "@/lib/store/auth-store";
 
-interface UserInfo {
-  id: number;
-  username: string;
-  email?: string;
-  role: string;
-  is_active: boolean;
-}
-
-interface AuthContextType {
-  isAuthenticated: boolean;
-  isLoading: boolean;
-  user: UserInfo | null;
-  login: (token: string) => void;
-  logout: () => void;
-}
-
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
+/**
+ * Zustand 版本的 AuthProvider：不再依赖 React Context，避免大范围重渲染。
+ * 保留 `useAuth()` API 供现有页面/组件继续使用。
+ */
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [user, setUser] = useState<UserInfo | null>(null);
-  const router = useRouter();
-
-  const checkAuthStatus = useCallback(async () => {
-    const token = localStorage.getItem('token');
-
-    if (!token) {
-      setIsLoading(false);
-      return;
-    }
-
-    try {
-      const result = await authApi.verifyToken();
-      if (result.valid && result.username) {
-        setIsAuthenticated(true);
-        setUser({
-          id: result.id || 0,
-          username: result.username,
-          email: result.email,
-          role: result.role || 'user',
-          is_active: result.is_active !== undefined ? result.is_active : true
-        });
-      } else {
-        // Token无效，清除存储
-        localStorage.removeItem('token');
-        setIsAuthenticated(false);
-        setUser(null);
-      }
-    } catch {
-      // 验证失败，清除token
-      localStorage.removeItem('token');
-      setIsAuthenticated(false);
-      setUser(null);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+  const verify = useAuthStore((s) => s.verify);
 
   useEffect(() => {
-    checkAuthStatus();
-  }, [checkAuthStatus]);
+    void verify();
 
-  const login = useCallback((token: string) => {
-    localStorage.setItem('token', token);
-    setIsAuthenticated(true);
-    // 重新验证以获取用户信息
-    checkAuthStatus();
-  }, [checkAuthStatus]);
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === "token") void verify();
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [verify]);
 
-  const logout = useCallback(() => {
-    localStorage.removeItem('token');
-    setIsAuthenticated(false);
-    setUser(null);
-    router.push('/login');
-  }, [router]);
-
-  const value = useMemo(() => ({
-    isAuthenticated,
-    isLoading,
-    user,
-    login,
-    logout
-  }), [isAuthenticated, isLoading, user, login, logout]);
-
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return children;
 }
 
 export function useAuth() {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
+  const router = useRouter();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const isLoading = useAuthStore((s) => s.isLoading);
+  const user = useAuthStore((s) => s.user);
+  const loginAction = useAuthStore((s) => s.login);
+  const logoutAction = useAuthStore((s) => s.logout);
+
+  const login = useCallback(
+    async (token: string) => {
+      await loginAction(token);
+    },
+    [loginAction]
+  );
+
+  const logout = useCallback(() => {
+    logoutAction();
+    router.push("/login");
+  }, [logoutAction, router]);
+
+  return useMemo(
+    () => ({
+      isAuthenticated,
+      isLoading,
+      user,
+      login,
+      logout,
+    }),
+    [isAuthenticated, isLoading, user, login, logout]
+  );
 }

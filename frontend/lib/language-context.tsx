@@ -1,59 +1,28 @@
 "use client"
 
-import React, { createContext, useContext, useEffect, useState } from 'react'
+import { useEffect } from "react";
+import { type Locale, useLanguageStore } from "@/lib/store/language-store";
 
-type Locale = 'zh' | 'en'
-
-interface LanguageContextType {
-  locale: Locale
-  setLocale: (locale: Locale) => void
-  messages: Record<string, any>
-}
-
-const LanguageContext = createContext<LanguageContextType | undefined>(undefined)
-
+/**
+ * Zustand 版本语言管理：locale 持久化 + messages 动态加载。
+ */
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>('zh')
-  const [messages, setMessages] = useState<Record<string, any>>({})
+  const loadMessages = useLanguageStore((s) => s.loadMessages);
 
-  // Load messages for the current locale
   useEffect(() => {
-    const loadMessages = async () => {
-      try {
-        const messagesModule = await import(`../messages/${locale}.json`)
-        setMessages(messagesModule.default)
-      } catch (error) {
-        console.error(`Failed to load messages for locale ${locale}:`, error)
-      }
-    }
+    void loadMessages();
+  }, [loadMessages]);
 
-    loadMessages()
-  }, [locale])
-
-  // Load saved locale from localStorage on mount
-  useEffect(() => {
-    const savedLocale = localStorage.getItem('locale') as Locale
-    if (savedLocale && (savedLocale === 'zh' || savedLocale === 'en')) {
-      setLocaleState(savedLocale)
-    }
-  }, [])
-
-  const setLocale = (newLocale: Locale) => {
-    setLocaleState(newLocale)
-    localStorage.setItem('locale', newLocale)
-  }
-
-  return (
-    <LanguageContext.Provider value={{ locale, setLocale, messages }}>
-      {children}
-    </LanguageContext.Provider>
-  )
+  return children;
 }
 
-export function useLanguage() {
-  const context = useContext(LanguageContext)
-  if (context === undefined) {
-    throw new Error('useLanguage must be used within a LanguageProvider')
-  }
-  return context
+export function useLanguage(): {
+  locale: Locale;
+  setLocale: (locale: Locale) => void;
+  messages: Record<string, any>;
+} {
+  const locale = useLanguageStore((s) => s.locale);
+  const setLocale = useLanguageStore((s) => s.setLocale);
+  const messages = useLanguageStore((s) => s.messages);
+  return { locale, setLocale, messages };
 }
