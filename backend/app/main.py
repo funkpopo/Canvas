@@ -3,14 +3,16 @@ import logging
 import asyncio
 import json
 import uuid
+import time
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 from .database import create_tables, init_default_user
-from .routers import auth, clusters, stats, nodes, namespaces, pods, deployments, storage, services, configmaps, secrets, network_policies, resource_quotas, events, jobs, websocket, users, audit_logs, rbac, permissions, app_rbac, statefulsets, daemonsets, hpas, cronjobs, ingresses, limit_ranges, pdbs, metrics, alerts
+from .routers import auth, clusters, stats, nodes, namespaces, pods, deployments, storage, services, configmaps, secrets, network_policies, resource_quotas, events, jobs, websocket, users, audit_logs, rbac, permissions, app_rbac, statefulsets, daemonsets, hpas, cronjobs, ingresses, limit_ranges, pdbs, metrics, alerts, monitoring
 from .exceptions import register_exception_handlers
 from .core.logging import setup_logging, get_logger
+from .observability import request_metrics
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -38,6 +40,12 @@ async def lifespan(app: FastAPI):
     asyncio.create_task(alert_checker.start())
     logger.info("告警检查器已启动")
 
+    # 启动审计日志归档/清理任务
+    from .services.audit_archive import audit_log_cleanup_worker
+    audit_stop_event = asyncio.Event()
+    audit_cleanup_task = asyncio.create_task(audit_log_cleanup_worker(audit_stop_event))
+    logger.info("审计日志清理任务已启动")
+
     yield
 
     # 关闭时执行
@@ -60,6 +68,15 @@ async def lifespan(app: FastAPI):
     watcher_manager.stop_all_watchers()
     logger.info("所有Kubernetes监听器已停止")
 
+    # 停止审计日志清理任务
+    audit_stop_event.set()
+    audit_cleanup_task.cancel()
+    try:
+        await audit_cleanup_task
+    except asyncio.CancelledError:
+        pass
+    logger.info("审计日志清理任务已停止")
+
 # 日志初始化需尽早执行（支持彩色/JSON输出、文件轮转）
 setup_logging()
 
@@ -73,42 +90,65 @@ app = FastAPI(
 
 # ============ request_id + 统一成功响应包装 ============
 @app.middleware("http")
-async def request_id_and_response_wrapper(request, call_next):
+async def request_id_metrics_and_envelope(request, call_next):
+    start = time.perf_counter()
     request_id = str(uuid.uuid4())
     request.state.request_id = request_id
 
-    response = await call_next(request)
-    response.headers["X-Request-ID"] = request_id
-
-    # 仅包装成功的 JSON 响应
-    if response.status_code >= 400 or response.status_code == 204:
-        return response
-
-    content_type = response.headers.get("content-type", "")
-    if "application/json" not in content_type:
-        return response
-
-    # 读取 body_iterator（可能是 StreamingResponse）
-    body = b""
-    async for chunk in response.body_iterator:
-        body += chunk
-
-    if not body:
-        return response
-
+    response = None
+    final_response = None
     try:
-        payload = json.loads(body)
-    except Exception:
-        return response
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = request_id
 
-    # 已经是 envelope 则不重复包装
-    if isinstance(payload, dict) and payload.get("success") is True and "request_id" in payload:
-        return response
+        # 仅包装成功的 JSON 响应
+        if response.status_code >= 400 or response.status_code == 204:
+            final_response = response
+            return final_response
 
-    wrapped = {"success": True, "data": payload, "request_id": request_id}
-    headers = dict(response.headers)
-    headers.pop("content-length", None)
-    return JSONResponse(status_code=response.status_code, content=wrapped, headers=headers)
+        content_type = response.headers.get("content-type", "")
+        if "application/json" not in content_type:
+            final_response = response
+            return final_response
+
+        # 读取 body_iterator（可能是 StreamingResponse）
+        body = b""
+        async for chunk in response.body_iterator:
+            body += chunk
+
+        if not body:
+            final_response = response
+            return final_response
+
+        try:
+            payload = json.loads(body)
+        except Exception:
+            final_response = response
+            return final_response
+
+        # 已经是 envelope 则不重复包装
+        if isinstance(payload, dict) and payload.get("success") is True and "request_id" in payload:
+            final_response = response
+            return final_response
+
+        wrapped = {"success": True, "data": payload, "request_id": request_id}
+        headers = dict(response.headers)
+        headers.pop("content-length", None)
+        final_response = JSONResponse(status_code=response.status_code, content=wrapped, headers=headers)
+        return final_response
+
+    finally:
+        try:
+            end = time.perf_counter()
+            status_code = (final_response or response).status_code if (final_response or response) else 500
+            request_metrics.observe(
+                method=request.method,
+                path=request.url.path,
+                status_code=status_code,
+                duration_ms=(end - start) * 1000,
+            )
+        except Exception:
+            pass
 
 # 配置CORS - 支持Docker环境
 allowed_origins = ["http://localhost:3000", "http://frontend:3000"]
@@ -159,6 +199,7 @@ app.include_router(limit_ranges.router, prefix="/api/limit-ranges", tags=["limit
 app.include_router(pdbs.router, prefix="/api/pdbs", tags=["pdbs"])
 app.include_router(metrics.router, prefix="/api/metrics", tags=["metrics"])
 app.include_router(alerts.router, prefix="/api/alerts", tags=["alerts"])
+app.include_router(monitoring.router, prefix="/api/monitoring", tags=["monitoring"])
 app.include_router(websocket.router, prefix="/api", tags=["websocket"])
 
 

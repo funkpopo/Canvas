@@ -3,14 +3,13 @@ Kubernetes客户端连接池管理模块
 提供连接池管理、客户端创建和上下文管理功能
 """
 
-import tempfile
-import os
 import time
 import threading
-from typing import Dict, Any, Optional, List
+import tempfile
+from typing import Dict, Any, Optional, List, Tuple
 
 from kubernetes import client, config
-from kubernetes.client.rest import ApiException
+import yaml
 
 from ...models import Cluster
 from ...core.logging import get_logger
@@ -22,16 +21,23 @@ logger = get_logger(__name__)
 class KubernetesClientPool:
     """Kubernetes客户端连接池管理器"""
 
-    def __init__(self, max_connections_per_cluster: int = 10, connection_timeout: int = 600):
+    def __init__(
+        self,
+        max_connections_per_cluster: int = 10,
+        connection_timeout: int = 600,
+        health_check_interval: int = 60,
+    ):
         """
         初始化连接池管理器
 
         Args:
             max_connections_per_cluster: 每个集群的最大连接数 (提升到10)
             connection_timeout: 连接超时时间（秒，提升到10分钟）
+            health_check_interval: 连接健康检查间隔（秒）。避免每次借用都调用K8s API。
         """
         self.max_connections_per_cluster = max_connections_per_cluster
         self.connection_timeout = connection_timeout
+        self.health_check_interval = health_check_interval
 
         # 连接池存储: cluster_id -> 连接列表
         self._pools: Dict[int, List[Dict[str, Any]]] = {}
@@ -43,9 +49,6 @@ class KubernetesClientPool:
         self._cleanup_thread = None
         self._stop_cleanup = threading.Event()
 
-        # 启动清理线程
-        self.start_cleanup_thread()
-
     def get_client(self, cluster: Cluster) -> Optional[client.ApiClient]:
         """
         从连接池获取客户端连接
@@ -56,47 +59,77 @@ class KubernetesClientPool:
         Returns:
             可用的Kubernetes客户端，如果无法获取则返回None
         """
+        cluster_id = cluster.id
+        current_time = time.time()
+
+        candidate_client: Optional[client.ApiClient] = None
+        candidate_needs_health_check = False
+
+        # 先在锁内快速挑选一个可用连接（不做昂贵的API校验）
         with self._lock:
-            cluster_id = cluster.id
+            pool = self._pools.setdefault(cluster_id, [])
 
-            # 初始化集群连接池
-            if cluster_id not in self._pools:
-                self._pools[cluster_id] = []
-
-            pool = self._pools[cluster_id]
-
-            # 查找可用的连接
-            current_time = time.time()
-            for connection_info in pool:
-                # 检查连接是否超时或无效
-                if (current_time - connection_info['last_used'] > self.connection_timeout or
-                    not self._is_connection_valid(connection_info['client'])):
-                    # 移除无效连接
-                    try:
-                        connection_info['client'].close()
-                    except:
-                        pass
+            # 清理超时连接（只做时间判断，避免锁内做K8s API调用）
+            for connection_info in list(pool):
+                if current_time - connection_info["last_used"] > self.connection_timeout:
+                    self._close_connection(connection_info)
                     pool.remove(connection_info)
-                    continue
 
-                # 找到可用连接
-                connection_info['last_used'] = current_time
-                return connection_info['client']
+            # 取一个候选连接
+            if pool:
+                connection_info = pool[0]
+                connection_info["last_used"] = current_time
+                candidate_client = connection_info["client"]
+                last_check = float(connection_info.get("last_health_check", 0) or 0)
+                candidate_needs_health_check = (current_time - last_check) > self.health_check_interval
 
-            # 如果没有可用连接且未达到最大连接数，创建新连接
-            if len(pool) < self.max_connections_per_cluster:
-                client_instance = self._create_new_connection(cluster)
+            # 没有可用连接，尝试创建
+            if candidate_client is None and len(pool) < self.max_connections_per_cluster:
+                client_instance, temp_files = self._create_new_connection(cluster)
                 if client_instance:
-                    connection_info = {
-                        'client': client_instance,
-                        'created_at': current_time,
-                        'last_used': current_time,
-                        'cluster_id': cluster_id
-                    }
-                    pool.append(connection_info)
+                    pool.append(
+                        {
+                            "client": client_instance,
+                            "created_at": current_time,
+                            "last_used": current_time,
+                            "cluster_id": cluster_id,
+                            "last_health_check": current_time,
+                            "last_health_ok": True,
+                            "temp_files": temp_files,
+                        }
+                    )
                     return client_instance
 
+        if candidate_client is None:
             return None
+
+        # 需要健康检查时，在锁外执行（避免阻塞其它请求）
+        if candidate_needs_health_check:
+            ok = self._is_connection_valid(candidate_client)
+            checked_at = time.time()
+            if not ok:
+                # 失效连接：从池中移除并关闭，然后递归获取下一个
+                with self._lock:
+                    pool = self._pools.get(cluster_id, [])
+                    for info in list(pool):
+                        if info.get("client") is candidate_client:
+                            info["last_health_check"] = checked_at
+                            info["last_health_ok"] = False
+                            self._close_connection(info)
+                            pool.remove(info)
+                            break
+                return self.get_client(cluster)
+
+            # 更新健康检查时间
+            with self._lock:
+                pool = self._pools.get(cluster_id, [])
+                for info in pool:
+                    if info.get("client") is candidate_client:
+                        info["last_health_check"] = checked_at
+                        info["last_health_ok"] = True
+                        break
+
+        return candidate_client
 
     def return_client(self, cluster: Cluster, client_instance: client.ApiClient) -> None:
         """
@@ -132,10 +165,7 @@ class KubernetesClientPool:
                 pool = self._pools[cluster_id]
                 # 关闭所有连接
                 for connection_info in pool:
-                    try:
-                        connection_info['client'].close()
-                    except:
-                        pass
+                    self._close_connection(connection_info)
                 del self._pools[cluster_id]
 
     def cleanup_expired_connections(self) -> None:
@@ -148,15 +178,9 @@ class KubernetesClientPool:
                 valid_connections = []
 
                 for connection_info in pool:
-                    # 检查连接是否过期或无效
-                    if (current_time - connection_info['last_used'] > self.connection_timeout or
-                        not self._is_connection_valid(connection_info['client'])):
-
-                        # 关闭过期连接
-                        try:
-                            connection_info['client'].close()
-                        except:
-                            pass
+                    # 仅基于时间清理，避免清理线程触发大量 K8s API 调用
+                    if current_time - connection_info["last_used"] > self.connection_timeout:
+                        self._close_connection(connection_info)
                     else:
                         valid_connections.append(connection_info)
 
@@ -194,7 +218,7 @@ class KubernetesClientPool:
             except Exception as e:
                 logger.exception("连接池清理出错: %s", e)
 
-    def _create_new_connection(self, cluster: Cluster) -> Optional[client.ApiClient]:
+    def _create_new_connection(self, cluster: Cluster) -> Tuple[Optional[client.ApiClient], List[str]]:
         """
         创建新的集群连接
 
@@ -209,18 +233,9 @@ class KubernetesClientPool:
                 if not cluster.kubeconfig_content:
                     raise ValueError("kubeconfig内容为空")
 
-                # 创建临时文件存储kubeconfig
-                with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
-                    f.write(cluster.kubeconfig_content)
-                    kubeconfig_path = f.name
-
-                try:
-                    # 加载kubeconfig
-                    config.load_kube_config(config_file=kubeconfig_path)
-                    return client.ApiClient()
-                finally:
-                    # 清理临时文件
-                    os.unlink(kubeconfig_path)
+                # 直接从 dict 创建客户端，避免频繁创建/删除临时文件造成I/O开销
+                config_dict = yaml.safe_load(cluster.kubeconfig_content)
+                return config.new_client_from_config_dict(config_dict), []
 
             elif cluster.auth_type == "token":
                 if not cluster.token:
@@ -231,26 +246,24 @@ class KubernetesClientPool:
                 configuration.host = cluster.endpoint
                 configuration.verify_ssl = True
 
+                temp_files: List[str] = []
                 if cluster.ca_cert:
-                    # 如果提供了CA证书，创建临时文件
-                    with tempfile.NamedTemporaryFile(mode='w', suffix='.pem', delete=False) as f:
+                    # 如果提供了CA证书，创建临时文件并保留到连接释放时再清理
+                    with tempfile.NamedTemporaryFile(mode="w", suffix=".pem", delete=False) as f:
                         f.write(cluster.ca_cert)
                         ca_cert_path = f.name
-
-                    try:
-                        configuration.ssl_ca_cert = ca_cert_path
-                    finally:
-                        os.unlink(ca_cert_path)
+                    configuration.ssl_ca_cert = ca_cert_path
+                    temp_files.append(ca_cert_path)
 
                 configuration.api_key = {"authorization": f"Bearer {cluster.token}"}
-                return client.ApiClient(configuration)
+                return client.ApiClient(configuration), temp_files
 
             else:
                 raise ValueError(f"不支持的认证类型: {cluster.auth_type}")
 
         except Exception as e:
             logger.exception("创建Kubernetes客户端失败: %s", e)
-            return None
+            return None, []
 
     def _is_connection_valid(self, client_instance: client.ApiClient) -> bool:
         """
@@ -269,6 +282,23 @@ class KubernetesClientPool:
             return True
         except:
             return False
+
+    @staticmethod
+    def _close_connection(connection_info: Dict[str, Any]) -> None:
+        """关闭连接并清理其关联的临时文件。"""
+        try:
+            connection_info.get("client").close()
+        except Exception:
+            pass
+
+        for path in connection_info.get("temp_files") or []:
+            try:
+                # 延迟清理临时文件（CA证书等）
+                import os
+
+                os.unlink(path)
+            except Exception:
+                pass
 
     def get_pool_stats(self) -> Dict[str, Any]:
         """

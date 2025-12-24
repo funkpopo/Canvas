@@ -17,7 +17,7 @@ logger = get_logger(__name__)
 REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
 REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
 REDIS_DB = int(os.getenv("REDIS_DB", "0"))
-REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", None)
+REDIS_PASSWORD = os.getenv("REDIS_PASSWORD") or None
 REDIS_ENABLED = os.getenv("REDIS_ENABLED", "true").lower() == "true"
 
 # 默认缓存时间（秒）

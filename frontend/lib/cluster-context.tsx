@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode } from 'react';
 import { useAuth } from './auth-context';
 import { clusterApi } from './api';
 import { useWebSocket, useResourceUpdates } from '../hooks/useWebSocket';
@@ -48,7 +48,7 @@ export function ClusterProvider({ children }: { children: ReactNode }) {
   // 获取当前选中的集群ID（用于兼容性）
   const selectedCluster = activeCluster?.id ?? null;
 
-  const fetchClusters = async () => {
+  const fetchClusters = useCallback(async () => {
     try {
       const token = localStorage.getItem("token");
       if (!token) {
@@ -64,15 +64,15 @@ export function ClusterProvider({ children }: { children: ReactNode }) {
       if (response.data) {
         console.log("ClusterContext: Loaded", response.data.length, "clusters");
         setClusters(response.data);
-        const activeClusters = response.data.filter((c: Cluster) => c.is_active);
-        if (activeClusters.length > 0) {
-          const serverActive = activeClusters[0];
-          if (!activeCluster || activeCluster.id !== serverActive.id) {
-            _setActiveClusterLocal(serverActive);
-          }
-        } else {
-          _setActiveClusterLocal(null);
-        }
+        const preferredIdRaw = localStorage.getItem("activeClusterId");
+        const preferredId = preferredIdRaw ? parseInt(preferredIdRaw, 10) : null;
+
+        const serverActive = response.data.find((c: Cluster) => c.is_active) || null;
+        const preferredActive =
+          preferredId ? response.data.find((c: Cluster) => c.id === preferredId && c.is_active) || null : null;
+
+        const nextActive = preferredActive || serverActive;
+        _setActiveClusterLocal(nextActive);
       } else {
         console.error("ClusterContext: Failed to fetch clusters, error:", response.error);
         setClusters([]);
@@ -85,31 +85,30 @@ export function ClusterProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
-  const refreshClusters = async () => {
+  const refreshClusters = useCallback(async () => {
     setIsLoading(true);
     await fetchClusters();
-  };
+  }, [fetchClusters]);
 
   // 将指定集群设为唯一激活（前后端一致）
-  const setActiveCluster = async (cluster: Cluster | null) => {
+  const setActiveCluster = useCallback(async (cluster: Cluster | null) => {
     const token = localStorage.getItem("token");
     if (!token) return;
     if (!cluster) {
       _setActiveClusterLocal(null);
+      localStorage.removeItem("activeClusterId");
       return;
     }
 
     try {
       // 先设置本地状态，避免UI闪烁
       _setActiveClusterLocal(cluster);
+      localStorage.setItem("activeClusterId", String(cluster.id));
 
-      await Promise.all(
-        clusters.map((c) =>
-          clusterApi.updateCluster(c.id, { is_active: c.id === cluster.id })
-        )
-      );
+      // 使用后端专用激活接口（避免对所有集群逐个 update）
+      await clusterApi.activateCluster(cluster.id);
 
       await refreshClusters();
     } catch (err) {
@@ -117,9 +116,9 @@ export function ClusterProvider({ children }: { children: ReactNode }) {
       // 失败时恢复到之前的活跃集群状态
       await refreshClusters();
     }
-  };
+  }, [refreshClusters]);
 
-  const toggleClusterActive = async (clusterId: number) => {
+  const toggleClusterActive = useCallback(async (clusterId: number) => {
     try {
       const cluster = clusters.find(c => c.id === clusterId);
       if (!cluster) return false;
@@ -137,7 +136,7 @@ export function ClusterProvider({ children }: { children: ReactNode }) {
       console.error("切换集群激活状态失败:", error);
       return false;
     }
-  };
+  }, [clusters, refreshClusters]);
 
   useEffect(() => {
     // 只有在认证完成后才尝试获取集群
@@ -168,7 +167,7 @@ export function ClusterProvider({ children }: { children: ReactNode }) {
 
     window.addEventListener('storage', handleStorageChange);
     return () => window.removeEventListener('storage', handleStorageChange);
-  }, [isAuthenticated, authLoading]);
+  }, [isAuthenticated, authLoading, fetchClusters]);
 
   // WebSocket集群订阅管理
   useEffect(() => {
@@ -179,24 +178,40 @@ export function ClusterProvider({ children }: { children: ReactNode }) {
     }
   }, [wsConnected, currentCluster, subscribe]);
 
+  const value = useMemo(() => ({
+    clusters,
+    activeCluster,
+    selectedCluster,
+    setActiveCluster,
+    refreshClusters,
+    toggleClusterActive,
+    isLoading,
+    // WebSocket相关
+    wsConnected,
+    wsConnecting,
+    wsError,
+    resourceUpdates,
+    reconnectWebSocket: reconnect,
+    currentCluster,
+  }), [
+    clusters,
+    activeCluster,
+    selectedCluster,
+    setActiveCluster,
+    refreshClusters,
+    toggleClusterActive,
+    isLoading,
+    wsConnected,
+    wsConnecting,
+    wsError,
+    resourceUpdates,
+    reconnect,
+    currentCluster,
+  ]);
+
   return (
     <ClusterContext.Provider
-      value={{
-        clusters,
-        activeCluster,
-        selectedCluster,
-        setActiveCluster,
-        refreshClusters,
-        toggleClusterActive,
-        isLoading,
-        // WebSocket相关
-        wsConnected,
-        wsConnecting,
-        wsError,
-        resourceUpdates,
-        reconnectWebSocket: reconnect,
-        currentCluster,
-      }}
+      value={value}
     >
       {children}
     </ClusterContext.Provider>

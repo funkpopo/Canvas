@@ -34,6 +34,10 @@ export const clusterApi = {
   async testConnection(id: number): Promise<ApiResponse<unknown>> {
     return apiClient.post<unknown>(`clusters/${id}/test-connection`, {});
   },
+
+  async activateCluster(id: number): Promise<ApiResponse<Cluster>> {
+    return apiClient.post<Cluster>(`clusters/${id}/activate`, {});
+  },
 };
 
 

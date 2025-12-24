@@ -6,6 +6,7 @@ WebSocket连接管理器
 import asyncio
 import json
 import logging
+import os
 from typing import Dict, List, Set, Optional, Any
 from datetime import datetime, timedelta
 from fastapi import WebSocket
@@ -47,9 +48,20 @@ class ConnectionManager:
         self.heartbeat_interval = 30  # 秒
         self.heartbeat_task: Optional[asyncio.Task] = None
 
+        # 连接数限制（简单保护，避免资源耗尽）
+        self.max_connections = int(os.getenv("WS_MAX_CONNECTIONS", "1000"))
+
+        # 广播并发限制
+        self.broadcast_concurrency = 50
+
     async def connect(self, websocket: WebSocket, connection_id: str, user_id: int, token: str) -> bool:
         """建立WebSocket连接"""
         try:
+            if len(self.active_connections) >= self.max_connections:
+                await websocket.accept()
+                await websocket.close(code=1013, reason="Too many connections")
+                return False
+
             await websocket.accept()
             self.active_connections[connection_id] = websocket
             self.connection_metadata[connection_id] = {
@@ -100,22 +112,40 @@ class ConnectionManager:
     async def _leave_all_rooms(self, connection_id: str):
         """从所有房间中移除连接"""
         # 从集群房间移除
-        for cluster_id, connections in self.cluster_rooms.items():
+        for cluster_id, connections in list(self.cluster_rooms.items()):
             connections.discard(connection_id)
             if not connections:
                 del self.cluster_rooms[cluster_id]
 
         # 从命名空间房间移除
-        for key, connections in self.namespace_rooms.items():
+        for key, connections in list(self.namespace_rooms.items()):
             connections.discard(connection_id)
             if not connections:
                 del self.namespace_rooms[key]
 
         # 从资源类型房间移除
-        for key, connections in self.resource_rooms.items():
+        for key, connections in list(self.resource_rooms.items()):
             connections.discard(connection_id)
             if not connections:
                 del self.resource_rooms[key]
+
+    def mark_heartbeat(self, connection_id: str) -> None:
+        """标记连接仍然存活（收到客户端消息/pong 时调用）。"""
+        if connection_id in self.connection_metadata:
+            self.connection_metadata[connection_id]["last_heartbeat"] = datetime.utcnow()
+
+    async def _broadcast(self, connection_ids: Set[str], message: WebSocketMessage) -> None:
+        """带并发限制的广播发送。"""
+        if not connection_ids:
+            return
+
+        sem = asyncio.Semaphore(self.broadcast_concurrency)
+
+        async def _send_one(cid: str):
+            async with sem:
+                await self.send_personal_message(cid, message)
+
+        await asyncio.gather(*[_send_one(cid) for cid in list(connection_ids)], return_exceptions=True)
 
     async def join_cluster(self, connection_id: str, cluster_id: int):
         """加入集群房间"""
@@ -180,9 +210,7 @@ class ConnectionManager:
         if cluster_id not in self.cluster_rooms:
             return
 
-        connection_ids = self.cluster_rooms[cluster_id].copy()
-        for connection_id in connection_ids:
-            await self.send_personal_message(connection_id, message)
+        await self._broadcast(self.cluster_rooms[cluster_id].copy(), message)
 
     async def broadcast_to_namespace(self, cluster_id: int, namespace: str, message: WebSocketMessage):
         """广播消息到命名空间中的所有连接"""
@@ -190,9 +218,7 @@ class ConnectionManager:
         if room_key not in self.namespace_rooms:
             return
 
-        connection_ids = self.namespace_rooms[room_key].copy()
-        for connection_id in connection_ids:
-            await self.send_personal_message(connection_id, message)
+        await self._broadcast(self.namespace_rooms[room_key].copy(), message)
 
     async def broadcast_to_resource_type(self, cluster_id: int, resource_type: str, message: WebSocketMessage):
         """广播消息到资源类型中的所有连接"""
@@ -200,9 +226,7 @@ class ConnectionManager:
         if room_key not in self.resource_rooms:
             return
 
-        connection_ids = self.resource_rooms[room_key].copy()
-        for connection_id in connection_ids:
-            await self.send_personal_message(connection_id, message)
+        await self._broadcast(self.resource_rooms[room_key].copy(), message)
 
     async def send_personal_message(self, connection_id: str, message: WebSocketMessage):
         """发送消息给特定连接"""
@@ -219,16 +243,11 @@ class ConnectionManager:
 
             await websocket.send_text(json.dumps(message_data))
 
-            # 更新心跳时间
-            if connection_id in self.connection_metadata:
-                self.connection_metadata[connection_id]['last_heartbeat'] = datetime.utcnow()
-
         except RuntimeError as e:
             # 连接已关闭，静默清理
             if "Cannot call" in str(e):
                 logger.debug(f"Connection {connection_id} already closed, cleaning up")
-                self.active_connections.pop(connection_id, None)
-                self.connection_metadata.pop(connection_id, None)
+                await self.disconnect(connection_id)
             else:
                 logger.error(f"Failed to send message to {connection_id}: {e}")
                 await self.disconnect(connection_id)

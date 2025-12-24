@@ -77,14 +77,16 @@ async def websocket_endpoint(
                 data = await websocket.receive_text()
                 message_data = json.loads(data)
 
+                # 任意客户端消息都视为连接存活
+                manager.mark_heartbeat(connection_id)
+
                 # 处理订阅/取消订阅请求
                 if message_data.get('type') == 'subscription':
                     await handle_subscription(connection_id, message_data, user, db)
 
                 # 处理心跳响应
                 elif message_data.get('type') == 'pong':
-                    # 更新心跳时间戳（在manager.send_personal_message中已处理）
-                    pass
+                    manager.mark_heartbeat(connection_id)
 
                 # 处理其他消息类型
                 else:

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { authApi } from './api';
 
@@ -28,11 +28,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserInfo | null>(null);
   const router = useRouter();
 
-  useEffect(() => {
-    checkAuthStatus();
-  }, []);
-
-  const checkAuthStatus = async () => {
+  const checkAuthStatus = useCallback(async () => {
     const token = localStorage.getItem('token');
 
     if (!token) {
@@ -65,30 +61,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
-  const login = (token: string) => {
+  useEffect(() => {
+    checkAuthStatus();
+  }, [checkAuthStatus]);
+
+  const login = useCallback((token: string) => {
     localStorage.setItem('token', token);
     setIsAuthenticated(true);
     // 重新验证以获取用户信息
     checkAuthStatus();
-  };
+  }, [checkAuthStatus]);
 
-  const logout = () => {
+  const logout = useCallback(() => {
     localStorage.removeItem('token');
     setIsAuthenticated(false);
     setUser(null);
     router.push('/login');
-  };
+  }, [router]);
+
+  const value = useMemo(() => ({
+    isAuthenticated,
+    isLoading,
+    user,
+    login,
+    logout
+  }), [isAuthenticated, isLoading, user, login, logout]);
 
   return (
-    <AuthContext.Provider value={{
-      isAuthenticated,
-      isLoading,
-      user,
-      login,
-      logout
-    }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );

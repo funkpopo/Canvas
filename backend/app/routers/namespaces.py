@@ -5,6 +5,7 @@ from ..database import get_db
 from ..models import Cluster
 from ..auth import get_current_user
 from ..services.k8s import get_namespaces_info, create_namespace, delete_namespace, get_namespace_resources, get_namespace_deployments, get_namespace_services, get_namespace_crds
+from ..cache import cache_manager, K8S_RESOURCE_TTL, invalidate_cache
 from pydantic import BaseModel
 
 router = APIRouter()
@@ -42,6 +43,11 @@ async def get_namespaces(
 ):
     """获取命名空间列表"""
     try:
+        cache_key = f"k8s:namespaces:cluster:{cluster_id}" if cluster_id else "k8s:namespaces:all_active"
+        cached = cache_manager.get(cache_key)
+        if cached is not None:
+            return cached
+
         if cluster_id:
             # 获取指定集群的命名空间
             cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
@@ -73,6 +79,7 @@ async def get_namespaces(
                     all_namespaces.extend(mock_namespaces)
                 continue
 
+        cache_manager.set(cache_key, all_namespaces, K8S_RESOURCE_TTL)
         return all_namespaces
 
     except Exception as e:
@@ -98,6 +105,10 @@ async def create_new_namespace(
 
         result = create_namespace(cluster, namespace.name, namespace.labels)
         if result:
+            # 使 namespaces 列表缓存失效
+            invalidate_cache(f"k8s:namespaces:cluster:{cluster_id}")
+            invalidate_cache("k8s:namespaces:all_active")
+
             # 重新获取命名空间信息以返回完整数据
             namespaces = get_namespaces_info(cluster)
             for ns in namespaces:
@@ -136,6 +147,9 @@ async def remove_namespace(
 
         result = delete_namespace(cluster, namespace_name)
         if result:
+            # 使 namespaces 列表缓存失效
+            invalidate_cache(f"k8s:namespaces:cluster:{cluster_id}")
+            invalidate_cache("k8s:namespaces:all_active")
             return {"message": f"命名空间 '{namespace_name}' 已删除"}
         else:
             raise HTTPException(status_code=500, detail="删除命名空间失败")
