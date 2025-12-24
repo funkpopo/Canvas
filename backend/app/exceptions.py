@@ -24,23 +24,25 @@ class AppException(Exception):
 
 def _build_error_payload(
     *,
-    detail: str,
+    message: str,
     status_code: int,
     code: str = "APP_ERROR",
     details: Optional[Dict[str, Any]] = None,
     request_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """构建标准化错误响应载荷。
-
-    注意：为保持前端兼容性，保留根级别的 `detail` 字段。
     """
+    rid = request_id or str(uuid.uuid4())
     payload: Dict[str, Any] = {
-        "detail": detail,
-        "code": code,
-        "request_id": request_id or str(uuid.uuid4()),
+        "success": False,
+        "error": {
+            "message": message,
+            "code": code,
+            **({"details": details} if details else {}),
+        },
+        "request_id": rid,
+        "status_code": status_code,
     }
-    if details:
-        payload["details"] = details
     return payload
 
 
@@ -49,12 +51,12 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(StarletteHTTPException)
     async def http_exception_handler(request: Request, exc: StarletteHTTPException):  # type: ignore[override]
-        req_id = str(uuid.uuid4())
+        req_id = getattr(request.state, "request_id", None) or str(uuid.uuid4())
         # FastAPI/Starlette 可能提供 str 或 dict 作为 detail
         message = exc.detail if isinstance(exc.detail, str) else "请求处理失败"
         code = "HTTP_ERROR"
         payload = _build_error_payload(
-            detail=message,
+            message=message,
             status_code=exc.status_code,
             code=code,
             request_id=req_id,
@@ -66,14 +68,14 @@ def register_exception_handlers(app: FastAPI) -> None:
             request.url.path,
             req_id,
         )
-        return JSONResponse(status_code=exc.status_code, content=payload)
+        return JSONResponse(status_code=exc.status_code, content=payload, headers={"X-Request-ID": req_id})
 
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(request: Request, exc: RequestValidationError):  # type: ignore[override]
-        req_id = str(uuid.uuid4())
+        req_id = getattr(request.state, "request_id", None) or str(uuid.uuid4())
         errors = exc.errors()
         payload = _build_error_payload(
-            detail="请求参数验证失败",
+            message="请求参数验证失败",
             status_code=422,
             code="VALIDATION_ERROR",
             details={"errors": errors},
@@ -85,13 +87,13 @@ def register_exception_handlers(app: FastAPI) -> None:
             len(errors),
             req_id,
         )
-        return JSONResponse(status_code=422, content=payload)
+        return JSONResponse(status_code=422, content=payload, headers={"X-Request-ID": req_id})
 
     @app.exception_handler(AppException)
     async def app_exception_handler(request: Request, exc: AppException):  # type: ignore[override]
-        req_id = str(uuid.uuid4())
+        req_id = getattr(request.state, "request_id", None) or str(uuid.uuid4())
         payload = _build_error_payload(
-            detail=exc.message,
+            message=exc.message,
             status_code=exc.status_code,
             code=exc.code,
             details=exc.details,
@@ -104,17 +106,17 @@ def register_exception_handlers(app: FastAPI) -> None:
             request.url.path,
             req_id,
         )
-        return JSONResponse(status_code=exc.status_code, content=payload)
+        return JSONResponse(status_code=exc.status_code, content=payload, headers={"X-Request-ID": req_id})
 
     @app.exception_handler(Exception)
     async def unhandled_exception_handler(request: Request, exc: Exception):  # type: ignore[override]
-        req_id = str(uuid.uuid4())
+        req_id = getattr(request.state, "request_id", None) or str(uuid.uuid4())
         logger.exception("UnhandledException: path=%s request_id=%s", request.url.path, req_id)
         payload = _build_error_payload(
-            detail="服务器内部错误",
+            message="服务器内部错误",
             status_code=500,
             code="INTERNAL_SERVER_ERROR",
             request_id=req_id,
         )
-        return JSONResponse(status_code=500, content=payload)
+        return JSONResponse(status_code=500, content=payload, headers={"X-Request-ID": req_id})
 

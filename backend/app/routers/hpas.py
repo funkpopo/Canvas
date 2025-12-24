@@ -4,6 +4,7 @@ from typing import List
 from ..database import get_db
 from ..models import Cluster
 from ..auth import get_current_user, require_resource_management
+from .deps import get_cluster_or_404
 from ..services.k8s import (
     get_namespace_hpas, get_hpa_details, delete_hpa
 )
@@ -51,14 +52,11 @@ async def list_hpas(
     cluster_id: int,
     namespace: str,
     request: Request,
+    cluster: Cluster = Depends(get_cluster_or_404),
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """获取命名空间中的HPAs"""
-    cluster = db.query(Cluster).filter(Cluster.id == cluster_id).first()
-    if not cluster:
-        raise HTTPException(status_code=404, detail="集群不存在")
-
     hpas = get_namespace_hpas(cluster, namespace)
 
     log_action(
@@ -77,14 +75,11 @@ async def get_hpa(
     namespace: str,
     name: str,
     request: Request,
+    cluster: Cluster = Depends(get_cluster_or_404),
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """获取HPA详细信息"""
-    cluster = db.query(Cluster).filter(Cluster.id == cluster_id).first()
-    if not cluster:
-        raise HTTPException(status_code=404, detail="集群不存在")
-
     hpa = get_hpa_details(cluster, namespace, name)
     if not hpa:
         raise HTTPException(status_code=404, detail="HPA不存在")
@@ -105,14 +100,11 @@ async def delete_hpa_handler(
     namespace: str,
     name: str,
     request: Request,
+    cluster: Cluster = Depends(get_cluster_or_404),
     current_user=Depends(require_resource_management),
     db: Session = Depends(get_db)
 ):
     """删除HPA"""
-    cluster = db.query(Cluster).filter(Cluster.id == cluster_id).first()
-    if not cluster:
-        raise HTTPException(status_code=404, detail="集群不存在")
-
     success = delete_hpa(cluster, namespace, name)
 
     log_action(

@@ -4,6 +4,7 @@ from typing import List
 from ..database import get_db
 from ..models import Cluster
 from ..auth import get_current_user, require_resource_management
+from .deps import get_cluster_or_404
 from ..services.k8s import (
     get_namespace_statefulsets, get_statefulset_details,
     scale_statefulset, delete_statefulset
@@ -55,14 +56,11 @@ async def list_statefulsets(
     cluster_id: int,
     namespace: str,
     request: Request,
+    cluster: Cluster = Depends(get_cluster_or_404),
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """获取命名空间中的StatefulSets"""
-    cluster = db.query(Cluster).filter(Cluster.id == cluster_id).first()
-    if not cluster:
-        raise HTTPException(status_code=404, detail="集群不存在")
-
     statefulsets = get_namespace_statefulsets(cluster, namespace)
 
     log_action(
@@ -81,14 +79,11 @@ async def get_statefulset(
     namespace: str,
     name: str,
     request: Request,
+    cluster: Cluster = Depends(get_cluster_or_404),
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """获取StatefulSet详细信息"""
-    cluster = db.query(Cluster).filter(Cluster.id == cluster_id).first()
-    if not cluster:
-        raise HTTPException(status_code=404, detail="集群不存在")
-
     statefulset = get_statefulset_details(cluster, namespace, name)
     if not statefulset:
         raise HTTPException(status_code=404, detail="StatefulSet不存在")
@@ -110,14 +105,11 @@ async def scale_statefulset_handler(
     name: str,
     scale_request: ScaleRequest,
     request: Request,
+    cluster: Cluster = Depends(get_cluster_or_404),
     current_user=Depends(require_resource_management),
     db: Session = Depends(get_db)
 ):
     """扩缩容StatefulSet"""
-    cluster = db.query(Cluster).filter(Cluster.id == cluster_id).first()
-    if not cluster:
-        raise HTTPException(status_code=404, detail="集群不存在")
-
     success = scale_statefulset(cluster, namespace, name, scale_request.replicas)
 
     log_action(
@@ -139,14 +131,11 @@ async def delete_statefulset_handler(
     namespace: str,
     name: str,
     request: Request,
+    cluster: Cluster = Depends(get_cluster_or_404),
     current_user=Depends(require_resource_management),
     db: Session = Depends(get_db)
 ):
     """删除StatefulSet"""
-    cluster = db.query(Cluster).filter(Cluster.id == cluster_id).first()
-    if not cluster:
-        raise HTTPException(status_code=404, detail="集群不存在")
-
     success = delete_statefulset(cluster, namespace, name)
 
     log_action(

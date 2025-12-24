@@ -1,8 +1,11 @@
 import os
 import logging
 import asyncio
+import json
+import uuid
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 from .database import create_tables, init_default_user
 from .routers import auth, clusters, stats, nodes, namespaces, pods, deployments, storage, services, configmaps, secrets, network_policies, resource_quotas, events, jobs, websocket, users, audit_logs, rbac, permissions, app_rbac, statefulsets, daemonsets, hpas, cronjobs, ingresses, limit_ranges, pdbs, metrics, alerts
@@ -67,6 +70,45 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+
+# ============ request_id + 统一成功响应包装 ============
+@app.middleware("http")
+async def request_id_and_response_wrapper(request, call_next):
+    request_id = str(uuid.uuid4())
+    request.state.request_id = request_id
+
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
+
+    # 仅包装成功的 JSON 响应
+    if response.status_code >= 400 or response.status_code == 204:
+        return response
+
+    content_type = response.headers.get("content-type", "")
+    if "application/json" not in content_type:
+        return response
+
+    # 读取 body_iterator（可能是 StreamingResponse）
+    body = b""
+    async for chunk in response.body_iterator:
+        body += chunk
+
+    if not body:
+        return response
+
+    try:
+        payload = json.loads(body)
+    except Exception:
+        return response
+
+    # 已经是 envelope 则不重复包装
+    if isinstance(payload, dict) and payload.get("success") is True and "request_id" in payload:
+        return response
+
+    wrapped = {"success": True, "data": payload, "request_id": request_id}
+    headers = dict(response.headers)
+    headers.pop("content-length", None)
+    return JSONResponse(status_code=response.status_code, content=wrapped, headers=headers)
 
 # 配置CORS - 支持Docker环境
 allowed_origins = ["http://localhost:3000", "http://frontend:3000"]

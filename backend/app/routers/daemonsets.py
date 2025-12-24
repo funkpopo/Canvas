@@ -4,6 +4,7 @@ from typing import List
 from ..database import get_db
 from ..models import Cluster
 from ..auth import get_current_user, require_resource_management
+from .deps import get_cluster_or_404
 from ..services.k8s import (
     get_namespace_daemonsets, get_daemonset_details, delete_daemonset
 )
@@ -51,14 +52,11 @@ async def list_daemonsets(
     cluster_id: int,
     namespace: str,
     request: Request,
+    cluster: Cluster = Depends(get_cluster_or_404),
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """获取命名空间中的DaemonSets"""
-    cluster = db.query(Cluster).filter(Cluster.id == cluster_id).first()
-    if not cluster:
-        raise HTTPException(status_code=404, detail="集群不存在")
-
     daemonsets = get_namespace_daemonsets(cluster, namespace)
 
     log_action(
@@ -77,14 +75,11 @@ async def get_daemonset(
     namespace: str,
     name: str,
     request: Request,
+    cluster: Cluster = Depends(get_cluster_or_404),
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """获取DaemonSet详细信息"""
-    cluster = db.query(Cluster).filter(Cluster.id == cluster_id).first()
-    if not cluster:
-        raise HTTPException(status_code=404, detail="集群不存在")
-
     daemonset = get_daemonset_details(cluster, namespace, name)
     if not daemonset:
         raise HTTPException(status_code=404, detail="DaemonSet不存在")
@@ -105,14 +100,11 @@ async def delete_daemonset_handler(
     namespace: str,
     name: str,
     request: Request,
+    cluster: Cluster = Depends(get_cluster_or_404),
     current_user=Depends(require_resource_management),
     db: Session = Depends(get_db)
 ):
     """删除DaemonSet"""
-    cluster = db.query(Cluster).filter(Cluster.id == cluster_id).first()
-    if not cluster:
-        raise HTTPException(status_code=404, detail="集群不存在")
-
     success = delete_daemonset(cluster, namespace, name)
 
     log_action(

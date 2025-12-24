@@ -7,6 +7,19 @@ export interface ApiResponse<T = unknown> {
   error?: string;
 }
 
+type ApiEnvelope<T = unknown> =
+  | {
+      success: true;
+      data: T;
+      request_id?: string;
+    }
+  | {
+      success: false;
+      error?: { message?: string; code?: string; details?: unknown };
+      request_id?: string;
+      status_code?: number;
+    };
+
 export class ApiClient {
   private getAuthHeaders(): HeadersInit {
     const token = localStorage.getItem("token");
@@ -23,6 +36,30 @@ export class ApiClient {
     return `${baseUrl}/${cleanEndpoint}`;
   }
 
+  private async parseJsonSafe(response: Response): Promise<unknown> {
+    const contentType = response.headers.get("content-type") || "";
+    if (!contentType.includes("application/json")) return null;
+    return await response.json().catch(() => null);
+  }
+
+  private unwrapEnvelope<T>(payload: unknown): { ok: true; data: T } | { ok: false; message: string } | null {
+    if (!payload || typeof payload !== "object") return null;
+    const maybe = payload as Partial<ApiEnvelope<T>> & Record<string, unknown>;
+    if (typeof maybe.success !== "boolean") return null;
+
+    if (maybe.success === true) {
+      return { ok: true, data: (maybe as any).data as T };
+    }
+
+    const errObj = (maybe as any).error as any;
+    const msg =
+      (errObj && typeof errObj === "object" && (errObj.message as unknown)) ||
+      (maybe as any).message ||
+      (maybe as any).detail ||
+      "Request failed";
+    return { ok: false, message: typeof msg === "string" ? msg : "Request failed" };
+  }
+
   async get<T>(endpoint: string): Promise<ApiResponse<T>> {
     try {
       const response = await fetch(this.buildUrl(endpoint), {
@@ -30,11 +67,19 @@ export class ApiClient {
       });
 
       if (!response.ok) {
-        return { error: `HTTP ${response.status}: ${response.statusText}` };
+        const body = await this.parseJsonSafe(response);
+        const unwrapped = this.unwrapEnvelope<T>(body);
+        const msg =
+          (unwrapped && !unwrapped.ok && unwrapped.message) ||
+          (body && typeof body === "object" && (body as any).detail) ||
+          `HTTP ${response.status}: ${response.statusText}`;
+        return { error: msg };
       }
 
-      const data = await response.json();
-      return { data };
+      const body = await this.parseJsonSafe(response);
+      const unwrapped = this.unwrapEnvelope<T>(body);
+      if (unwrapped && unwrapped.ok) return { data: unwrapped.data };
+      return { data: body as T };
     } catch (error) {
       return { error: error instanceof Error ? error.message : "Network error" };
     }
@@ -49,12 +94,19 @@ export class ApiClient {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        return { error: errorData.detail || `HTTP ${response.status}: ${response.statusText}` };
+        const errorBody = await this.parseJsonSafe(response);
+        const unwrapped = this.unwrapEnvelope<T>(errorBody);
+        const msg =
+          (unwrapped && !unwrapped.ok && unwrapped.message) ||
+          (errorBody && typeof errorBody === "object" && (errorBody as any).detail) ||
+          `HTTP ${response.status}: ${response.statusText}`;
+        return { error: msg };
       }
 
-      const data = await response.json();
-      return { data };
+      const okBody = await this.parseJsonSafe(response);
+      const unwrapped = this.unwrapEnvelope<T>(okBody);
+      if (unwrapped && unwrapped.ok) return { data: unwrapped.data };
+      return { data: okBody as T };
     } catch (error) {
       return { error: error instanceof Error ? error.message : "Network error" };
     }
@@ -69,12 +121,19 @@ export class ApiClient {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        return { error: errorData.detail || `HTTP ${response.status}: ${response.statusText}` };
+        const errorBody = await this.parseJsonSafe(response);
+        const unwrapped = this.unwrapEnvelope<T>(errorBody);
+        const msg =
+          (unwrapped && !unwrapped.ok && unwrapped.message) ||
+          (errorBody && typeof errorBody === "object" && (errorBody as any).detail) ||
+          `HTTP ${response.status}: ${response.statusText}`;
+        return { error: msg };
       }
 
-      const data = await response.json();
-      return { data };
+      const okBody = await this.parseJsonSafe(response);
+      const unwrapped = this.unwrapEnvelope<T>(okBody);
+      if (unwrapped && unwrapped.ok) return { data: unwrapped.data };
+      return { data: okBody as T };
     } catch (error) {
       return { error: error instanceof Error ? error.message : "Network error" };
     }
@@ -88,11 +147,20 @@ export class ApiClient {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        return { error: errorData.detail || `HTTP ${response.status}: ${response.statusText}` };
+        const errorBody = await this.parseJsonSafe(response);
+        const unwrapped = this.unwrapEnvelope<T>(errorBody);
+        const msg =
+          (unwrapped && !unwrapped.ok && unwrapped.message) ||
+          (errorBody && typeof errorBody === "object" && (errorBody as any).detail) ||
+          `HTTP ${response.status}: ${response.statusText}`;
+        return { error: msg };
       }
 
-      return { data: null as T };
+      if (response.status === 204) return { data: null as T };
+      const okBody = await this.parseJsonSafe(response);
+      const unwrapped = this.unwrapEnvelope<T>(okBody);
+      if (unwrapped && unwrapped.ok) return { data: unwrapped.data };
+      return { data: (okBody ?? (null as T)) as T };
     } catch (error) {
       return { error: error instanceof Error ? error.message : "Network error" };
     }

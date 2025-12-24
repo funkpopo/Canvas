@@ -4,6 +4,7 @@ from typing import List, Optional
 from ..database import get_db
 from ..models import Cluster
 from ..auth import get_current_user, require_resource_management
+from .deps import get_cluster_or_404
 from ..services.k8s import (
     get_namespace_cronjobs, get_cronjob_details, delete_cronjob
 )
@@ -52,14 +53,11 @@ async def list_cronjobs(
     cluster_id: int,
     namespace: str,
     request: Request,
+    cluster: Cluster = Depends(get_cluster_or_404),
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """获取命名空间中的CronJobs"""
-    cluster = db.query(Cluster).filter(Cluster.id == cluster_id).first()
-    if not cluster:
-        raise HTTPException(status_code=404, detail="集群不存在")
-
     cronjobs = get_namespace_cronjobs(cluster, namespace)
 
     log_action(
@@ -78,14 +76,11 @@ async def get_cronjob(
     namespace: str,
     name: str,
     request: Request,
+    cluster: Cluster = Depends(get_cluster_or_404),
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """获取CronJob详细信息"""
-    cluster = db.query(Cluster).filter(Cluster.id == cluster_id).first()
-    if not cluster:
-        raise HTTPException(status_code=404, detail="集群不存在")
-
     cronjob = get_cronjob_details(cluster, namespace, name)
     if not cronjob:
         raise HTTPException(status_code=404, detail="CronJob不存在")
@@ -106,14 +101,11 @@ async def delete_cronjob_handler(
     namespace: str,
     name: str,
     request: Request,
+    cluster: Cluster = Depends(get_cluster_or_404),
     current_user=Depends(require_resource_management),
     db: Session = Depends(get_db)
 ):
     """删除CronJob"""
-    cluster = db.query(Cluster).filter(Cluster.id == cluster_id).first()
-    if not cluster:
-        raise HTTPException(status_code=404, detail="集群不存在")
-
     success = delete_cronjob(cluster, namespace, name)
 
     log_action(

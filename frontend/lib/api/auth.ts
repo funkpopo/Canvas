@@ -52,12 +52,22 @@ export const loginApi = {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        return { error: errorData.detail || `HTTP ${response.status}: ${response.statusText}` };
+        const errorBody = await response.json().catch(() => ({}));
+        const msg =
+          errorBody?.error?.message ||
+          errorBody?.message ||
+          errorBody?.detail ||
+          `HTTP ${response.status}: ${response.statusText}`;
+        return { error: typeof msg === "string" ? msg : `HTTP ${response.status}: ${response.statusText}` };
       }
 
-      const data = await response.json();
-      return { data };
+      const body = await response.json().catch(() => null);
+      if (body && typeof body === "object" && "success" in (body as any)) {
+        const env = body as any;
+        if (env.success === true) return { data: env.data };
+        return { error: env?.error?.message || "Login failed" };
+      }
+      return { data: body };
     } catch (error) {
       return { error: error instanceof Error ? error.message : "Network error" };
     }
