@@ -39,38 +39,8 @@ export const authApi = {
 // ===== Login API =====
 export const loginApi = {
   async login(username: string, password: string): Promise<ApiResponse<{ access_token: string; token_type: string }>> {
-    try {
-      const response = await fetch(`${API_BASE_URL.replace(/\/$/, "")}/auth/login`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: new URLSearchParams({
-          username,
-          password,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorBody = await response.json().catch(() => ({}));
-        const msg =
-          errorBody?.error?.message ||
-          errorBody?.message ||
-          errorBody?.detail ||
-          `HTTP ${response.status}: ${response.statusText}`;
-        return { error: typeof msg === "string" ? msg : `HTTP ${response.status}: ${response.statusText}` };
-      }
-
-      const body = await response.json().catch(() => null);
-      if (body && typeof body === "object" && "success" in (body as any)) {
-        const env = body as any;
-        if (env.success === true) return { data: env.data };
-        return { error: env?.error?.message || "Login failed" };
-      }
-      return { data: body };
-    } catch (error) {
-      return { error: error instanceof Error ? error.message : "Network error" };
-    }
+    // 后端 `/api/auth/login` 使用 JSON body（LoginRequest）
+    return apiClient.post<{ access_token: string; token_type: string }>("auth/login", { username, password });
   },
 };
 

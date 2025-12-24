@@ -98,6 +98,8 @@ from .service_operations import (
     create_service,
     update_service,
     delete_service,
+    get_service_yaml,
+    update_service_yaml,
 )
 
 # ========== ConfigMap和Secret操作 ==========
@@ -106,6 +108,7 @@ from .config_operations import (
     get_namespace_configmaps,
     get_configmap_details,
     create_configmap,
+    update_configmap,
     delete_configmap,
     get_configmap_yaml,
     create_configmap_from_yaml,
@@ -114,6 +117,7 @@ from .config_operations import (
     get_namespace_secrets,
     get_secret_details,
     create_secret,
+    update_secret,
     delete_secret,
     get_secret_yaml,
     create_secret_yaml,
@@ -312,11 +316,14 @@ __all__ = [
     'create_service',
     'update_service',
     'delete_service',
+    'get_service_yaml',
+    'update_service_yaml',
 
     # ConfigMap操作
     'get_namespace_configmaps',
     'get_configmap_details',
     'create_configmap',
+    'update_configmap',
     'delete_configmap',
     'get_configmap_yaml',
     'create_configmap_from_yaml',
@@ -326,6 +333,7 @@ __all__ = [
     'get_namespace_secrets',
     'get_secret_details',
     'create_secret',
+    'update_secret',
     'delete_secret',
     'get_secret_yaml',
     'create_secret_yaml',

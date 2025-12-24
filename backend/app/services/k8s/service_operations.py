@@ -4,9 +4,11 @@ Kubernetes Service操作模块
 """
 
 from typing import Dict, Any, Optional, List
+from io import StringIO
 
 from kubernetes import client
 from kubernetes.client.rest import ApiException
+import yaml
 
 from ...models import Cluster
 from ...core.logging import get_logger
@@ -289,6 +291,67 @@ def delete_service(cluster: Cluster, namespace: str, service_name: str) -> bool:
     except Exception as e:
         logger.exception("删除服务失败: %s", e)
         return False
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def get_service_yaml(cluster: Cluster, namespace: str, service_name: str) -> Optional[str]:
+    """获取Service的YAML"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return None
+
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+        svc = core_v1.read_namespaced_service(service_name, namespace)
+
+        api_client = client.ApiClient()
+        svc_dict = api_client.sanitize_for_serialization(svc)
+
+        yaml_output = StringIO()
+        yaml.dump(svc_dict, yaml_output, default_flow_style=False, allow_unicode=True, sort_keys=False)
+        return yaml_output.getvalue()
+
+    except Exception as e:
+        logger.exception("获取Service YAML失败: %s/%s error=%s", namespace, service_name, e)
+        return None
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def update_service_yaml(cluster: Cluster, namespace: str, service_name: str, yaml_content: str) -> Dict[str, Any]:
+    """更新Service的YAML配置"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return {"success": False, "message": "无法创建Kubernetes客户端"}
+
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+
+        svc_dict = yaml.safe_load(yaml_content) or {}
+        if not isinstance(svc_dict, dict):
+            return {"success": False, "message": "YAML内容格式不正确"}
+
+        # 强制与URL参数一致，避免用户误改导致更新到别的资源
+        metadata = svc_dict.get("metadata") or {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+        metadata["name"] = service_name
+        metadata["namespace"] = namespace
+        svc_dict["metadata"] = metadata
+
+        # status 属于子资源，更新主体时移除以减少失败概率
+        svc_dict.pop("status", None)
+
+        core_v1.replace_namespaced_service(service_name, namespace, svc_dict)
+        return {"success": True, "message": f"Service '{service_name}' 更新成功"}
+
+    except ApiException as e:
+        return {"success": False, "message": f"API错误: {e.body}"}
+    except Exception as e:
+        return {"success": False, "message": f"更新Service失败: {str(e)}"}
     finally:
         if client_instance:
             client_instance.close()

@@ -125,6 +125,36 @@ def create_configmap(cluster: Cluster, namespace: str, configmap_data: Dict[str,
             client_instance.close()
 
 
+def update_configmap(cluster: Cluster, namespace: str, configmap_name: str, update_data: Dict[str, Any]) -> bool:
+    """更新ConfigMap（非YAML方式）"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+        existing = core_v1.read_namespaced_config_map(configmap_name, namespace)
+
+        if "data" in update_data:
+            existing.data = update_data.get("data") or {}
+        if "binary_data" in update_data:
+            existing.binary_data = update_data.get("binary_data") or {}
+        if "labels" in update_data:
+            existing.metadata.labels = update_data.get("labels") or {}
+        if "annotations" in update_data:
+            existing.metadata.annotations = update_data.get("annotations") or {}
+
+        core_v1.replace_namespaced_config_map(configmap_name, namespace, existing)
+        return True
+
+    except Exception as e:
+        logger.exception("更新ConfigMap失败: %s", e)
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
 def delete_configmap(cluster: Cluster, namespace: str, configmap_name: str) -> bool:
     """删除ConfigMap"""
     client_instance = create_k8s_client(cluster)
@@ -366,6 +396,44 @@ def create_secret(cluster: Cluster, namespace: str, secret_data: Dict[str, Any])
 
     except Exception as e:
         logger.exception("创建Secret失败: %s", e)
+        return False
+    finally:
+        if client_instance:
+            client_instance.close()
+
+
+def update_secret(cluster: Cluster, namespace: str, secret_name: str, update_data: Dict[str, Any]) -> bool:
+    """更新Secret（非YAML方式）"""
+    client_instance = create_k8s_client(cluster)
+    if not client_instance:
+        return False
+
+    try:
+        core_v1 = client.CoreV1Api(client_instance)
+        existing = core_v1.read_namespaced_secret(secret_name, namespace)
+
+        if "type" in update_data and update_data.get("type") is not None:
+            existing.type = update_data.get("type")
+
+        if "data" in update_data and update_data.get("data") is not None:
+            encoded_data: Dict[str, Any] = {}
+            for key, value in (update_data.get("data") or {}).items():
+                if isinstance(value, str):
+                    encoded_data[key] = base64.b64encode(value.encode("utf-8")).decode("utf-8")
+                else:
+                    encoded_data[key] = value
+            existing.data = encoded_data
+
+        if "labels" in update_data:
+            existing.metadata.labels = update_data.get("labels") or {}
+        if "annotations" in update_data:
+            existing.metadata.annotations = update_data.get("annotations") or {}
+
+        core_v1.replace_namespaced_secret(secret_name, namespace, existing)
+        return True
+
+    except Exception as e:
+        logger.exception("更新Secret失败: %s", e)
         return False
     finally:
         if client_instance:

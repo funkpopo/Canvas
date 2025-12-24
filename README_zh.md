@@ -45,7 +45,7 @@ npm run dev
 
 - 使用 Alembic 做迁移，避免启动时直接 `create_all`。
 - 将卷文件浏览改为真实且可审计的实现。
-- 为前后端增加 Dockerfile 与 CI/CD。
+- 增加 CI/CD（构建、测试、发布）流程。
 - 增加测试（单元/集成）与 Lint。
 
 ---

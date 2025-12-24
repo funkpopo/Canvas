@@ -30,15 +30,10 @@ const nextConfig = {
     return [
       {
         source: "/api/:path*",
-        destination: process.env.API_URL || "http://backend:8000/api/:path*",
+        // 本地开发默认走 localhost；Docker 部署时通过 API_URL 覆盖为 http://backend:8000/api/:path*
+        destination: process.env.API_URL || "http://localhost:8000/api/:path*",
       },
     ];
-  },
-
-  // 环境变量
-  env: {
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
-    NEXT_PUBLIC_WS_URL: process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000',
   },
 
   // 输出配置

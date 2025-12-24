@@ -707,10 +707,9 @@ async def update_service_yaml_endpoint(
             raise HTTPException(status_code=404, detail="集群不存在或未激活")
 
         result = update_service_yaml(cluster, namespace, service_name, yaml_request.yaml_content)
-        if result:
-            return {"message": f"服务 {namespace}/{service_name} YAML更新成功"}
-        else:
-            raise HTTPException(status_code=500, detail="更新服务YAML失败")
+        if not result.get("success"):
+            raise HTTPException(status_code=500, detail=result.get("message") or "更新服务YAML失败")
+        return {"message": result.get("message") or f"服务 {namespace}/{service_name} YAML更新成功"}
     except HTTPException:
         raise
     except Exception as e:

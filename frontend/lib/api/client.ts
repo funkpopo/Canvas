@@ -1,6 +1,7 @@
 // API 工具函数与统一客户端
 
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/";
+// 默认走同源 `/api`，由 Next rewrites 代理到后端（避免 CORS / 配置缺失导致 404）
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
 
 export interface ApiResponse<T = unknown> {
   data?: T;

@@ -26,14 +26,28 @@ export interface WebSocketHookReturn {
   removeMessageHandler: (type: string) => void;
 }
 
-// 从API基础URL动态构造WebSocket URL
+// 从 API 基址动态构造 WebSocket URL（兼容 NEXT_PUBLIC_API_URL 为相对路径 `/api`）
 const getWebSocketBaseUrl = (): string => {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/';
-  // 将http/https替换为ws/wss，并移除最后的/api/
-  return apiUrl.replace(/^http/, 'ws').replace(/\/api\/$/, '/api/ws');
-};
+  const explicit = process.env.NEXT_PUBLIC_WS_URL;
+  if (explicit && typeof explicit === "string") {
+    return explicit.replace(/\/$/, "");
+  }
 
-const WS_BASE_URL = getWebSocketBaseUrl();
+  const apiUrl = (process.env.NEXT_PUBLIC_API_URL || "/api").replace(/\/$/, "");
+
+  // 绝对 URL：http(s)://host/api -> ws(s)://host/api/ws
+  if (/^https?:\/\//.test(apiUrl)) {
+    return apiUrl.replace(/^http/, "ws").replace(/\/api$/, "/api/ws");
+  }
+
+  // 相对 URL：HTTP 走 Next rewrites，但 WebSocket 不走 rewrites，因此默认连后端 8000 端口
+  const loc = typeof window !== "undefined" ? window.location : null;
+  const proto = loc && loc.protocol === "https:" ? "wss" : "ws";
+  const wsPort = process.env.NEXT_PUBLIC_WS_PORT || "8000";
+  const host = loc ? `${loc.hostname}:${wsPort}` : "localhost:8000";
+  const basePath = apiUrl === "/api" ? "/api/ws" : `${apiUrl}/ws`;
+  return `${proto}://${host}${basePath}`;
+};
 
 export function useWebSocket(): WebSocketHookReturn {
   const [token, setToken] = useState<string | null>(null);
@@ -74,7 +88,8 @@ export function useWebSocket(): WebSocketHookReturn {
     setError(null);
 
     try {
-      const wsUrl = `${WS_BASE_URL}?token=${encodeURIComponent(token)}`;
+      const wsBase = getWebSocketBaseUrl();
+      const wsUrl = `${wsBase}?token=${encodeURIComponent(token)}`;
       const ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {

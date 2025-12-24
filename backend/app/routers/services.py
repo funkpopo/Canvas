@@ -319,9 +319,9 @@ async def update_service_yaml_config(
         if not yaml_content:
             raise HTTPException(status_code=400, detail="YAML内容不能为空")
 
-        success = update_service_yaml(cluster, namespace, service_name, yaml_content)
-        if not success:
-            raise HTTPException(status_code=500, detail="更新服务失败")
+        result = update_service_yaml(cluster, namespace, service_name, yaml_content)
+        if not result.get("success"):
+            raise HTTPException(status_code=500, detail=result.get("message") or "更新服务失败")
 
         # 记录审计日志
         audit_log = AuditLog(
@@ -335,7 +335,7 @@ async def update_service_yaml_config(
         db.add(audit_log)
         db.commit()
 
-        return {"message": "服务更新成功"}
+        return {"message": result.get("message") or "服务更新成功"}
 
     except HTTPException:
         raise

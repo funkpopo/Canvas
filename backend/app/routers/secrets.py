@@ -140,9 +140,9 @@ async def create_secret_yaml_config(
         if not yaml_content:
             raise HTTPException(status_code=400, detail="YAML内容不能为空")
 
-        success = create_secret_yaml(cluster, yaml_content)
-        if not success:
-            raise HTTPException(status_code=500, detail="通过YAML创建Secret失败")
+        result = create_secret_yaml(cluster, yaml_content)
+        if not result.get("success"):
+            raise HTTPException(status_code=500, detail=result.get("message") or "通过YAML创建Secret失败")
 
         # 记录审计日志
         audit_log = AuditLog(
@@ -156,7 +156,7 @@ async def create_secret_yaml_config(
         db.add(audit_log)
         db.commit()
 
-        return {"message": "Secret创建成功"}
+        return {"message": result.get("message") or "Secret创建成功"}
 
     except HTTPException:
         raise
@@ -347,9 +347,9 @@ async def update_secret_yaml_config(
         if not yaml_content:
             raise HTTPException(status_code=400, detail="YAML内容不能为空")
 
-        success = update_secret_yaml(cluster, namespace, secret_name, yaml_content)
-        if not success:
-            raise HTTPException(status_code=500, detail="更新Secret YAML失败")
+        result = update_secret_yaml(cluster, namespace, secret_name, yaml_content)
+        if not result.get("success"):
+            raise HTTPException(status_code=500, detail=result.get("message") or "更新Secret YAML失败")
 
         # 记录审计日志
         audit_log = AuditLog(
@@ -363,7 +363,7 @@ async def update_secret_yaml_config(
         db.add(audit_log)
         db.commit()
 
-        return {"message": f"Secret {namespace}/{secret_name} YAML更新成功"}
+        return {"message": result.get("message") or f"Secret {namespace}/{secret_name} YAML更新成功"}
 
     except HTTPException:
         raise

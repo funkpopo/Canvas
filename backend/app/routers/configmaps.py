@@ -257,9 +257,9 @@ async def create_configmap_from_yaml(
         if not yaml_content:
             raise HTTPException(status_code=400, detail="YAML内容不能为空")
 
-        success = create_configmap_from_yaml(cluster, yaml_content)
-        if not success:
-            raise HTTPException(status_code=500, detail="创建ConfigMap失败")
+        result = create_configmap_from_yaml(cluster, yaml_content)
+        if not result.get("success"):
+            raise HTTPException(status_code=500, detail=result.get("message") or "创建ConfigMap失败")
 
         # 记录审计日志
         audit_log = AuditLog(
@@ -273,7 +273,7 @@ async def create_configmap_from_yaml(
         db.add(audit_log)
         db.commit()
 
-        return {"message": "ConfigMap创建成功"}
+        return {"message": result.get("message") or "ConfigMap创建成功"}
 
     except HTTPException:
         raise
@@ -331,9 +331,9 @@ async def update_configmap_yaml_config(
         if not yaml_content:
             raise HTTPException(status_code=400, detail="YAML内容不能为空")
 
-        success = update_configmap_yaml(cluster, namespace, configmap_name, yaml_content)
-        if not success:
-            raise HTTPException(status_code=500, detail="更新ConfigMap YAML失败")
+        result = update_configmap_yaml(cluster, namespace, configmap_name, yaml_content)
+        if not result.get("success"):
+            raise HTTPException(status_code=500, detail=result.get("message") or "更新ConfigMap YAML失败")
 
         # 记录审计日志
         audit_log = AuditLog(
@@ -347,7 +347,7 @@ async def update_configmap_yaml_config(
         db.add(audit_log)
         db.commit()
 
-        return {"message": f"ConfigMap {namespace}/{configmap_name} YAML更新成功"}
+        return {"message": result.get("message") or f"ConfigMap {namespace}/{configmap_name} YAML更新成功"}
 
     except HTTPException:
         raise
