@@ -8,6 +8,18 @@ export interface ApiResponse<T = unknown> {
   error?: string;
 }
 
+interface RetryConfig {
+  maxRetries: number;
+  baseDelay: number;
+  retryOn: (status: number) => boolean;
+}
+
+const defaultRetryConfig: RetryConfig = {
+  maxRetries: 3,
+  baseDelay: 1000,
+  retryOn: (status) => status >= 500 || status === 429,
+};
+
 type ApiEnvelope<T = unknown> =
   | {
       success: true;
@@ -22,6 +34,34 @@ type ApiEnvelope<T = unknown> =
     };
 
 export class ApiClient {
+  private retryConfig: RetryConfig;
+
+  constructor(retryConfig: Partial<RetryConfig> = {}) {
+    this.retryConfig = { ...defaultRetryConfig, ...retryConfig };
+  }
+
+  private async sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private async fetchWithRetry(url: string, options: RequestInit): Promise<Response> {
+    let lastError: Error | null = null;
+    for (let attempt = 0; attempt <= this.retryConfig.maxRetries; attempt++) {
+      try {
+        const response = await fetch(url, options);
+        if (!this.retryConfig.retryOn(response.status) || attempt === this.retryConfig.maxRetries) {
+          return response;
+        }
+        await this.sleep(this.retryConfig.baseDelay * Math.pow(2, attempt));
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error("Network error");
+        if (attempt === this.retryConfig.maxRetries) break;
+        await this.sleep(this.retryConfig.baseDelay * Math.pow(2, attempt));
+      }
+    }
+    throw lastError ?? new Error("Request failed after retries");
+  }
+
   private getAuthHeaders(): HeadersInit {
     const token = localStorage.getItem("token");
     return {
@@ -75,7 +115,7 @@ export class ApiClient {
 
   async get<T>(endpoint: string): Promise<ApiResponse<T>> {
     try {
-      const response = await fetch(this.buildUrl(endpoint), {
+      const response = await this.fetchWithRetry(this.buildUrl(endpoint), {
         headers: this.getAuthHeaders(),
       });
 
@@ -100,7 +140,7 @@ export class ApiClient {
 
   async post<T>(endpoint: string, body: unknown): Promise<ApiResponse<T>> {
     try {
-      const response = await fetch(this.buildUrl(endpoint), {
+      const response = await this.fetchWithRetry(this.buildUrl(endpoint), {
         method: "POST",
         headers: this.getAuthHeaders(),
         body: JSON.stringify(body),
@@ -127,7 +167,7 @@ export class ApiClient {
 
   async put<T>(endpoint: string, body: unknown): Promise<ApiResponse<T>> {
     try {
-      const response = await fetch(this.buildUrl(endpoint), {
+      const response = await this.fetchWithRetry(this.buildUrl(endpoint), {
         method: "PUT",
         headers: this.getAuthHeaders(),
         body: JSON.stringify(body),
@@ -154,7 +194,7 @@ export class ApiClient {
 
   async delete<T>(endpoint: string): Promise<ApiResponse<T>> {
     try {
-      const response = await fetch(this.buildUrl(endpoint), {
+      const response = await this.fetchWithRetry(this.buildUrl(endpoint), {
         method: "DELETE",
         headers: this.getAuthHeaders(),
       });
