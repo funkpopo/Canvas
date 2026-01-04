@@ -2,13 +2,9 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Search, ArrowLeft, RefreshCw, Plus, LayoutGrid, List } from "lucide-react";
-import ClusterSelector from "@/components/ClusterSelector";
+import { Card, CardContent } from "@/components/ui/card";
+import { Loader2, Plus } from "lucide-react";
 import { BatchOperations } from "@/components/BatchOperations";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useAuth } from "@/lib/auth-context";
@@ -21,6 +17,8 @@ import type { BaseResource, ResourceListProps, ViewMode } from "./resource-list/
 import { generateResourceId } from "./resource-list/utils";
 import { ResourceListCardView } from "./resource-list/CardView";
 import { ResourceListTableView } from "./resource-list/TableView";
+import { ResourceListHeader } from "./resource-list/Header";
+import { ResourceListToolbar } from "./resource-list/Toolbar";
 
 export type {
   ActionDef,
@@ -355,62 +353,18 @@ export function ResourceList<T extends BaseResource>({
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="bg-card shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
-              <Link href="/" className="flex items-center">
-                <ArrowLeft className="h-5 w-5 mr-2" />
-                <span className="text-gray-600 dark:text-gray-400">返回仪表板</span>
-              </Link>
-            </div>
-            <div className="flex items-center space-x-4">
-              <ClusterSelector
-                value={selectedClusterId?.toString() || ""}
-                onValueChange={(value) => setSelectedClusterId(value ? parseInt(value) : null)}
-              />
-              {/* 命名空间选择器 (Header 模式 或 从数据提取) */}
-              {(showNamespaceInHeader || namespaceSource === "data") && namespaces.length > 0 && (
-                <Select
-                  value={selectedNamespace || "all"}
-                  onValueChange={(value) => setSelectedNamespace(value === "all" ? "" : value)}
-                >
-                  <SelectTrigger className="w-48">
-                    <SelectValue placeholder="选择命名空间" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">全部命名空间</SelectItem>
-                    {namespaces.map((ns) => (
-                      <SelectItem key={ns} value={ns}>
-                        {ns}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-              {/* 命名空间选择器 (卡片内模式，从 API 获取) */}
-              {!showNamespaceInHeader && namespaceSource === "api" && requireNamespace && (
-                <Select value={selectedNamespace} onValueChange={setSelectedNamespace}>
-                  <SelectTrigger className="w-[200px]">
-                    <SelectValue placeholder="选择命名空间" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {namespaces.map((ns) => (
-                      <SelectItem key={ns} value={ns}>
-                        {ns}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-              <Button onClick={() => refetchItems()} variant="outline" disabled={isFetching}>
-                <RefreshCw className={`h-4 w-4 mr-2 ${isFetching ? "animate-spin" : ""}`} />
-                刷新
-              </Button>
-            </div>
-          </div>
-        </div>
-      </header>
+      <ResourceListHeader
+        selectedClusterId={selectedClusterId}
+        onClusterChange={setSelectedClusterId}
+        namespaces={namespaces}
+        selectedNamespace={selectedNamespace}
+        onNamespaceChange={setSelectedNamespace}
+        showNamespaceInHeader={showNamespaceInHeader}
+        namespaceSource={namespaceSource}
+        requireNamespace={requireNamespace}
+        isFetching={isFetching}
+        onRefresh={() => refetchItems()}
+      />
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -471,64 +425,23 @@ export function ResourceList<T extends BaseResource>({
             )}
 
             {/* 工具栏：搜索、筛选、视图切换 */}
-            <div className="flex items-center justify-between gap-4 mb-4">
-              <div className="flex items-center gap-4 flex-1">
-                <div className="relative flex-1 max-w-sm">
-                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder={searchPlaceholder || `搜索${resourceType}...`}
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-8"
-                  />
-                </div>
-                {statusFilter && (
-                  <Select value={selectedStatus} onValueChange={setSelectedStatus}>
-                    <SelectTrigger className="w-[150px]">
-                      <SelectValue placeholder="状态筛选" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">全部状态</SelectItem>
-                      {statusFilter.options.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                {headerActions}
-                {createButton && createButton.canCreate !== false && (
-                  <Button onClick={createButton.onClick} disabled={namespaceSource === "api" && requireNamespace && !selectedNamespace}>
-                    <Plus className="w-4 h-4 mr-2" />
-                    {createButton.label}
-                  </Button>
-                )}
-                {/* 视图切换按钮 */}
-                {cardConfig && allowViewToggle && (
-                  <div className="flex items-center border rounded-md">
-                    <Button
-                      variant={viewMode === "card" ? "secondary" : "ghost"}
-                      size="sm"
-                      onClick={() => setViewMode("card")}
-                      className="rounded-r-none"
-                    >
-                      <LayoutGrid className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant={viewMode === "table" ? "secondary" : "ghost"}
-                      size="sm"
-                      onClick={() => setViewMode("table")}
-                      className="rounded-l-none"
-                    >
-                      <List className="h-4 w-4" />
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </div>
+            <ResourceListToolbar
+              resourceType={resourceType}
+              searchTerm={searchTerm}
+              onSearchChange={setSearchTerm}
+              searchPlaceholder={searchPlaceholder}
+              statusFilter={statusFilter ? { field: String(statusFilter.field), options: statusFilter.options } : undefined}
+              selectedStatus={selectedStatus}
+              onStatusChange={setSelectedStatus}
+              headerActions={headerActions}
+              createButton={createButton ? {
+                ...createButton,
+                disabled: namespaceSource === "api" && requireNamespace && !selectedNamespace,
+              } : undefined}
+              viewMode={viewMode}
+              onViewModeChange={setViewMode}
+              showViewToggle={!!cardConfig && allowViewToggle}
+            />
 
             {/* 卡片视图 */}
             {viewMode === "card" && cardConfig ? (

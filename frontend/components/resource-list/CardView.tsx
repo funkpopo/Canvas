@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ItemCheckbox } from "@/components/BatchOperations";
@@ -13,6 +14,7 @@ export interface ResourceListCardViewProps<T extends BaseResource> {
   selectedItems: string[];
   onSelectionChange: (ids: string[]) => void;
   onCardClick?: (item: T) => void;
+  virtualizeThreshold?: number;
 }
 
 export function ResourceListCardView<T extends BaseResource>({
@@ -23,7 +25,61 @@ export function ResourceListCardView<T extends BaseResource>({
   selectedItems,
   onSelectionChange,
   onCardClick,
+  virtualizeThreshold = 100,
 }: ResourceListCardViewProps<T>) {
+  // ============ 虚拟滚动 ============
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const scrollRafRef = useRef<number | null>(null);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(800);
+  const [columns, setColumns] = useState(3);
+
+  const shouldVirtualize = items.length > virtualizeThreshold;
+  const cardHeight = 220; // 估算卡片高度
+  const gap = 24;
+  const rowHeight = cardHeight + gap;
+  const overscan = 2;
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const updateDimensions = () => {
+      setViewportHeight(el.clientHeight || 800);
+      const width = el.clientWidth || 1200;
+      setColumns(width >= 1024 ? 3 : width >= 768 ? 2 : 1);
+    };
+    updateDimensions();
+
+    window.addEventListener("resize", updateDimensions);
+    return () => window.removeEventListener("resize", updateDimensions);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (scrollRafRef.current) cancelAnimationFrame(scrollRafRef.current);
+    };
+  }, []);
+
+  const { virtualItems, paddingTop, paddingBottom } = useMemo(() => {
+    if (!shouldVirtualize) {
+      return { virtualItems: items, paddingTop: 0, paddingBottom: 0 };
+    }
+
+    const totalRows = Math.ceil(items.length / columns);
+    const startRow = Math.max(0, Math.floor(scrollTop / rowHeight) - overscan);
+    const endRow = Math.min(totalRows, Math.ceil((scrollTop + viewportHeight) / rowHeight) + overscan);
+
+    const startIndex = startRow * columns;
+    const endIndex = Math.min(items.length, endRow * columns);
+
+    return {
+      virtualItems: items.slice(startIndex, endIndex),
+      paddingTop: startRow * rowHeight,
+      paddingBottom: Math.max(0, (totalRows - endRow) * rowHeight),
+    };
+  }, [items, shouldVirtualize, scrollTop, viewportHeight, columns, rowHeight]);
+
   const toggleSelection = (itemId: string, checked: boolean) => {
     if (checked) {
       onSelectionChange([...selectedItems, itemId]);
@@ -32,9 +88,21 @@ export function ResourceListCardView<T extends BaseResource>({
     }
   };
 
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const top = e.currentTarget.scrollTop;
+    if (scrollRafRef.current) cancelAnimationFrame(scrollRafRef.current);
+    scrollRafRef.current = requestAnimationFrame(() => setScrollTop(top));
+  };
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {items.map((item) => {
+    <div
+      ref={containerRef}
+      className={shouldVirtualize ? "overflow-auto max-h-[70vh]" : ""}
+      onScroll={shouldVirtualize ? handleScroll : undefined}
+    >
+      {shouldVirtualize && paddingTop > 0 && <div style={{ height: paddingTop }} />}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {virtualItems.map((item) => {
         const defaultActionsNode =
           actions.length > 0 ? (
             <div className="flex justify-end space-x-2">
@@ -97,6 +165,8 @@ export function ResourceListCardView<T extends BaseResource>({
           </Card>
         );
       })}
+      </div>
+      {shouldVirtualize && paddingBottom > 0 && <div style={{ height: paddingBottom }} />}
     </div>
   );
 }
