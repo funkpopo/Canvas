@@ -42,12 +42,28 @@ class KubernetesClientPool:
         # 连接池存储: cluster_id -> 连接列表
         self._pools: Dict[int, List[Dict[str, Any]]] = {}
 
-        # 锁保护并发访问
-        self._lock = threading.RLock()
+        # 分段锁：每个集群独立的锁，减少高并发时的锁竞争
+        self._cluster_locks: Dict[int, threading.RLock] = {}
+        # 元数据锁：仅用于保护 _pools 和 _cluster_locks 字典本身的修改
+        self._meta_lock = threading.Lock()
 
         # 清理线程
         self._cleanup_thread = None
         self._stop_cleanup = threading.Event()
+
+    def _get_cluster_lock(self, cluster_id: int) -> threading.RLock:
+        """获取指定集群的锁，如果不存在则创建"""
+        with self._meta_lock:
+            if cluster_id not in self._cluster_locks:
+                self._cluster_locks[cluster_id] = threading.RLock()
+            return self._cluster_locks[cluster_id]
+
+    def _get_or_create_pool(self, cluster_id: int) -> List[Dict[str, Any]]:
+        """获取或创建指定集群的连接池"""
+        with self._meta_lock:
+            if cluster_id not in self._pools:
+                self._pools[cluster_id] = []
+            return self._pools[cluster_id]
 
     def get_client(self, cluster: Cluster) -> Optional[client.ApiClient]:
         """
@@ -65,9 +81,11 @@ class KubernetesClientPool:
         candidate_client: Optional[client.ApiClient] = None
         candidate_needs_health_check = False
 
+        cluster_lock = self._get_cluster_lock(cluster_id)
+
         # 先在锁内快速挑选一个可用连接（不做昂贵的API校验）
-        with self._lock:
-            pool = self._pools.setdefault(cluster_id, [])
+        with cluster_lock:
+            pool = self._get_or_create_pool(cluster_id)
 
             # 清理超时连接（只做时间判断，避免锁内做K8s API调用）
             for connection_info in list(pool):
@@ -109,8 +127,8 @@ class KubernetesClientPool:
             checked_at = time.time()
             if not ok:
                 # 失效连接：从池中移除并关闭，然后递归获取下一个
-                with self._lock:
-                    pool = self._pools.get(cluster_id, [])
+                with cluster_lock:
+                    pool = self._get_or_create_pool(cluster_id)
                     for info in list(pool):
                         if info.get("client") is candidate_client:
                             info["last_health_check"] = checked_at
@@ -121,8 +139,8 @@ class KubernetesClientPool:
                 return self.get_client(cluster)
 
             # 更新健康检查时间
-            with self._lock:
-                pool = self._pools.get(cluster_id, [])
+            with cluster_lock:
+                pool = self._get_or_create_pool(cluster_id)
                 for info in pool:
                     if info.get("client") is candidate_client:
                         info["last_health_check"] = checked_at
@@ -139,14 +157,15 @@ class KubernetesClientPool:
             cluster: 集群配置
             client_instance: 要返回的客户端连接
         """
-        with self._lock:
-            cluster_id = cluster.id
-            if cluster_id not in self._pools:
+        cluster_id = cluster.id
+        cluster_lock = self._get_cluster_lock(cluster_id)
+
+        with cluster_lock:
+            pool = self._pools.get(cluster_id)
+            if not pool:
                 return
 
-            pool = self._pools[cluster_id]
             current_time = time.time()
-
             # 更新连接的最后使用时间
             for connection_info in pool:
                 if connection_info['client'] is client_instance:
@@ -160,23 +179,37 @@ class KubernetesClientPool:
         Args:
             cluster_id: 集群ID
         """
-        with self._lock:
-            if cluster_id in self._pools:
-                pool = self._pools[cluster_id]
-                # 关闭所有连接
-                for connection_info in pool:
-                    self._close_connection(connection_info)
-                del self._pools[cluster_id]
+        cluster_lock = self._get_cluster_lock(cluster_id)
+
+        with cluster_lock:
+            with self._meta_lock:
+                if cluster_id in self._pools:
+                    pool = self._pools[cluster_id]
+                    # 关闭所有连接
+                    for connection_info in pool:
+                        self._close_connection(connection_info)
+                    del self._pools[cluster_id]
+                # 清理集群锁
+                if cluster_id in self._cluster_locks:
+                    del self._cluster_locks[cluster_id]
 
     def cleanup_expired_connections(self) -> None:
         """清理过期的连接"""
-        with self._lock:
-            current_time = time.time()
-            clusters_to_remove = []
+        # 获取所有集群ID的快照
+        with self._meta_lock:
+            cluster_ids = list(self._pools.keys())
 
-            for cluster_id, pool in self._pools.items():
+        clusters_to_remove = []
+        current_time = time.time()
+
+        for cluster_id in cluster_ids:
+            cluster_lock = self._get_cluster_lock(cluster_id)
+            with cluster_lock:
+                pool = self._pools.get(cluster_id)
+                if pool is None:
+                    continue
+
                 valid_connections = []
-
                 for connection_info in pool:
                     # 仅基于时间清理，避免清理线程触发大量 K8s API 调用
                     if current_time - connection_info["last_used"] > self.connection_timeout:
@@ -189,9 +222,11 @@ class KubernetesClientPool:
                 else:
                     clusters_to_remove.append(cluster_id)
 
-            # 移除空连接池
+        # 移除空连接池
+        with self._meta_lock:
             for cluster_id in clusters_to_remove:
-                del self._pools[cluster_id]
+                self._pools.pop(cluster_id, None)
+                self._cluster_locks.pop(cluster_id, None)
 
     def start_cleanup_thread(self) -> None:
         """启动清理线程"""
@@ -307,7 +342,7 @@ class KubernetesClientPool:
         Returns:
             连接池统计信息
         """
-        with self._lock:
+        with self._meta_lock:
             stats = {
                 'total_clusters': len(self._pools),
                 'total_connections': 0,
