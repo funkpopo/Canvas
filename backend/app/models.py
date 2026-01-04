@@ -1,13 +1,25 @@
 from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, ForeignKey, Index
 from sqlalchemy.sql import func
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, declared_attr
 from passlib.context import CryptContext
 from .database import Base
 
 pwd_context = CryptContext(schemes=["scrypt", "bcrypt"], deprecated="auto")
 
 
-class User(Base):
+class SoftDeleteMixin:
+    """软删除混入类"""
+    is_deleted = Column(Boolean, default=False, index=True)
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
+    deleted_by = Column(Integer, nullable=True)
+
+    def soft_delete(self, user_id: int = None):
+        self.is_deleted = True
+        self.deleted_at = func.now()
+        self.deleted_by = user_id
+
+
+class User(SoftDeleteMixin, Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -75,7 +87,7 @@ class UserSession(Base):
     )
 
 
-class Cluster(Base):
+class Cluster(SoftDeleteMixin, Base):
     __tablename__ = "clusters"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -91,6 +103,7 @@ class Cluster(Base):
 
 
 class AuditLog(Base):
+    """审计日志表 - 支持归档"""
     __tablename__ = "audit_logs"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -105,6 +118,9 @@ class AuditLog(Base):
     success = Column(Boolean, default=True)
     error_message = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    # 归档支持
+    is_archived = Column(Boolean, default=False, index=True)
+    archived_at = Column(DateTime(timezone=True), nullable=True)
 
     # Relationships
     user = relationship("User")
@@ -114,10 +130,11 @@ class AuditLog(Base):
         Index("idx_audit_user_created", "user_id", "created_at"),
         Index("idx_audit_cluster_created", "cluster_id", "created_at"),
         Index("idx_audit_resource", "resource_type", "resource_name"),
+        Index("idx_audit_archived", "is_archived", "created_at"),
     )
 
 
-class JobTemplate(Base):
+class JobTemplate(SoftDeleteMixin, Base):
     __tablename__ = "job_templates"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -201,7 +218,7 @@ class Permission(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
-class Role(Base):
+class Role(SoftDeleteMixin, Base):
     """角色表（扩展RBAC）"""
     __tablename__ = "roles"
 
@@ -291,7 +308,7 @@ class UserNamespacePermission(Base):
     )
 
 
-class AlertRule(Base):
+class AlertRule(SoftDeleteMixin, Base):
     """告警规则表"""
     __tablename__ = "alert_rules"
 
