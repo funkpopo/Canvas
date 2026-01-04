@@ -4,7 +4,7 @@ from typing import List
 from ..database import get_db
 from ..models import Cluster
 from ..auth import get_current_user, require_resource_management
-from .deps import get_cluster_or_404
+from .deps import get_active_cluster
 from ..services.k8s import (
     get_namespace_ingresses, get_ingress_details, delete_ingress
 )
@@ -46,7 +46,7 @@ async def list_ingresses(
     cluster_id: int,
     namespace: str,
     request: Request,
-    cluster: Cluster = Depends(get_cluster_or_404),
+    cluster: Cluster = Depends(get_active_cluster),
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -69,7 +69,7 @@ async def get_ingress(
     namespace: str,
     name: str,
     request: Request,
-    cluster: Cluster = Depends(get_cluster_or_404),
+    cluster: Cluster = Depends(get_active_cluster),
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -94,7 +94,7 @@ async def delete_ingress_handler(
     namespace: str,
     name: str,
     request: Request,
-    cluster: Cluster = Depends(get_cluster_or_404),
+    cluster: Cluster = Depends(get_active_cluster),
     current_user=Depends(require_resource_management),
     db: Session = Depends(get_db)
 ):

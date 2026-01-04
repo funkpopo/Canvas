@@ -1,19 +1,18 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from typing import List
+from pydantic import BaseModel
+
 from ..database import get_db
 from ..models import Cluster
 from ..auth import get_current_user, require_resource_management
-from .deps import get_cluster_or_404
 from ..services.k8s import (
     get_namespace_daemonsets, get_daemonset_details, delete_daemonset
 )
 from ..audit import log_action
-from ..core.logging import get_logger
-from pydantic import BaseModel
+from .deps import get_active_cluster
 
 router = APIRouter()
-logger = get_logger(__name__)
 
 
 class DaemonSetInfo(BaseModel):
@@ -52,20 +51,18 @@ async def list_daemonsets(
     cluster_id: int,
     namespace: str,
     request: Request,
-    cluster: Cluster = Depends(get_cluster_or_404),
+    cluster: Cluster = Depends(get_active_cluster),
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """获取命名空间中的DaemonSets"""
     daemonsets = get_namespace_daemonsets(cluster, namespace)
-
     log_action(
         db=db, user_id=current_user.id, action="LIST_DAEMONSETS",
         resource_type="daemonset", resource_name=namespace,
         cluster_id=cluster_id, request=request,
         details={"namespace": namespace, "count": len(daemonsets)}
     )
-
     return daemonsets
 
 
@@ -75,7 +72,7 @@ async def get_daemonset(
     namespace: str,
     name: str,
     request: Request,
-    cluster: Cluster = Depends(get_cluster_or_404),
+    cluster: Cluster = Depends(get_active_cluster),
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -90,7 +87,6 @@ async def get_daemonset(
         cluster_id=cluster_id, request=request,
         details={"namespace": namespace, "name": name}
     )
-
     return daemonset
 
 
@@ -100,13 +96,12 @@ async def delete_daemonset_handler(
     namespace: str,
     name: str,
     request: Request,
-    cluster: Cluster = Depends(get_cluster_or_404),
+    cluster: Cluster = Depends(get_active_cluster),
     current_user=Depends(require_resource_management),
     db: Session = Depends(get_db)
 ):
     """删除DaemonSet"""
     success = delete_daemonset(cluster, namespace, name)
-
     log_action(
         db=db, user_id=current_user.id, action="DELETE_DAEMONSET",
         resource_type="daemonset", resource_name=f"{namespace}/{name}",
@@ -116,5 +111,4 @@ async def delete_daemonset_handler(
 
     if not success:
         raise HTTPException(status_code=500, detail="删除失败")
-
     return {"success": True, "message": "DaemonSet已删除"}

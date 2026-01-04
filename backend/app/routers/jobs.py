@@ -1,6 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
+from pydantic import BaseModel
+from datetime import datetime
+
 from ..database import get_db
 from ..models import Cluster, JobTemplate, JobHistory
 from ..auth import get_current_user
@@ -8,8 +11,7 @@ from ..services.k8s import (
     get_namespace_jobs, get_job_details, create_job, delete_job, restart_job,
     get_job_pods, get_job_yaml, update_job_yaml, monitor_job_status_changes
 )
-from pydantic import BaseModel
-from datetime import datetime
+from .deps import get_active_cluster, handle_k8s_operation
 
 router = APIRouter()
 
@@ -116,9 +118,9 @@ async def list_jobs(
     current_user: dict = Depends(get_current_user)
 ):
     """获取命名空间中的Jobs列表"""
-    cluster = db.query(Cluster).filter(Cluster.id == cluster_id).first()
+    cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
     if not cluster:
-        raise HTTPException(status_code=404, detail="集群不存在")
+        raise HTTPException(status_code=404, detail="集群不存在或未激活")
 
     jobs = get_namespace_jobs(cluster, namespace)
     return jobs
@@ -133,9 +135,9 @@ async def get_job_detail(
     current_user: dict = Depends(get_current_user)
 ):
     """获取Job详细信息"""
-    cluster = db.query(Cluster).filter(Cluster.id == cluster_id).first()
+    cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
     if not cluster:
-        raise HTTPException(status_code=404, detail="集群不存在")
+        raise HTTPException(status_code=404, detail="集群不存在或未激活")
 
     job_details = get_job_details(cluster, namespace, job_name)
     if not job_details:
@@ -154,9 +156,9 @@ async def create_new_job(
     current_user: dict = Depends(get_current_user)
 ):
     """创建Job"""
-    cluster = db.query(Cluster).filter(Cluster.id == cluster_id).first()
+    cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
     if not cluster:
-        raise HTTPException(status_code=404, detail="集群不存在")
+        raise HTTPException(status_code=404, detail="集群不存在或未激活")
 
     result = create_job(cluster, namespace, {"yaml_content": request.yaml_content})
 
@@ -185,9 +187,9 @@ async def remove_job(
     current_user: dict = Depends(get_current_user)
 ):
     """删除Job"""
-    cluster = db.query(Cluster).filter(Cluster.id == cluster_id).first()
+    cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
     if not cluster:
-        raise HTTPException(status_code=404, detail="集群不存在")
+        raise HTTPException(status_code=404, detail="集群不存在或未激活")
 
     result = delete_job(cluster, namespace, job_name)
     return result
@@ -202,9 +204,9 @@ async def restart_existing_job(
     current_user: dict = Depends(get_current_user)
 ):
     """重启Job"""
-    cluster = db.query(Cluster).filter(Cluster.id == cluster_id).first()
+    cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
     if not cluster:
-        raise HTTPException(status_code=404, detail="集群不存在")
+        raise HTTPException(status_code=404, detail="集群不存在或未激活")
 
     result = restart_job(cluster, namespace, job_name)
 
@@ -232,9 +234,9 @@ async def get_job_associated_pods(
     current_user: dict = Depends(get_current_user)
 ):
     """获取Job关联的Pods"""
-    cluster = db.query(Cluster).filter(Cluster.id == cluster_id).first()
+    cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
     if not cluster:
-        raise HTTPException(status_code=404, detail="集群不存在")
+        raise HTTPException(status_code=404, detail="集群不存在或未激活")
 
     pods = get_job_pods(cluster, namespace, job_name)
     return pods
@@ -249,9 +251,9 @@ async def get_job_yaml_config(
     current_user: dict = Depends(get_current_user)
 ):
     """获取Job的YAML配置"""
-    cluster = db.query(Cluster).filter(Cluster.id == cluster_id).first()
+    cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
     if not cluster:
-        raise HTTPException(status_code=404, detail="集群不存在")
+        raise HTTPException(status_code=404, detail="集群不存在或未激活")
 
     yaml_content = get_job_yaml(cluster, namespace, job_name)
     if yaml_content is None:
@@ -270,9 +272,9 @@ async def update_job_yaml_config(
     current_user: dict = Depends(get_current_user)
 ):
     """更新Job的YAML配置"""
-    cluster = db.query(Cluster).filter(Cluster.id == cluster_id).first()
+    cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
     if not cluster:
-        raise HTTPException(status_code=404, detail="集群不存在")
+        raise HTTPException(status_code=404, detail="集群不存在或未激活")
 
     result = update_job_yaml(cluster, namespace, job_name, request.yaml_content)
     return result
@@ -435,9 +437,9 @@ async def bulk_delete_jobs(
     current_user: dict = Depends(get_current_user)
 ):
     """批量删除Jobs"""
-    cluster = db.query(Cluster).filter(Cluster.id == cluster_id).first()
+    cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
     if not cluster:
-        raise HTTPException(status_code=404, detail="集群不存在")
+        raise HTTPException(status_code=404, detail="集群不存在或未激活")
 
     results = []
     success_count = 0
@@ -474,9 +476,9 @@ async def get_jobs_status_overview(
     current_user: dict = Depends(get_current_user)
 ):
     """获取命名空间中所有Jobs的状态概览"""
-    cluster = db.query(Cluster).filter(Cluster.id == cluster_id).first()
+    cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
     if not cluster:
-        raise HTTPException(status_code=404, detail="集群不存在")
+        raise HTTPException(status_code=404, detail="集群不存在或未激活")
 
     jobs = get_namespace_jobs(cluster, namespace)
 
@@ -615,7 +617,7 @@ async def monitor_job_status(
     # 获取集群信息
     cluster = db.query(Cluster).filter(Cluster.id == history_record.cluster_id).first()
     if not cluster:
-        raise HTTPException(status_code=404, detail="集群不存在")
+        raise HTTPException(status_code=404, detail="集群不存在或未激活")
 
     # 监控状态变化
     result = monitor_job_status_changes(

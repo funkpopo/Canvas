@@ -1,22 +1,20 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
+from pydantic import BaseModel
+
 from ..database import get_db
 from ..models import Cluster, AuditLog, User
-from ..auth import require_read_only, require_resource_management, check_cluster_access, get_viewer_allowed_cluster_ids
+from ..auth import require_read_only, require_resource_management
 from ..services.k8s import (
     get_namespace_secrets, get_secret_details, create_secret, update_secret, delete_secret,
     get_secret_yaml, create_secret_yaml, update_secret_yaml
 )
-from ..audit import log_action
-from pydantic import BaseModel
-from ..core.logging import get_logger
+from .deps import get_active_cluster, get_active_cluster_with_read_access, get_clusters_for_user, handle_k8s_operation
 
 router = APIRouter()
 
-logger = get_logger(__name__)
 
-# Secret相关模型
 class SecretInfo(BaseModel):
     name: str
     namespace: str
@@ -27,6 +25,7 @@ class SecretInfo(BaseModel):
     age: str
     cluster_name: str
     cluster_id: int
+
 
 class SecretDetails(BaseModel):
     name: str
@@ -39,6 +38,7 @@ class SecretDetails(BaseModel):
     cluster_name: str
     cluster_id: int
 
+
 class SecretCreate(BaseModel):
     name: str
     namespace: str
@@ -47,132 +47,76 @@ class SecretCreate(BaseModel):
     labels: Optional[dict] = None
     annotations: Optional[dict] = None
 
+
 class SecretUpdate(BaseModel):
     type: Optional[str] = None
     data: Optional[dict] = None
     labels: Optional[dict] = None
     annotations: Optional[dict] = None
 
-class YamlUpdateRequest(BaseModel):
+
+class YamlRequest(BaseModel):
     yaml_content: str
 
 
-# ========== Secrets管理 ==========
-
 @router.get("/", response_model=List[SecretInfo])
+@handle_k8s_operation("获取Secret列表")
 async def get_secrets(
-    cluster_id: Optional[int] = Query(None, description="集群ID，不传则获取所有活跃集群"),
     namespace: Optional[str] = Query(None, description="命名空间名称"),
-    db: Session = Depends(get_db),
+    clusters: list[Cluster] = Depends(get_clusters_for_user),
     current_user: User = Depends(require_read_only)
 ):
     """获取Secret列表"""
-    try:
-        if cluster_id:
-            if getattr(current_user, "role", None) == "viewer":
-                if not check_cluster_access(db, current_user, cluster_id, required_level="read"):
-                    raise HTTPException(status_code=403, detail="需要集群 read 权限")
-            # 获取特定集群的Secrets
-            cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
-            if not cluster:
-                raise HTTPException(status_code=404, detail="集群不存在或未激活")
+    if not namespace:
+        raise HTTPException(status_code=400, detail="必须指定命名空间")
 
-            if namespace:
-                secrets = get_namespace_secrets(cluster, namespace)
-            else:
-                # 获取所有命名空间的Secrets
-                secrets = []
-                # 这里可以扩展为获取所有命名空间的Secrets
-                raise HTTPException(status_code=400, detail="必须指定命名空间")
-        else:
-            # 获取所有活跃集群的Secrets
-            if getattr(current_user, "role", None) == "viewer":
-                allowed_ids = get_viewer_allowed_cluster_ids(db, current_user)
-                if not allowed_ids:
-                    return []
-                clusters = db.query(Cluster).filter(Cluster.is_active == True, Cluster.id.in_(allowed_ids)).all()
-            else:
-                clusters = db.query(Cluster).filter(Cluster.is_active == True).all()
-            secrets = []
-            for cluster in clusters:
-                if namespace:
-                    cluster_secrets = get_namespace_secrets(cluster, namespace)
-                    secrets.extend(cluster_secrets)
-
-        return secrets
-
-    except Exception as e:
-        logger.exception("获取Secret列表失败: %s", e)
-        raise HTTPException(status_code=500, detail=f"获取Secret列表失败: {str(e)}")
+    secrets = []
+    for cluster in clusters:
+        secrets.extend(get_namespace_secrets(cluster, namespace))
+    return secrets
 
 
 @router.get("/{namespace}/{secret_name}", response_model=SecretDetails)
+@handle_k8s_operation("获取Secret详情")
 async def get_secret(
     namespace: str,
     secret_name: str,
-    cluster_id: int = Query(..., description="集群ID"),
-    db: Session = Depends(get_db),
+    cluster: Cluster = Depends(get_active_cluster_with_read_access),
     current_user: User = Depends(require_read_only)
 ):
     """获取Secret详细信息"""
-    try:
-        if getattr(current_user, "role", None) == "viewer":
-            if not check_cluster_access(db, current_user, cluster_id, required_level="read"):
-                raise HTTPException(status_code=403, detail="需要集群 read 权限")
-        cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
-        if not cluster:
-            raise HTTPException(status_code=404, detail="集群不存在或未激活")
-
-        secret = get_secret_details(cluster, namespace, secret_name)
-        if not secret:
-            raise HTTPException(status_code=404, detail="Secret不存在")
-
-        return secret
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取Secret详情失败: {str(e)}")
+    secret = get_secret_details(cluster, namespace, secret_name)
+    if not secret:
+        raise HTTPException(status_code=404, detail="Secret不存在")
+    return secret
 
 
 @router.post("/yaml", response_model=dict)
 async def create_secret_yaml_config(
-    yaml_data: YamlUpdateRequest,
-    cluster_id: int = Query(..., description="集群ID"),
+    yaml_data: YamlRequest,
+    cluster: Cluster = Depends(get_active_cluster),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_resource_management)
 ):
     """通过YAML创建Secret"""
     try:
-        if getattr(current_user, "role", None) == "viewer":
-            if not check_cluster_access(db, current_user, cluster_id, required_level="read"):
-                raise HTTPException(status_code=403, detail="需要集群 read 权限")
-        cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
-        if not cluster:
-            raise HTTPException(status_code=404, detail="集群不存在或未激活")
-
-        yaml_content = yaml_data.yaml_content
-        if not yaml_content:
+        if not yaml_data.yaml_content:
             raise HTTPException(status_code=400, detail="YAML内容不能为空")
 
-        result = create_secret_yaml(cluster, yaml_content)
+        result = create_secret_yaml(cluster, yaml_data.yaml_content)
         if not result.get("success"):
             raise HTTPException(status_code=500, detail=result.get("message") or "通过YAML创建Secret失败")
 
-        # 记录审计日志
-        audit_log = AuditLog(
+        db.add(AuditLog(
             user_id=current_user.id,
             action="CREATE",
             resource_type="Secret",
             resource_name="通过YAML创建",
-            cluster_id=cluster_id,
-            details=f"通过YAML创建Secret"
-        )
-        db.add(audit_log)
+            cluster_id=cluster.id,
+            details="通过YAML创建Secret"
+        ))
         db.commit()
-
         return {"message": result.get("message") or "Secret创建成功"}
-
     except HTTPException:
         raise
     except Exception as e:
@@ -183,20 +127,12 @@ async def create_secret_yaml_config(
 @router.post("/", response_model=dict)
 async def create_new_secret(
     secret_data: SecretCreate,
-    cluster_id: int = Query(..., description="集群ID"),
+    cluster: Cluster = Depends(get_active_cluster),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_resource_management)
 ):
     """创建Secret"""
     try:
-        if getattr(current_user, "role", None) == "viewer":
-            if not check_cluster_access(db, current_user, cluster_id, required_level="read"):
-                raise HTTPException(status_code=403, detail="需要集群 read 权限")
-        cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
-        if not cluster:
-            raise HTTPException(status_code=404, detail="集群不存在或未激活")
-
-        # 构建Secret数据
         secret_dict = {
             "name": secret_data.name,
             "type": secret_data.type,
@@ -205,24 +141,19 @@ async def create_new_secret(
             "annotations": secret_data.annotations
         }
 
-        success = create_secret(cluster, secret_data.namespace, secret_dict)
-        if not success:
+        if not create_secret(cluster, secret_data.namespace, secret_dict):
             raise HTTPException(status_code=500, detail="创建Secret失败")
 
-        # 记录审计日志
-        audit_log = AuditLog(
+        db.add(AuditLog(
             user_id=current_user.id,
             action="CREATE",
             resource_type="Secret",
             resource_name=f"{secret_data.namespace}/{secret_data.name}",
-            cluster_id=cluster_id,
+            cluster_id=cluster.id,
             details=f"创建Secret {secret_data.name} 在命名空间 {secret_data.namespace}"
-        )
-        db.add(audit_log)
+        ))
         db.commit()
-
         return {"message": "Secret创建成功"}
-
     except HTTPException:
         raise
     except Exception as e:
@@ -235,48 +166,27 @@ async def update_existing_secret(
     namespace: str,
     secret_name: str,
     updates: SecretUpdate,
-    cluster_id: int = Query(..., description="集群ID"),
+    cluster: Cluster = Depends(get_active_cluster),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_resource_management)
 ):
     """更新Secret"""
     try:
-        if getattr(current_user, "role", None) == "viewer":
-            if not check_cluster_access(db, current_user, cluster_id, required_level="read"):
-                raise HTTPException(status_code=403, detail="需要集群 read 权限")
-        cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
-        if not cluster:
-            raise HTTPException(status_code=404, detail="集群不存在或未激活")
+        update_dict = {k: v for k, v in updates.dict().items() if v is not None}
 
-        # 构建更新数据
-        update_dict = {}
-        if updates.type is not None:
-            update_dict["type"] = updates.type
-        if updates.data is not None:
-            update_dict["data"] = updates.data
-        if updates.labels is not None:
-            update_dict["labels"] = updates.labels
-        if updates.annotations is not None:
-            update_dict["annotations"] = updates.annotations
-
-        success = update_secret(cluster, namespace, secret_name, update_dict)
-        if not success:
+        if not update_secret(cluster, namespace, secret_name, update_dict):
             raise HTTPException(status_code=500, detail="更新Secret失败")
 
-        # 记录审计日志
-        audit_log = AuditLog(
+        db.add(AuditLog(
             user_id=current_user.id,
             action="UPDATE",
             resource_type="Secret",
             resource_name=f"{namespace}/{secret_name}",
-            cluster_id=cluster_id,
+            cluster_id=cluster.id,
             details=f"更新Secret {secret_name} 在命名空间 {namespace}"
-        )
-        db.add(audit_log)
+        ))
         db.commit()
-
         return {"message": "Secret更新成功"}
-
     except HTTPException:
         raise
     except Exception as e:
@@ -288,37 +198,25 @@ async def update_existing_secret(
 async def delete_existing_secret(
     namespace: str,
     secret_name: str,
-    cluster_id: int = Query(..., description="集群ID"),
+    cluster: Cluster = Depends(get_active_cluster),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_resource_management)
 ):
     """删除Secret"""
     try:
-        if getattr(current_user, "role", None) == "viewer":
-            if not check_cluster_access(db, current_user, cluster_id, required_level="read"):
-                raise HTTPException(status_code=403, detail="需要集群 read 权限")
-        cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
-        if not cluster:
-            raise HTTPException(status_code=404, detail="集群不存在或未激活")
-
-        success = delete_secret(cluster, namespace, secret_name)
-        if not success:
+        if not delete_secret(cluster, namespace, secret_name):
             raise HTTPException(status_code=500, detail="删除Secret失败")
 
-        # 记录审计日志
-        audit_log = AuditLog(
+        db.add(AuditLog(
             user_id=current_user.id,
             action="DELETE",
             resource_type="Secret",
             resource_name=f"{namespace}/{secret_name}",
-            cluster_id=cluster_id,
+            cluster_id=cluster.id,
             details=f"删除Secret {secret_name} 在命名空间 {namespace}"
-        )
-        db.add(audit_log)
+        ))
         db.commit()
-
         return {"message": "Secret删除成功"}
-
     except HTTPException:
         raise
     except Exception as e:
@@ -327,74 +225,48 @@ async def delete_existing_secret(
 
 
 @router.get("/{namespace}/{secret_name}/yaml", response_model=dict)
+@handle_k8s_operation("获取YAML配置")
 async def get_secret_yaml_config(
     namespace: str,
     secret_name: str,
-    cluster_id: int = Query(..., description="集群ID"),
-    db: Session = Depends(get_db),
+    cluster: Cluster = Depends(get_active_cluster_with_read_access),
     current_user: User = Depends(require_read_only)
 ):
     """获取Secret的YAML配置"""
-    try:
-        if getattr(current_user, "role", None) == "viewer":
-            if not check_cluster_access(db, current_user, cluster_id, required_level="read"):
-                raise HTTPException(status_code=403, detail="需要集群 read 权限")
-        cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
-        if not cluster:
-            raise HTTPException(status_code=404, detail="集群不存在或未激活")
-
-        yaml_content = get_secret_yaml(cluster, namespace, secret_name)
-        if not yaml_content:
-            raise HTTPException(status_code=404, detail="获取YAML配置失败")
-
-        return {"yaml": yaml_content}
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取YAML配置失败: {str(e)}")
+    yaml_content = get_secret_yaml(cluster, namespace, secret_name)
+    if not yaml_content:
+        raise HTTPException(status_code=404, detail="获取YAML配置失败")
+    return {"yaml": yaml_content}
 
 
 @router.put("/{namespace}/{secret_name}/yaml", response_model=dict)
 async def update_secret_yaml_config(
     namespace: str,
     secret_name: str,
-    yaml_data: YamlUpdateRequest,
-    cluster_id: int = Query(..., description="集群ID"),
+    yaml_data: YamlRequest,
+    cluster: Cluster = Depends(get_active_cluster),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_resource_management)
 ):
     """通过YAML更新Secret"""
     try:
-        if getattr(current_user, "role", None) == "viewer":
-            if not check_cluster_access(db, current_user, cluster_id, required_level="read"):
-                raise HTTPException(status_code=403, detail="需要集群 read 权限")
-        cluster = db.query(Cluster).filter(Cluster.id == cluster_id, Cluster.is_active == True).first()
-        if not cluster:
-            raise HTTPException(status_code=404, detail="集群不存在或未激活")
-
-        yaml_content = yaml_data.yaml_content
-        if not yaml_content:
+        if not yaml_data.yaml_content:
             raise HTTPException(status_code=400, detail="YAML内容不能为空")
 
-        result = update_secret_yaml(cluster, namespace, secret_name, yaml_content)
+        result = update_secret_yaml(cluster, namespace, secret_name, yaml_data.yaml_content)
         if not result.get("success"):
             raise HTTPException(status_code=500, detail=result.get("message") or "更新Secret YAML失败")
 
-        # 记录审计日志
-        audit_log = AuditLog(
+        db.add(AuditLog(
             user_id=current_user.id,
             action="UPDATE",
             resource_type="Secret",
             resource_name=f"{namespace}/{secret_name}",
-            cluster_id=cluster_id,
+            cluster_id=cluster.id,
             details=f"通过YAML更新Secret {secret_name} 在命名空间 {namespace}"
-        )
-        db.add(audit_log)
+        ))
         db.commit()
-
         return {"message": result.get("message") or f"Secret {namespace}/{secret_name} YAML更新成功"}
-
     except HTTPException:
         raise
     except Exception as e:

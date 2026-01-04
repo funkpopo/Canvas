@@ -4,7 +4,7 @@ from typing import List, Optional
 from ..database import get_db
 from ..models import Cluster
 from ..auth import get_current_user, require_resource_management
-from .deps import get_cluster_or_404
+from .deps import get_active_cluster
 from ..services.k8s import (
     get_namespace_cronjobs, get_cronjob_details, delete_cronjob
 )
@@ -53,7 +53,7 @@ async def list_cronjobs(
     cluster_id: int,
     namespace: str,
     request: Request,
-    cluster: Cluster = Depends(get_cluster_or_404),
+    cluster: Cluster = Depends(get_active_cluster),
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -76,7 +76,7 @@ async def get_cronjob(
     namespace: str,
     name: str,
     request: Request,
-    cluster: Cluster = Depends(get_cluster_or_404),
+    cluster: Cluster = Depends(get_active_cluster),
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -101,7 +101,7 @@ async def delete_cronjob_handler(
     namespace: str,
     name: str,
     request: Request,
-    cluster: Cluster = Depends(get_cluster_or_404),
+    cluster: Cluster = Depends(get_active_cluster),
     current_user=Depends(require_resource_management),
     db: Session = Depends(get_db)
 ):
