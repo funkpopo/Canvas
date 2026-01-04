@@ -3,6 +3,7 @@
 import { useEffect, useState, use } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -17,7 +18,8 @@ import { useAuth } from "@/lib/auth-context";
 import { jobApi, JobDetails, JobPod } from "@/lib/api";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import YamlEditor from "@/components/YamlEditor";
+
+const YamlEditor = dynamic(() => import("@/components/YamlEditor"), { ssr: false });
 
 interface JobCondition {
   type: string;

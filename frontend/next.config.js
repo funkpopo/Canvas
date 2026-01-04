@@ -22,8 +22,8 @@ const nextConfig = {
 
   // 实验性功能
   experimental: {
-    // 优化字体加载
-    optimizePackageImports: ['lucide-react', 'recharts'],
+    // 优化包导入 - tree shaking
+    optimizePackageImports: ['lucide-react', 'recharts', '@radix-ui/react-dialog', '@radix-ui/react-dropdown-menu', '@radix-ui/react-select'],
   },
 
   async rewrites() {

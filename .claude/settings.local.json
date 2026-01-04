@@ -5,7 +5,8 @@
       "Bash(find:*)",
       "Bash(dir:*)",
       "Bash(ls -la \"d:\\Projects\\Canvas\\backend\\app\\services\\k8s\"\" 2>&1 || echo \"Directory does not exist \")",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(npm uninstall:*)"
     ],
     "deny": [],
     "ask": []

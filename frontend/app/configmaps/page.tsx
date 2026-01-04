@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,7 +17,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { FileText, Plus, Eye, Code, Trash2 } from "lucide-react";
-import YamlEditor from "@/components/YamlEditor";
+
+const YamlEditor = dynamic(() => import("@/components/YamlEditor"), { ssr: false });
 import {
   ResourceList,
   ColumnDef,
