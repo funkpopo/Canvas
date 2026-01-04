@@ -226,13 +226,15 @@ async def get_websocket_stats(current_user: User = Depends(get_current_user_with
 
 @router.on_event("startup")
 async def startup_event():
-    """应用启动时启动心跳检测"""
+    """应用启动时启动心跳检测和消息聚合器"""
     await manager.start_heartbeat_monitor()
+    await manager.start_aggregator()
 
 @router.on_event("shutdown")
 async def shutdown_event():
     """应用关闭时清理连接"""
     await manager.stop_heartbeat_monitor()
+    await manager.stop_aggregator()
 
     # 关闭所有连接
     connection_ids = list(manager.active_connections.keys())

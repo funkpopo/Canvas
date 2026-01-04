@@ -1,6 +1,7 @@
 """
 WebSocket连接管理器
 负责管理WebSocket连接、消息广播和资源监听
+支持连接复用、消息聚合和降级策略
 """
 
 import asyncio
@@ -9,10 +10,12 @@ import logging
 import os
 from typing import Dict, List, Set, Optional, Any
 from datetime import datetime, timedelta
+from collections import defaultdict
 from fastapi import WebSocket
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
+
 
 class WebSocketMessage(BaseModel):
     """WebSocket消息模型"""
@@ -24,6 +27,37 @@ class WebSocketMessage(BaseModel):
         super().__init__(**data)
         if self.timestamp is None:
             self.timestamp = datetime.utcnow()
+
+
+class MessageAggregator:
+    """消息聚合器 - 批量发送消息减少网络开销"""
+
+    def __init__(self, flush_interval: float = 0.1, max_batch_size: int = 50):
+        self.flush_interval = flush_interval
+        self.max_batch_size = max_batch_size
+        self._buffers: Dict[str, List[WebSocketMessage]] = defaultdict(list)
+        self._flush_task: Optional[asyncio.Task] = None
+        self._lock = asyncio.Lock()
+
+    async def add(self, connection_id: str, message: WebSocketMessage):
+        """添加消息到缓冲区"""
+        async with self._lock:
+            self._buffers[connection_id].append(message)
+            if len(self._buffers[connection_id]) >= self.max_batch_size:
+                messages = self._buffers.pop(connection_id)
+                return messages
+        return None
+
+    async def flush_all(self) -> Dict[str, List[WebSocketMessage]]:
+        """刷新所有缓冲区"""
+        async with self._lock:
+            buffers = dict(self._buffers)
+            self._buffers.clear()
+            return buffers
+
+    def remove_connection(self, connection_id: str):
+        """移除连接的缓冲区"""
+        self._buffers.pop(connection_id, None)
 
 class ConnectionManager:
     """WebSocket连接管理器"""
@@ -44,32 +78,56 @@ class ConnectionManager:
         # 连接元数据: {connection_id: {"user_id", "token", "filters"}}
         self.connection_metadata: Dict[str, Dict[str, Any]] = {}
 
+        # 用户连接映射: {user_id: set(connection_ids)}
+        self.user_connections: Dict[int, Set[str]] = defaultdict(set)
+
         # 心跳检测
         self.heartbeat_interval = 30  # 秒
         self.heartbeat_task: Optional[asyncio.Task] = None
 
-        # 连接数限制（简单保护，避免资源耗尽）
+        # 连接数限制
         self.max_connections = int(os.getenv("WS_MAX_CONNECTIONS", "1000"))
+        self.max_connections_per_user = int(os.getenv("WS_MAX_CONNECTIONS_PER_USER", "10"))
 
         # 广播并发限制
         self.broadcast_concurrency = 50
 
+        # 消息聚合器
+        self.aggregator = MessageAggregator()
+        self._aggregator_task: Optional[asyncio.Task] = None
+
+        # 降级策略
+        self._load_threshold = int(os.getenv("WS_LOAD_THRESHOLD", "500"))
+        self._degraded_mode = False
+        self._message_skip_counter: Dict[str, int] = defaultdict(int)
+
     async def connect(self, websocket: WebSocket, connection_id: str, user_id: int, token: str) -> bool:
         """建立WebSocket连接"""
         try:
+            # 全局连接数限制
             if len(self.active_connections) >= self.max_connections:
                 await websocket.accept()
                 await websocket.close(code=1013, reason="Too many connections")
                 return False
 
+            # 单用户连接数限制
+            if len(self.user_connections[user_id]) >= self.max_connections_per_user:
+                await websocket.accept()
+                await websocket.close(code=1013, reason="Too many connections for this user")
+                return False
+
             await websocket.accept()
             self.active_connections[connection_id] = websocket
+            self.user_connections[user_id].add(connection_id)
             self.connection_metadata[connection_id] = {
                 "user_id": user_id,
                 "token": token,
                 "connected_at": datetime.utcnow(),
                 "last_heartbeat": datetime.utcnow()
             }
+
+            # 更新降级模式状态
+            self._update_degraded_mode()
 
             logger.info(f"WebSocket connection established: {connection_id} (user: {user_id})")
 
@@ -84,6 +142,16 @@ class ConnectionManager:
             logger.error(f"Failed to establish WebSocket connection {connection_id}: {e}")
             return False
 
+    def _update_degraded_mode(self):
+        """更新降级模式状态"""
+        conn_count = len(self.active_connections)
+        if conn_count >= self._load_threshold and not self._degraded_mode:
+            self._degraded_mode = True
+            logger.warning(f"Entering degraded mode: {conn_count} connections")
+        elif conn_count < self._load_threshold * 0.8 and self._degraded_mode:
+            self._degraded_mode = False
+            logger.info(f"Exiting degraded mode: {conn_count} connections")
+
     async def disconnect(self, connection_id: str):
         """断开WebSocket连接"""
         if connection_id in self.active_connections:
@@ -91,9 +159,24 @@ class ConnectionManager:
                 # 清理房间成员身份
                 await self._leave_all_rooms(connection_id)
 
+                # 清理用户连接映射
+                metadata = self.connection_metadata.get(connection_id, {})
+                user_id = metadata.get("user_id")
+                if user_id and user_id in self.user_connections:
+                    self.user_connections[user_id].discard(connection_id)
+                    if not self.user_connections[user_id]:
+                        del self.user_connections[user_id]
+
+                # 清理消息聚合器缓冲区
+                self.aggregator.remove_connection(connection_id)
+
                 # 清理数据先于关闭连接，避免重复发送消息
                 websocket = self.active_connections.pop(connection_id, None)
                 self.connection_metadata.pop(connection_id, None)
+                self._message_skip_counter.pop(connection_id, None)
+
+                # 更新降级模式状态
+                self._update_degraded_mode()
 
                 # 最后关闭连接
                 if websocket:
@@ -266,7 +349,7 @@ class ConnectionManager:
 
     async def broadcast_resource_update(self, cluster_id: int, resource_type: str, resource_data: dict,
                                        namespace: Optional[str] = None):
-        """广播资源更新消息"""
+        """广播资源更新消息（支持降级策略）"""
         message = WebSocketMessage(
             type="resource_update",
             data={
@@ -277,6 +360,14 @@ class ConnectionManager:
             }
         )
 
+        # 降级模式下跳过部分消息
+        if self._degraded_mode:
+            msg_key = f"{cluster_id}:{resource_type}"
+            self._message_skip_counter[msg_key] += 1
+            if self._message_skip_counter[msg_key] % 3 != 0:  # 跳过2/3的消息
+                return
+            self._message_skip_counter[msg_key] = 0
+
         # 广播到集群房间
         await self.broadcast_to_cluster(cluster_id, message)
 
@@ -286,6 +377,51 @@ class ConnectionManager:
 
         # 广播到资源类型房间
         await self.broadcast_to_resource_type(cluster_id, resource_type, message)
+
+    async def start_aggregator(self):
+        """启动消息聚合器刷新任务"""
+        if self._aggregator_task and not self._aggregator_task.done():
+            return
+        self._aggregator_task = asyncio.create_task(self._aggregator_flush_loop())
+
+    async def stop_aggregator(self):
+        """停止消息聚合器"""
+        if self._aggregator_task and not self._aggregator_task.done():
+            self._aggregator_task.cancel()
+            try:
+                await self._aggregator_task
+            except asyncio.CancelledError:
+                pass
+
+    async def _aggregator_flush_loop(self):
+        """定期刷新消息聚合器"""
+        while True:
+            try:
+                await asyncio.sleep(self.aggregator.flush_interval)
+                buffers = await self.aggregator.flush_all()
+                for connection_id, messages in buffers.items():
+                    if messages and connection_id in self.active_connections:
+                        await self._send_batch(connection_id, messages)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Aggregator flush error: {e}")
+
+    async def _send_batch(self, connection_id: str, messages: List[WebSocketMessage]):
+        """批量发送消息"""
+        if not messages:
+            return
+        try:
+            websocket = self.active_connections.get(connection_id)
+            if not websocket:
+                return
+            batch_data = {
+                "type": "batch",
+                "messages": [{"type": m.type, "data": m.data, "timestamp": m.timestamp.isoformat()} for m in messages]
+            }
+            await websocket.send_text(json.dumps(batch_data))
+        except Exception as e:
+            logger.debug(f"Failed to send batch to {connection_id}: {e}")
 
     async def start_heartbeat_monitor(self):
         """启动心跳检测任务"""
@@ -346,10 +482,14 @@ class ConnectionManager:
         """获取连接统计信息"""
         return {
             "active_connections": len(self.active_connections),
+            "unique_users": len(self.user_connections),
             "cluster_rooms": len(self.cluster_rooms),
             "namespace_rooms": len(self.namespace_rooms),
             "resource_rooms": len(self.resource_rooms),
-            "total_rooms": len(self.cluster_rooms) + len(self.namespace_rooms) + len(self.resource_rooms)
+            "total_rooms": len(self.cluster_rooms) + len(self.namespace_rooms) + len(self.resource_rooms),
+            "degraded_mode": self._degraded_mode,
+            "max_connections": self.max_connections,
+            "max_connections_per_user": self.max_connections_per_user
         }
 
 
