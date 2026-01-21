@@ -57,7 +57,7 @@ class ServiceUpdate(BaseModel):
 # ========== 服务管理 ==========
 
 @router.get("/", response_model=List[ServiceInfo])
-async def get_services(
+def get_services(
     cluster_id: Optional[int] = Query(None, description="集群ID，不传则获取所有活跃集群"),
     namespace: Optional[str] = Query(None, description="命名空间名称"),
     db: Session = Depends(get_db),
@@ -94,7 +94,7 @@ async def get_services(
 
 
 @router.get("/{namespace}/{service_name}", response_model=ServiceInfo)
-async def get_service(
+def get_service(
     namespace: str,
     service_name: str,
     cluster_id: int = Query(..., description="集群ID"),
@@ -120,7 +120,7 @@ async def get_service(
 
 
 @router.post("/", response_model=dict)
-async def create_new_service(
+def create_new_service(
     service_data: ServiceCreate,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
@@ -173,7 +173,7 @@ async def create_new_service(
 
 
 @router.put("/{namespace}/{service_name}", response_model=dict)
-async def update_existing_service(
+def update_existing_service(
     namespace: str,
     service_name: str,
     updates: ServiceUpdate,
@@ -236,7 +236,7 @@ async def update_existing_service(
 
 
 @router.delete("/{namespace}/{service_name}", response_model=dict)
-async def delete_existing_service(
+def delete_existing_service(
     namespace: str,
     service_name: str,
     cluster_id: int = Query(..., description="集群ID"),
@@ -275,7 +275,7 @@ async def delete_existing_service(
 
 
 @router.get("/{namespace}/{service_name}/yaml", response_model=dict)
-async def get_service_yaml_config(
+def get_service_yaml_config(
     namespace: str,
     service_name: str,
     cluster_id: int = Query(..., description="集群ID"),
@@ -301,7 +301,7 @@ async def get_service_yaml_config(
 
 
 @router.put("/{namespace}/{service_name}/yaml", response_model=dict)
-async def update_service_yaml_config(
+def update_service_yaml_config(
     namespace: str,
     service_name: str,
     yaml_data: dict,

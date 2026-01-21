@@ -20,7 +20,7 @@ router = APIRouter()
 # ========== 权限管理 ==========
 
 @router.get("/app-permissions", response_model=List[PermissionResponse])
-async def list_permissions(
+def list_permissions(
     current_user: models.User = Depends(require_admin),
     db: Session = Depends(database.get_db)
 ):
@@ -30,7 +30,7 @@ async def list_permissions(
 
 
 @router.post("/app-permissions", response_model=PermissionResponse)
-async def create_permission(
+def create_permission(
     permission_data: PermissionCreate,
     current_user: models.User = Depends(require_admin),
     db: Session = Depends(database.get_db)
@@ -49,7 +49,7 @@ async def create_permission(
 # ========== 角色管理 ==========
 
 @router.get("/app-roles", response_model=RoleListResponse)
-async def list_app_roles(
+def list_app_roles(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(database.get_db)
 ):
@@ -62,7 +62,7 @@ async def list_app_roles(
 
 
 @router.get("/app-roles/{role_id}", response_model=RoleWithPermissionsResponse)
-async def get_app_role(
+def get_app_role(
     role_id: int,
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(database.get_db)
@@ -85,7 +85,7 @@ async def get_app_role(
 
 
 @router.post("/app-roles", response_model=RoleResponse)
-async def create_app_role(
+def create_app_role(
     role_data: RoleCreate,
     current_user: models.User = Depends(require_admin),
     db: Session = Depends(database.get_db)
@@ -111,7 +111,7 @@ async def create_app_role(
 
 
 @router.put("/app-roles/{role_id}", response_model=RoleResponse)
-async def update_app_role(
+def update_app_role(
     role_id: int,
     role_data: RoleUpdate,
     current_user: models.User = Depends(require_admin),
@@ -142,7 +142,7 @@ async def update_app_role(
 
 
 @router.delete("/app-roles/{role_id}")
-async def delete_app_role(
+def delete_app_role(
     role_id: int,
     current_user: models.User = Depends(require_admin),
     db: Session = Depends(database.get_db)
@@ -168,7 +168,7 @@ async def delete_app_role(
 # ========== 用户角色管理 ==========
 
 @router.get("/users/{user_id}/app-roles", response_model=List[RoleResponse])
-async def get_user_app_roles(
+def get_user_app_roles(
     user_id: int,
     current_user: models.User = Depends(require_admin),
     db: Session = Depends(database.get_db)
@@ -187,7 +187,7 @@ async def get_user_app_roles(
 
 
 @router.post("/users/{user_id}/app-roles")
-async def assign_user_app_roles(
+def assign_user_app_roles(
     user_id: int,
     role_assignment: UserRoleAssignment,
     current_user: models.User = Depends(require_admin),
@@ -217,7 +217,7 @@ async def assign_user_app_roles(
 
 
 @router.get("/users/{user_id}/app-permissions", response_model=List[PermissionResponse])
-async def get_user_app_permissions(
+def get_user_app_permissions(
     user_id: int,
     current_user: models.User = Depends(require_admin),
     db: Session = Depends(database.get_db)
@@ -236,7 +236,7 @@ async def get_user_app_permissions(
 
 
 @router.get("/my-app-roles", response_model=List[RoleResponse])
-async def get_my_app_roles(
+def get_my_app_roles(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(database.get_db)
 ):
@@ -246,7 +246,7 @@ async def get_my_app_roles(
 
 
 @router.get("/my-app-permissions", response_model=List[PermissionResponse])
-async def get_my_app_permissions(
+def get_my_app_permissions(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(database.get_db)
 ):
@@ -258,7 +258,7 @@ async def get_my_app_permissions(
 # ========== 初始化接口 ==========
 
 @router.post("/initialize-app-rbac")
-async def initialize_app_rbac(
+def initialize_app_rbac(
     current_user: models.User = Depends(require_admin),
     db: Session = Depends(database.get_db)
 ):

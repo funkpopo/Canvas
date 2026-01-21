@@ -46,7 +46,7 @@ class YamlRequest(BaseModel):
 
 @router.get("/", response_model=List[ConfigMapInfo])
 @handle_k8s_operation("获取ConfigMap列表")
-async def get_configmaps(
+def get_configmaps(
     namespace: Optional[str] = Query(None, description="命名空间名称"),
     clusters: list[Cluster] = Depends(get_clusters_for_user),
     current_user: User = Depends(require_read_only)
@@ -64,7 +64,7 @@ async def get_configmaps(
 
 @router.get("/{namespace}/{configmap_name}", response_model=ConfigMapInfo)
 @handle_k8s_operation("获取ConfigMap详情")
-async def get_configmap(
+def get_configmap(
     namespace: str,
     configmap_name: str,
     cluster: Cluster = Depends(get_active_cluster_with_read_access),
@@ -78,7 +78,7 @@ async def get_configmap(
 
 
 @router.post("/", response_model=dict)
-async def create_new_configmap(
+def create_new_configmap(
     configmap_data: ConfigMapCreate,
     cluster: Cluster = Depends(get_active_cluster),
     db: Session = Depends(get_db),
@@ -114,7 +114,7 @@ async def create_new_configmap(
 
 
 @router.put("/{namespace}/{configmap_name}", response_model=dict)
-async def update_existing_configmap(
+def update_existing_configmap(
     namespace: str,
     configmap_name: str,
     updates: ConfigMapUpdate,
@@ -147,7 +147,7 @@ async def update_existing_configmap(
 
 
 @router.delete("/{namespace}/{configmap_name}", response_model=dict)
-async def delete_existing_configmap(
+def delete_existing_configmap(
     namespace: str,
     configmap_name: str,
     cluster: Cluster = Depends(get_active_cluster),
@@ -178,7 +178,7 @@ async def delete_existing_configmap(
 
 @router.get("/{namespace}/{configmap_name}/yaml", response_model=dict)
 @handle_k8s_operation("获取YAML配置")
-async def get_configmap_yaml_config(
+def get_configmap_yaml_config(
     namespace: str,
     configmap_name: str,
     cluster: Cluster = Depends(get_active_cluster_with_read_access),
@@ -192,7 +192,7 @@ async def get_configmap_yaml_config(
 
 
 @router.put("/{namespace}/{configmap_name}/yaml", response_model=dict)
-async def update_configmap_yaml_config(
+def update_configmap_yaml_config(
     namespace: str,
     configmap_name: str,
     yaml_data: YamlRequest,

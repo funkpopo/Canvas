@@ -117,7 +117,7 @@ class ServiceDetails(BaseModel):
 @router.get("/", response_model=List[DeploymentInfo])
 @router.get("", response_model=List[DeploymentInfo])
 @handle_k8s_operation("获取部署信息")
-async def get_deployments(
+def get_deployments(
     namespace: Optional[str] = None,
     clusters: list[Cluster] = Depends(get_clusters_for_user),
     current_user: dict = Depends(get_current_user),
@@ -148,7 +148,7 @@ async def get_deployments(
 
 @router.get("/{namespace}/{deployment_name}", response_model=DeploymentDetails)
 @handle_k8s_operation("获取部署详情")
-async def get_deployment_detail(
+def get_deployment_detail(
     namespace: str,
     deployment_name: str,
     cluster: Cluster = Depends(get_active_cluster_with_read_access),
@@ -163,7 +163,7 @@ async def get_deployment_detail(
 
 @router.get("/{namespace}/{deployment_name}/pods", response_model=List[DeploymentPod])
 @handle_k8s_operation("获取部署Pods")
-async def get_deployment_pods_endpoint(
+def get_deployment_pods_endpoint(
     namespace: str,
     deployment_name: str,
     cluster: Cluster = Depends(get_active_cluster_with_read_access),
@@ -174,7 +174,7 @@ async def get_deployment_pods_endpoint(
 
 
 @router.put("/{namespace}/{deployment_name}/scale")
-async def scale_deployment_endpoint(
+def scale_deployment_endpoint(
     namespace: str,
     deployment_name: str,
     scale_request: ScaleRequest,
@@ -206,7 +206,7 @@ async def scale_deployment_endpoint(
 
 
 @router.post("/{namespace}/{deployment_name}/restart")
-async def restart_deployment_endpoint(
+def restart_deployment_endpoint(
     namespace: str,
     deployment_name: str,
     cluster_id: int = Query(..., description="集群ID"),
@@ -234,7 +234,7 @@ async def restart_deployment_endpoint(
 
 
 @router.delete("/{namespace}/{deployment_name}")
-async def delete_deployment_endpoint(
+def delete_deployment_endpoint(
     namespace: str,
     deployment_name: str,
     cluster_id: int = Query(..., description="集群ID"),
@@ -262,7 +262,7 @@ async def delete_deployment_endpoint(
 
 
 @router.patch("/{namespace}/{deployment_name}")
-async def update_deployment_endpoint(
+def update_deployment_endpoint(
     namespace: str,
     deployment_name: str,
     update_request: DeploymentUpdateRequest,
@@ -293,7 +293,7 @@ async def update_deployment_endpoint(
 
 @router.get("/{namespace}/{deployment_name}/yaml")
 @handle_k8s_operation("获取部署YAML")
-async def get_deployment_yaml_endpoint(
+def get_deployment_yaml_endpoint(
     namespace: str,
     deployment_name: str,
     cluster: Cluster = Depends(get_active_cluster_with_read_access),
@@ -307,7 +307,7 @@ async def get_deployment_yaml_endpoint(
 
 
 @router.put("/{namespace}/{deployment_name}/yaml")
-async def update_deployment_yaml_endpoint(
+def update_deployment_yaml_endpoint(
     namespace: str,
     deployment_name: str,
     yaml_request: YamlUpdateRequest,
@@ -337,7 +337,7 @@ async def update_deployment_yaml_endpoint(
 
 @router.get("/{namespace}/{deployment_name}/services", response_model=List[dict])
 @handle_k8s_operation("获取部署服务")
-async def get_deployment_services_endpoint(
+def get_deployment_services_endpoint(
     namespace: str,
     deployment_name: str,
     cluster: Cluster = Depends(get_active_cluster_with_read_access),
@@ -349,7 +349,7 @@ async def get_deployment_services_endpoint(
 
 @router.get("/{namespace}/{deployment_name}/services/{service_name}", response_model=ServiceDetails)
 @handle_k8s_operation("获取服务详情")
-async def get_service_detail_endpoint(
+def get_service_detail_endpoint(
     namespace: str,
     deployment_name: str,
     service_name: str,
@@ -365,7 +365,7 @@ async def get_service_detail_endpoint(
 
 @router.patch("/{namespace}/{deployment_name}/services/{service_name}")
 @handle_k8s_operation("更新服务")
-async def update_service_endpoint(
+def update_service_endpoint(
     namespace: str,
     deployment_name: str,
     service_name: str,
@@ -382,7 +382,7 @@ async def update_service_endpoint(
 
 @router.get("/{namespace}/{deployment_name}/services/{service_name}/yaml")
 @handle_k8s_operation("获取服务YAML")
-async def get_service_yaml_endpoint(
+def get_service_yaml_endpoint(
     namespace: str,
     deployment_name: str,
     service_name: str,
@@ -398,7 +398,7 @@ async def get_service_yaml_endpoint(
 
 @router.put("/{namespace}/{deployment_name}/services/{service_name}/yaml")
 @handle_k8s_operation("更新服务YAML")
-async def update_service_yaml_endpoint(
+def update_service_yaml_endpoint(
     namespace: str,
     deployment_name: str,
     service_name: str,

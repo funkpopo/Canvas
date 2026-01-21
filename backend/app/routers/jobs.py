@@ -111,7 +111,7 @@ class JobHistoryInfo(BaseModel):
 # ===== Jobs 管理 API =====
 
 @router.get("/{cluster_id}/namespaces/{namespace}/jobs", response_model=List[JobInfo])
-async def list_jobs(
+def list_jobs(
     cluster_id: int,
     namespace: str,
     db: Session = Depends(get_db),
@@ -127,7 +127,7 @@ async def list_jobs(
 
 
 @router.get("/{cluster_id}/namespaces/{namespace}/jobs/{job_name}", response_model=JobDetails)
-async def get_job_detail(
+def get_job_detail(
     cluster_id: int,
     namespace: str,
     job_name: str,
@@ -147,7 +147,7 @@ async def get_job_detail(
 
 
 @router.post("/{cluster_id}/namespaces/{namespace}/jobs")
-async def create_new_job(
+def create_new_job(
     cluster_id: int,
     namespace: str,
     request: CreateJobRequest,
@@ -179,7 +179,7 @@ async def create_new_job(
 
 
 @router.delete("/{cluster_id}/namespaces/{namespace}/jobs/{job_name}")
-async def remove_job(
+def remove_job(
     cluster_id: int,
     namespace: str,
     job_name: str,
@@ -196,7 +196,7 @@ async def remove_job(
 
 
 @router.post("/{cluster_id}/namespaces/{namespace}/jobs/{job_name}/restart")
-async def restart_existing_job(
+def restart_existing_job(
     cluster_id: int,
     namespace: str,
     job_name: str,
@@ -226,7 +226,7 @@ async def restart_existing_job(
 
 
 @router.get("/{cluster_id}/namespaces/{namespace}/jobs/{job_name}/pods", response_model=List[JobPod])
-async def get_job_associated_pods(
+def get_job_associated_pods(
     cluster_id: int,
     namespace: str,
     job_name: str,
@@ -243,7 +243,7 @@ async def get_job_associated_pods(
 
 
 @router.get("/{cluster_id}/namespaces/{namespace}/jobs/{job_name}/yaml")
-async def get_job_yaml_config(
+def get_job_yaml_config(
     cluster_id: int,
     namespace: str,
     job_name: str,
@@ -263,7 +263,7 @@ async def get_job_yaml_config(
 
 
 @router.put("/{cluster_id}/namespaces/{namespace}/jobs/{job_name}/yaml")
-async def update_job_yaml_config(
+def update_job_yaml_config(
     cluster_id: int,
     namespace: str,
     job_name: str,
@@ -283,7 +283,7 @@ async def update_job_yaml_config(
 # ===== Job模板管理 API =====
 
 @router.get("/templates", response_model=List[JobTemplateInfo])
-async def list_job_templates(
+def list_job_templates(
     category: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
@@ -314,7 +314,7 @@ async def list_job_templates(
 
 
 @router.post("/templates")
-async def create_job_template(
+def create_job_template(
     request: CreateJobTemplateRequest,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
@@ -342,7 +342,7 @@ async def create_job_template(
 
 
 @router.get("/templates/{template_id}")
-async def get_job_template(
+def get_job_template(
     template_id: int,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
@@ -370,7 +370,7 @@ async def get_job_template(
 
 
 @router.put("/templates/{template_id}")
-async def update_job_template(
+def update_job_template(
     template_id: int,
     request: UpdateJobTemplateRequest,
     db: Session = Depends(get_db),
@@ -398,7 +398,7 @@ async def update_job_template(
 
 
 @router.delete("/templates/{template_id}")
-async def delete_job_template(
+def delete_job_template(
     template_id: int,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
@@ -429,7 +429,7 @@ class BulkActionResponse(BaseModel):
     results: List[Dict[str, Any]]
 
 @router.post("/{cluster_id}/namespaces/{namespace}/jobs/bulk-delete")
-async def bulk_delete_jobs(
+def bulk_delete_jobs(
     cluster_id: int,
     namespace: str,
     request: BulkDeleteJobsRequest,
@@ -469,7 +469,7 @@ async def bulk_delete_jobs(
 
 
 @router.get("/{cluster_id}/namespaces/{namespace}/jobs/status")
-async def get_jobs_status_overview(
+def get_jobs_status_overview(
     cluster_id: int,
     namespace: str,
     db: Session = Depends(get_db),
@@ -498,7 +498,7 @@ async def get_jobs_status_overview(
 # ===== Job历史记录 API =====
 
 @router.get("/history", response_model=List[JobHistoryInfo])
-async def list_job_history(
+def list_job_history(
     cluster_id: Optional[int] = None,
     namespace: Optional[str] = None,
     status: Optional[str] = None,
@@ -554,7 +554,7 @@ async def list_job_history(
 
 
 @router.post("/history/{history_id}/status")
-async def update_job_history_status(
+def update_job_history_status(
     history_id: int,
     status: str,
     succeeded_pods: Optional[int] = None,
@@ -599,7 +599,7 @@ async def update_job_history_status(
 
 
 @router.post("/monitor/{history_id}")
-async def monitor_job_status(
+def monitor_job_status(
     history_id: int,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)

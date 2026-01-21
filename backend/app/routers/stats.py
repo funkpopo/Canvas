@@ -29,7 +29,7 @@ class ConnectionPoolStats(BaseModel):
     connection_timeout: int
 
 @router.get("/dashboard", response_model=DashboardStats)
-async def get_dashboard_stats(
+def get_dashboard_stats(
     db: Session = Depends(get_db),
     current_user=Depends(require_read_only)
 ):
@@ -84,7 +84,7 @@ async def get_dashboard_stats(
 
 
 @router.get("/connection-pool", response_model=ConnectionPoolStats)
-async def get_connection_pool_stats(
+def get_connection_pool_stats(
     current_user=Depends(require_admin)
 ):
     """获取Kubernetes连接池统计信息"""

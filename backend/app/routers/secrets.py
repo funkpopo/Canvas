@@ -61,7 +61,7 @@ class YamlRequest(BaseModel):
 
 @router.get("/", response_model=List[SecretInfo])
 @handle_k8s_operation("获取Secret列表")
-async def get_secrets(
+def get_secrets(
     namespace: Optional[str] = Query(None, description="命名空间名称"),
     clusters: list[Cluster] = Depends(get_clusters_for_user),
     current_user: User = Depends(require_read_only)
@@ -78,7 +78,7 @@ async def get_secrets(
 
 @router.get("/{namespace}/{secret_name}", response_model=SecretDetails)
 @handle_k8s_operation("获取Secret详情")
-async def get_secret(
+def get_secret(
     namespace: str,
     secret_name: str,
     cluster: Cluster = Depends(get_active_cluster_with_read_access),
@@ -92,7 +92,7 @@ async def get_secret(
 
 
 @router.post("/yaml", response_model=dict)
-async def create_secret_yaml_config(
+def create_secret_yaml_config(
     yaml_data: YamlRequest,
     cluster: Cluster = Depends(get_active_cluster),
     db: Session = Depends(get_db),
@@ -125,7 +125,7 @@ async def create_secret_yaml_config(
 
 
 @router.post("/", response_model=dict)
-async def create_new_secret(
+def create_new_secret(
     secret_data: SecretCreate,
     cluster: Cluster = Depends(get_active_cluster),
     db: Session = Depends(get_db),
@@ -162,7 +162,7 @@ async def create_new_secret(
 
 
 @router.put("/{namespace}/{secret_name}", response_model=dict)
-async def update_existing_secret(
+def update_existing_secret(
     namespace: str,
     secret_name: str,
     updates: SecretUpdate,
@@ -195,7 +195,7 @@ async def update_existing_secret(
 
 
 @router.delete("/{namespace}/{secret_name}", response_model=dict)
-async def delete_existing_secret(
+def delete_existing_secret(
     namespace: str,
     secret_name: str,
     cluster: Cluster = Depends(get_active_cluster),
@@ -226,7 +226,7 @@ async def delete_existing_secret(
 
 @router.get("/{namespace}/{secret_name}/yaml", response_model=dict)
 @handle_k8s_operation("获取YAML配置")
-async def get_secret_yaml_config(
+def get_secret_yaml_config(
     namespace: str,
     secret_name: str,
     cluster: Cluster = Depends(get_active_cluster_with_read_access),
@@ -240,7 +240,7 @@ async def get_secret_yaml_config(
 
 
 @router.put("/{namespace}/{secret_name}/yaml", response_model=dict)
-async def update_secret_yaml_config(
+def update_secret_yaml_config(
     namespace: str,
     secret_name: str,
     yaml_data: YamlRequest,

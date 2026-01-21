@@ -57,7 +57,7 @@ class ResourceQuotaUpdate(BaseModel):
 # ========== Resource Quotas管理 ==========
 
 @router.get("/", response_model=List[ResourceQuotaInfo])
-async def get_resource_quotas(
+def get_resource_quotas(
     cluster_id: Optional[int] = Query(None, description="集群ID，不传则获取所有活跃集群"),
     namespace: Optional[str] = Query(None, description="命名空间名称"),
     db: Session = Depends(get_db),
@@ -104,7 +104,7 @@ async def get_resource_quotas(
 
 
 @router.get("/{namespace}/{quota_name}", response_model=ResourceQuotaDetails)
-async def get_resource_quota(
+def get_resource_quota(
     namespace: str,
     quota_name: str,
     cluster_id: int = Query(..., description="集群ID"),
@@ -133,7 +133,7 @@ async def get_resource_quota(
 
 
 @router.post("/", response_model=dict)
-async def create_new_resource_quota(
+def create_new_resource_quota(
     quota_data: ResourceQuotaCreate,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
@@ -182,7 +182,7 @@ async def create_new_resource_quota(
 
 
 @router.put("/{namespace}/{quota_name}", response_model=dict)
-async def update_existing_resource_quota(
+def update_existing_resource_quota(
     namespace: str,
     quota_name: str,
     updates: ResourceQuotaUpdate,
@@ -235,7 +235,7 @@ async def update_existing_resource_quota(
 
 
 @router.delete("/{namespace}/{quota_name}", response_model=dict)
-async def delete_existing_resource_quota(
+def delete_existing_resource_quota(
     namespace: str,
     quota_name: str,
     cluster_id: int = Query(..., description="集群ID"),

@@ -59,7 +59,7 @@ class NetworkPolicyUpdate(BaseModel):
 # ========== Network Policies管理 ==========
 
 @router.get("/", response_model=List[NetworkPolicyInfo])
-async def get_network_policies(
+def get_network_policies(
     cluster_id: Optional[int] = Query(None, description="集群ID，不传则获取所有活跃集群"),
     namespace: Optional[str] = Query(None, description="命名空间名称"),
     db: Session = Depends(get_db),
@@ -105,7 +105,7 @@ async def get_network_policies(
 
 
 @router.get("/{namespace}/{policy_name}", response_model=NetworkPolicyDetails)
-async def get_network_policy(
+def get_network_policy(
     namespace: str,
     policy_name: str,
     cluster_id: int = Query(..., description="集群ID"),
@@ -134,7 +134,7 @@ async def get_network_policy(
 
 
 @router.post("/", response_model=dict)
-async def create_new_network_policy(
+def create_new_network_policy(
     policy_data: NetworkPolicyCreate,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
@@ -183,7 +183,7 @@ async def create_new_network_policy(
 
 
 @router.put("/{namespace}/{policy_name}", response_model=dict)
-async def update_existing_network_policy(
+def update_existing_network_policy(
     namespace: str,
     policy_name: str,
     updates: NetworkPolicyUpdate,
@@ -238,7 +238,7 @@ async def update_existing_network_policy(
 
 
 @router.delete("/{namespace}/{policy_name}", response_model=dict)
-async def delete_existing_network_policy(
+def delete_existing_network_policy(
     namespace: str,
     policy_name: str,
     cluster_id: int = Query(..., description="集群ID"),

@@ -59,7 +59,7 @@ class NamespaceMetrics(BaseModel):
 
 
 @router.get("/clusters/{cluster_id}/metrics")
-async def get_cluster_metrics_endpoint(
+def get_cluster_metrics_endpoint(
     cluster_id: int,
     db: Session = Depends(get_db),
     current_user=Depends(require_cluster_access("read"))
@@ -84,7 +84,7 @@ async def get_cluster_metrics_endpoint(
 
 
 @router.get("/clusters/{cluster_id}/nodes/metrics")
-async def get_nodes_metrics_endpoint(
+def get_nodes_metrics_endpoint(
     cluster_id: int,
     db: Session = Depends(get_db),
     current_user=Depends(require_cluster_access("read"))
@@ -109,7 +109,7 @@ async def get_nodes_metrics_endpoint(
 
 
 @router.get("/clusters/{cluster_id}/pods/metrics")
-async def get_pods_metrics_endpoint(
+def get_pods_metrics_endpoint(
     cluster_id: int,
     namespace: Optional[str] = Query(None, description="命名空间过滤"),
     db: Session = Depends(get_db),
@@ -135,7 +135,7 @@ async def get_pods_metrics_endpoint(
 
 
 @router.get("/clusters/{cluster_id}/namespaces/metrics")
-async def get_namespaces_metrics_endpoint(
+def get_namespaces_metrics_endpoint(
     cluster_id: int,
     db: Session = Depends(get_db),
     current_user=Depends(require_cluster_access("read"))
@@ -160,7 +160,7 @@ async def get_namespaces_metrics_endpoint(
 
 
 @router.get("/clusters/{cluster_id}/metrics/health")
-async def check_metrics_server_health(
+def check_metrics_server_health(
     cluster_id: int,
     db: Session = Depends(get_db),
     current_user=Depends(require_cluster_access("read"))
@@ -191,7 +191,7 @@ async def check_metrics_server_health(
 
 
 @router.post("/clusters/{cluster_id}/metrics-server/install")
-async def install_metrics_server_endpoint(
+def install_metrics_server_endpoint(
     cluster_id: int,
     request: MetricsServerInstallRequest,
     db: Session = Depends(get_db),

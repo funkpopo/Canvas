@@ -71,7 +71,7 @@ class BatchOperationResponse(BaseModel):
 @router.get("/", response_model=PodPageResponse)
 @router.get("", response_model=PodPageResponse)
 @handle_k8s_operation("获取Pod信息")
-async def get_pods(
+def get_pods(
     namespace: Optional[str] = None,
     limit: int = Query(200, description="每页数量", ge=1, le=1000),
     continue_token: Optional[str] = Query(None, description="分页游标"),
@@ -88,7 +88,7 @@ async def get_pods(
 
 @router.get("/{namespace}/{pod_name}", response_model=PodDetails)
 @handle_k8s_operation("获取Pod详情")
-async def get_pod_detail(
+def get_pod_detail(
     namespace: str,
     pod_name: str,
     cluster: Cluster = Depends(get_active_cluster),
@@ -102,7 +102,7 @@ async def get_pod_detail(
 
 @router.get("/{namespace}/{pod_name}/logs")
 @handle_k8s_operation("获取Pod日志")
-async def get_pod_log(
+def get_pod_log(
     namespace: str,
     pod_name: str,
     container: Optional[str] = Query(None, description="容器名称"),
@@ -117,7 +117,7 @@ async def get_pod_log(
 
 
 @router.post("/{namespace}/{pod_name}/restart")
-async def restart_pod_endpoint(
+def restart_pod_endpoint(
     namespace: str,
     pod_name: str,
     cluster_id: int = Query(..., description="集群ID"),
@@ -145,7 +145,7 @@ async def restart_pod_endpoint(
 
 
 @router.delete("/{namespace}/{pod_name}")
-async def delete_pod_endpoint(
+def delete_pod_endpoint(
     namespace: str,
     pod_name: str,
     force: bool = Query(False, description="是否强制删除Pod"),
@@ -175,7 +175,7 @@ async def delete_pod_endpoint(
 
 
 @router.post("/batch-delete", response_model=BatchOperationResponse)
-async def batch_delete_pods_endpoint(
+def batch_delete_pods_endpoint(
     request_data: BatchOperationRequest,
     request: Request = None,
     db: Session = Depends(get_db),
@@ -219,7 +219,7 @@ async def batch_delete_pods_endpoint(
 
 
 @router.post("/batch-restart", response_model=BatchOperationResponse)
-async def batch_restart_pods_endpoint(
+def batch_restart_pods_endpoint(
     request_data: BatchOperationRequest,
     request: Request = None,
     db: Session = Depends(get_db),

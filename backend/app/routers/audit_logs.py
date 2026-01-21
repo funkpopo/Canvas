@@ -17,7 +17,7 @@ def require_admin(current_user: models.User = Depends(get_current_user)):
 
 
 @router.get("/", response_model=schemas.AuditLogListResponse)
-async def get_audit_logs(
+def get_audit_logs(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
     user_id: Optional[int] = None,
@@ -81,7 +81,7 @@ async def get_audit_logs(
 
 
 @router.get("/stats/summary")
-async def get_audit_stats(
+def get_audit_stats(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     db: Session = Depends(get_db),

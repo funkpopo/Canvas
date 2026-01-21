@@ -2,6 +2,7 @@
 Common dependencies for API routers.
 Provides reusable utilities to reduce code duplication across router modules.
 """
+import inspect
 from functools import wraps
 from typing import Callable, Optional, Any
 from fastapi import Depends, HTTPException, Query, Request
@@ -135,18 +136,64 @@ def with_audit_log(
             ...
     """
     def decorator(func: Callable) -> Callable:
+        if inspect.iscoroutinefunction(func):
+            @wraps(func)
+            async def async_wrapper(*args, **kwargs):
+                db = kwargs.get("db")
+                current_user = kwargs.get("current_user")
+                cluster_id = kwargs.get("cluster_id")
+                request = kwargs.get("request")
+
+                resource_name = get_resource_name(**kwargs)
+                details = get_details(**kwargs)
+
+                try:
+                    result = await func(*args, **kwargs)
+                    if db and current_user and cluster_id:
+                        log_action(
+                            db=db,
+                            user_id=current_user.id,
+                            cluster_id=cluster_id,
+                            action=action,
+                            resource_type=resource_type,
+                            resource_name=resource_name,
+                            details=details,
+                            success=True,
+                            request=request,
+                        )
+                    return result
+                except HTTPException:
+                    raise
+                except Exception as e:
+                    if db and current_user and cluster_id:
+                        log_action(
+                            db=db,
+                            user_id=current_user.id,
+                            cluster_id=cluster_id,
+                            action=action,
+                            resource_type=resource_type,
+                            resource_name=resource_name,
+                            details=details,
+                            success=False,
+                            error_message=str(e),
+                            request=request,
+                        )
+                    raise HTTPException(status_code=500, detail=f"{action} {resource_type} 失败: {str(e)}")
+
+            return async_wrapper
+
         @wraps(func)
-        async def wrapper(*args, **kwargs):
-            db = kwargs.get('db')
-            current_user = kwargs.get('current_user')
-            cluster_id = kwargs.get('cluster_id')
-            request = kwargs.get('request')
+        def sync_wrapper(*args, **kwargs):
+            db = kwargs.get("db")
+            current_user = kwargs.get("current_user")
+            cluster_id = kwargs.get("cluster_id")
+            request = kwargs.get("request")
 
             resource_name = get_resource_name(**kwargs)
             details = get_details(**kwargs)
 
             try:
-                result = await func(*args, **kwargs)
+                result = func(*args, **kwargs)
                 if db and current_user and cluster_id:
                     log_action(
                         db=db,
@@ -157,7 +204,7 @@ def with_audit_log(
                         resource_name=resource_name,
                         details=details,
                         success=True,
-                        request=request
+                        request=request,
                     )
                 return result
             except HTTPException:
@@ -174,10 +221,12 @@ def with_audit_log(
                         details=details,
                         success=False,
                         error_message=str(e),
-                        request=request
+                        request=request,
                     )
                 raise HTTPException(status_code=500, detail=f"{action} {resource_type} 失败: {str(e)}")
-        return wrapper
+
+        return sync_wrapper
+
     return decorator
 
 
@@ -191,13 +240,26 @@ def handle_k8s_operation(error_prefix: str):
             ...
     """
     def decorator(func: Callable) -> Callable:
+        if inspect.iscoroutinefunction(func):
+            @wraps(func)
+            async def async_wrapper(*args, **kwargs):
+                try:
+                    return await func(*args, **kwargs)
+                except HTTPException:
+                    raise
+                except Exception as e:
+                    raise HTTPException(status_code=500, detail=f"{error_prefix}失败: {str(e)}")
+
+            return async_wrapper
+
         @wraps(func)
-        async def wrapper(*args, **kwargs):
+        def sync_wrapper(*args, **kwargs):
             try:
-                return await func(*args, **kwargs)
+                return func(*args, **kwargs)
             except HTTPException:
                 raise
             except Exception as e:
                 raise HTTPException(status_code=500, detail=f"{error_prefix}失败: {str(e)}")
-        return wrapper
+
+        return sync_wrapper
     return decorator

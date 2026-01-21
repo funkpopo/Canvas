@@ -47,7 +47,7 @@ class DaemonSetDetails(BaseModel):
 
 
 @router.get("/clusters/{cluster_id}/namespaces/{namespace}/daemonsets", response_model=List[DaemonSetInfo])
-async def list_daemonsets(
+def list_daemonsets(
     cluster_id: int,
     namespace: str,
     request: Request,
@@ -67,7 +67,7 @@ async def list_daemonsets(
 
 
 @router.get("/clusters/{cluster_id}/namespaces/{namespace}/daemonsets/{name}", response_model=DaemonSetDetails)
-async def get_daemonset(
+def get_daemonset(
     cluster_id: int,
     namespace: str,
     name: str,
@@ -91,7 +91,7 @@ async def get_daemonset(
 
 
 @router.delete("/clusters/{cluster_id}/namespaces/{namespace}/daemonsets/{name}")
-async def delete_daemonset_handler(
+def delete_daemonset_handler(
     cluster_id: int,
     namespace: str,
     name: str,

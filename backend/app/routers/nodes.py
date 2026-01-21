@@ -48,7 +48,7 @@ class NodeDetails(BaseModel):
 
 @router.get("/", response_model=List[NodeInfo])
 @router.get("", response_model=List[NodeInfo])
-async def get_nodes(
+def get_nodes(
     cluster_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user=Depends(require_read_only)
@@ -93,7 +93,7 @@ async def get_nodes(
         raise HTTPException(status_code=500, detail=f"获取节点信息失败: {str(e)}")
 
 @router.get("/{node_name}", response_model=NodeDetails)
-async def get_node_detail(
+def get_node_detail(
     node_name: str,
     cluster_id: Optional[int] = None,
     db: Session = Depends(get_db),

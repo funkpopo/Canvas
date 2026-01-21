@@ -17,7 +17,7 @@ def require_admin(current_user: models.User = Depends(get_current_user)):
 
 
 @router.get("/stats")
-async def get_monitoring_stats(current_user: models.User = Depends(require_admin)):
+def get_monitoring_stats(current_user: models.User = Depends(require_admin)):
     """轻量级监控指标（用于排障/观测，不替代专业监控系统）。"""
     return {
         "requests": request_metrics.snapshot(),

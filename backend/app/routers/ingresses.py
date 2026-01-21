@@ -42,7 +42,7 @@ class IngressDetails(BaseModel):
 
 
 @router.get("/clusters/{cluster_id}/namespaces/{namespace}/ingresses", response_model=List[IngressInfo])
-async def list_ingresses(
+def list_ingresses(
     cluster_id: int,
     namespace: str,
     request: Request,
@@ -64,7 +64,7 @@ async def list_ingresses(
 
 
 @router.get("/clusters/{cluster_id}/namespaces/{namespace}/ingresses/{name}", response_model=IngressDetails)
-async def get_ingress(
+def get_ingress(
     cluster_id: int,
     namespace: str,
     name: str,
@@ -89,7 +89,7 @@ async def get_ingress(
 
 
 @router.delete("/clusters/{cluster_id}/namespaces/{namespace}/ingresses/{name}")
-async def delete_ingress_handler(
+def delete_ingress_handler(
     cluster_id: int,
     namespace: str,
     name: str,

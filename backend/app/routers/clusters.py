@@ -11,7 +11,7 @@ router = APIRouter()
 
 
 @router.post("/", response_model=ClusterResponse)
-async def create_cluster(
+def create_cluster(
     cluster: ClusterCreate,
     db: Session = Depends(get_db),
     current_user: dict = Depends(require_cluster_management),
@@ -53,7 +53,7 @@ async def create_cluster(
 
 @router.get("/", response_model=List[ClusterResponse])
 @router.get("", response_model=List[ClusterResponse])
-async def get_clusters(
+def get_clusters(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
@@ -84,7 +84,7 @@ async def get_clusters(
 
 
 @router.get("/{cluster_id}", response_model=ClusterResponse)
-async def get_cluster(
+def get_cluster(
     cluster_id: int,
     db: Session = Depends(get_db),
     current_user: dict = Depends(require_read_only),
@@ -101,7 +101,7 @@ async def get_cluster(
 
 
 @router.put("/{cluster_id}", response_model=ClusterResponse)
-async def update_cluster(
+def update_cluster(
     cluster_id: int,
     cluster_update: ClusterUpdate,
     db: Session = Depends(get_db),
@@ -144,7 +144,7 @@ async def update_cluster(
 
 
 @router.delete("/{cluster_id}")
-async def delete_cluster(
+def delete_cluster(
     cluster_id: int,
     db: Session = Depends(get_db),
     current_user: dict = Depends(require_cluster_management),
@@ -166,7 +166,7 @@ async def delete_cluster(
 
 
 @router.post("/{cluster_id}/test-connection")
-async def test_cluster_connection(
+def test_cluster_connection(
     cluster_id: int,
     db: Session = Depends(get_db),
     current_user: dict = Depends(require_read_only),
@@ -186,7 +186,7 @@ async def test_cluster_connection(
 
 
 @router.post("/{cluster_id}/activate", response_model=ClusterResponse)
-async def activate_cluster(
+def activate_cluster(
     cluster_id: int,
     db: Session = Depends(get_db),
     current_user: dict = Depends(require_cluster_management),
@@ -205,4 +205,3 @@ async def activate_cluster(
     start_watcher_async(cluster)
 
     return cluster
-

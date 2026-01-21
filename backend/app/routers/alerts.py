@@ -80,7 +80,7 @@ class AlertEventResponse(BaseModel):
 
 
 @router.post("/rules", response_model=AlertRuleResponse)
-async def create_alert_rule(
+def create_alert_rule(
     rule: AlertRuleCreate,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
@@ -129,7 +129,7 @@ async def create_alert_rule(
 
 
 @router.get("/rules", response_model=List[AlertRuleResponse])
-async def list_alert_rules(
+def list_alert_rules(
     cluster_id: Optional[int] = Query(None),
     enabled: Optional[bool] = Query(None),
     db: Session = Depends(get_db),
@@ -172,7 +172,7 @@ async def list_alert_rules(
 
 
 @router.get("/rules/{rule_id}", response_model=AlertRuleResponse)
-async def get_alert_rule(
+def get_alert_rule(
     rule_id: int,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
@@ -208,7 +208,7 @@ async def get_alert_rule(
 
 
 @router.put("/rules/{rule_id}", response_model=AlertRuleResponse)
-async def update_alert_rule(
+def update_alert_rule(
     rule_id: int,
     rule_update: AlertRuleUpdate,
     db: Session = Depends(get_db),
@@ -260,7 +260,7 @@ async def update_alert_rule(
 
 
 @router.delete("/rules/{rule_id}")
-async def delete_alert_rule(
+def delete_alert_rule(
     rule_id: int,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
@@ -285,7 +285,7 @@ async def delete_alert_rule(
 
 
 @router.get("/events", response_model=List[AlertEventResponse])
-async def list_alert_events(
+def list_alert_events(
     cluster_id: Optional[int] = Query(None),
     status: Optional[str] = Query(None),
     severity: Optional[str] = Query(None),
@@ -338,7 +338,7 @@ async def list_alert_events(
 
 
 @router.post("/events/{event_id}/resolve")
-async def resolve_alert_event(
+def resolve_alert_event(
     event_id: int,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
@@ -364,7 +364,7 @@ async def resolve_alert_event(
 
 
 @router.get("/stats")
-async def get_alert_stats(
+def get_alert_stats(
     cluster_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)

@@ -49,7 +49,7 @@ class PDBDetails(BaseModel):
 
 
 @router.get("/clusters/{cluster_id}/namespaces/{namespace}/pdbs", response_model=List[PDBInfo])
-async def list_pdbs(
+def list_pdbs(
     cluster_id: int,
     namespace: str,
     request: Request,
@@ -71,7 +71,7 @@ async def list_pdbs(
 
 
 @router.get("/clusters/{cluster_id}/namespaces/{namespace}/pdbs/{name}", response_model=PDBDetails)
-async def get_pdb(
+def get_pdb(
     cluster_id: int,
     namespace: str,
     name: str,
@@ -96,7 +96,7 @@ async def get_pdb(
 
 
 @router.delete("/clusters/{cluster_id}/namespaces/{namespace}/pdbs/{name}")
-async def delete_pdb_handler(
+def delete_pdb_handler(
     cluster_id: int,
     namespace: str,
     name: str,

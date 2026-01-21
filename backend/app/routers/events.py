@@ -37,7 +37,7 @@ class EventPageResponse(BaseModel):
 
 @router.get("/", response_model=EventPageResponse)
 @router.get("", response_model=EventPageResponse)
-async def get_events(
+def get_events(
     namespace: Optional[str] = None,
     cluster_id: int = Query(..., description="集群ID"),
     limit: int = Query(200, description="每页数量", ge=1, le=1000),

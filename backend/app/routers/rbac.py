@@ -18,7 +18,7 @@ router = APIRouter()
 # ========== Roles ==========
 
 @router.get("/roles")
-async def list_roles(
+def list_roles(
     cluster_id: int = Query(..., description="集群ID"),
     namespace: Optional[str] = Query(None, description="命名空间，不指定则返回所有"),
     db: Session = Depends(get_db),
@@ -47,7 +47,7 @@ async def list_roles(
 
 
 @router.get("/roles/{namespace}/{name}")
-async def get_role_detail(
+def get_role_detail(
     namespace: str,
     name: str,
     cluster_id: int = Query(..., description="集群ID"),
@@ -72,7 +72,7 @@ async def get_role_detail(
 
 
 @router.delete("/roles/{namespace}/{name}")
-async def delete_role_endpoint(
+def delete_role_endpoint(
     namespace: str,
     name: str,
     cluster_id: int = Query(..., description="集群ID"),
@@ -137,7 +137,7 @@ async def delete_role_endpoint(
 # ========== RoleBindings ==========
 
 @router.get("/role-bindings")
-async def list_role_bindings(
+def list_role_bindings(
     cluster_id: int = Query(..., description="集群ID"),
     namespace: Optional[str] = Query(None, description="命名空间，不指定则返回所有"),
     db: Session = Depends(get_db),
@@ -166,7 +166,7 @@ async def list_role_bindings(
 
 
 @router.get("/role-bindings/{namespace}/{name}")
-async def get_role_binding_detail(
+def get_role_binding_detail(
     namespace: str,
     name: str,
     cluster_id: int = Query(..., description="集群ID"),
@@ -191,7 +191,7 @@ async def get_role_binding_detail(
 
 
 @router.delete("/role-bindings/{namespace}/{name}")
-async def delete_role_binding_endpoint(
+def delete_role_binding_endpoint(
     namespace: str,
     name: str,
     cluster_id: int = Query(..., description="集群ID"),
@@ -256,7 +256,7 @@ async def delete_role_binding_endpoint(
 # ========== ServiceAccounts ==========
 
 @router.get("/service-accounts")
-async def list_service_accounts(
+def list_service_accounts(
     cluster_id: int = Query(..., description="集群ID"),
     namespace: Optional[str] = Query(None, description="命名空间，不指定则返回所有"),
     db: Session = Depends(get_db),
@@ -285,7 +285,7 @@ async def list_service_accounts(
 
 
 @router.get("/service-accounts/{namespace}/{name}")
-async def get_service_account_detail(
+def get_service_account_detail(
     namespace: str,
     name: str,
     cluster_id: int = Query(..., description="集群ID"),
@@ -310,7 +310,7 @@ async def get_service_account_detail(
 
 
 @router.delete("/service-accounts/{namespace}/{name}")
-async def delete_service_account_endpoint(
+def delete_service_account_endpoint(
     namespace: str,
     name: str,
     cluster_id: int = Query(..., description="集群ID"),
@@ -375,7 +375,7 @@ async def delete_service_account_endpoint(
 # ========== ClusterRoles (只读) ==========
 
 @router.get("/cluster-roles")
-async def list_cluster_roles(
+def list_cluster_roles(
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin)
@@ -405,7 +405,7 @@ async def list_cluster_roles(
 # ========== ClusterRoleBindings (只读) ==========
 
 @router.get("/cluster-role-bindings")
-async def list_cluster_role_bindings(
+def list_cluster_role_bindings(
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin)

@@ -49,7 +49,7 @@ class CronJobDetails(BaseModel):
 
 
 @router.get("/clusters/{cluster_id}/namespaces/{namespace}/cronjobs", response_model=List[CronJobInfo])
-async def list_cronjobs(
+def list_cronjobs(
     cluster_id: int,
     namespace: str,
     request: Request,
@@ -71,7 +71,7 @@ async def list_cronjobs(
 
 
 @router.get("/clusters/{cluster_id}/namespaces/{namespace}/cronjobs/{name}", response_model=CronJobDetails)
-async def get_cronjob(
+def get_cronjob(
     cluster_id: int,
     namespace: str,
     name: str,
@@ -96,7 +96,7 @@ async def get_cronjob(
 
 
 @router.delete("/clusters/{cluster_id}/namespaces/{namespace}/cronjobs/{name}")
-async def delete_cronjob_handler(
+def delete_cronjob_handler(
     cluster_id: int,
     namespace: str,
     name: str,

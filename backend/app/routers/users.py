@@ -23,7 +23,7 @@ def require_admin(current_user: models.User = Depends(get_current_user)):
 
 @router.get("", response_model=schemas.UserListResponse, include_in_schema=False)
 @router.get("/", response_model=schemas.UserListResponse)
-async def get_users(
+def get_users(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
     search: Optional[str] = None,
@@ -56,7 +56,7 @@ async def get_users(
 
 
 @router.get("/{user_id}", response_model=schemas.UserResponse)
-async def get_user(
+def get_user(
     user_id: int,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_user_management)
@@ -73,7 +73,7 @@ async def get_user(
 
 @router.post("", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED, include_in_schema=False)
 @router.post("/", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED)
-async def create_user(
+def create_user(
     user_data: schemas.UserCreate,
     request: Request,
     db: Session = Depends(get_db),
@@ -127,7 +127,7 @@ async def create_user(
 
 
 @router.put("/{user_id}", response_model=schemas.UserResponse)
-async def update_user(
+def update_user(
     user_id: int,
     user_data: schemas.UserUpdate,
     request: Request,
@@ -209,7 +209,7 @@ async def update_user(
 
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_user(
+def delete_user(
     user_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -265,7 +265,7 @@ async def delete_user(
 
 
 @router.put("/{user_id}/password", status_code=status.HTTP_200_OK)
-async def change_password(
+def change_password(
     user_id: int,
     password_data: schemas.PasswordChange,
     db: Session = Depends(get_db),

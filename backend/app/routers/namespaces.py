@@ -36,7 +36,7 @@ class NamespaceResources(BaseModel):
 
 @router.get("/", response_model=List[NamespaceInfo])
 @router.get("", response_model=List[NamespaceInfo])
-async def get_namespaces(
+def get_namespaces(
     cluster_id: Optional[int] = Query(None, description="集群ID，不传则获取所有活跃集群"),
     db: Session = Depends(get_db),
     current_user=Depends(require_read_only)
@@ -99,7 +99,7 @@ async def get_namespaces(
         raise HTTPException(status_code=500, detail=f"获取命名空间信息失败: {str(e)}")
 
 @router.post("/", response_model=NamespaceInfo)
-async def create_new_namespace(
+def create_new_namespace(
     namespace: NamespaceCreate,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
@@ -141,7 +141,7 @@ async def create_new_namespace(
         raise HTTPException(status_code=500, detail=f"创建命名空间失败: {str(e)}")
 
 @router.delete("/{namespace_name}")
-async def remove_namespace(
+def remove_namespace(
     namespace_name: str,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
@@ -173,7 +173,7 @@ async def remove_namespace(
         raise HTTPException(status_code=500, detail=f"删除命名空间失败: {str(e)}")
 
 @router.get("/{namespace_name}/resources", response_model=NamespaceResources)
-async def get_namespace_resource_usage(
+def get_namespace_resource_usage(
     namespace_name: str,
     cluster_id: int,
     db: Session = Depends(get_db),
@@ -202,7 +202,7 @@ async def get_namespace_resource_usage(
 
 
 @router.get("/{namespace_name}/deployments")
-async def get_namespace_deployments_endpoint(
+def get_namespace_deployments_endpoint(
     namespace_name: str,
     cluster_id: int,
     db: Session = Depends(get_db),
@@ -228,7 +228,7 @@ async def get_namespace_deployments_endpoint(
 
 
 @router.get("/{namespace_name}/services")
-async def get_namespace_services_endpoint(
+def get_namespace_services_endpoint(
     namespace_name: str,
     cluster_id: int,
     db: Session = Depends(get_db),
@@ -254,7 +254,7 @@ async def get_namespace_services_endpoint(
 
 
 @router.get("/{namespace_name}/crds")
-async def get_namespace_crds_endpoint(
+def get_namespace_crds_endpoint(
     namespace_name: str,
     cluster_id: int,
     db: Session = Depends(get_db),

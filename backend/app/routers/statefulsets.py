@@ -51,7 +51,7 @@ class ScaleRequest(BaseModel):
 
 
 @router.get("/clusters/{cluster_id}/namespaces/{namespace}/statefulsets", response_model=List[StatefulSetInfo])
-async def list_statefulsets(
+def list_statefulsets(
     cluster_id: int,
     namespace: str,
     request: Request,
@@ -71,7 +71,7 @@ async def list_statefulsets(
 
 
 @router.get("/clusters/{cluster_id}/namespaces/{namespace}/statefulsets/{name}", response_model=StatefulSetDetails)
-async def get_statefulset(
+def get_statefulset(
     cluster_id: int,
     namespace: str,
     name: str,
@@ -95,7 +95,7 @@ async def get_statefulset(
 
 
 @router.post("/clusters/{cluster_id}/namespaces/{namespace}/statefulsets/{name}/scale")
-async def scale_statefulset_handler(
+def scale_statefulset_handler(
     cluster_id: int,
     namespace: str,
     name: str,
@@ -120,7 +120,7 @@ async def scale_statefulset_handler(
 
 
 @router.delete("/clusters/{cluster_id}/namespaces/{namespace}/statefulsets/{name}")
-async def delete_statefulset_handler(
+def delete_statefulset_handler(
     cluster_id: int,
     namespace: str,
     name: str,

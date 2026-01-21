@@ -11,7 +11,7 @@ router = APIRouter()
 
 
 @router.get("/users/{user_id}", response_model=schemas.UserPermissionsResponse)
-async def get_user_permissions(
+def get_user_permissions(
     user_id: int,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_admin)
@@ -70,7 +70,7 @@ async def get_user_permissions(
 
 
 @router.post("/users/{user_id}/clusters", response_model=schemas.ClusterPermissionResponse, status_code=status.HTTP_201_CREATED)
-async def grant_cluster_permission(
+def grant_cluster_permission(
     user_id: int,
     permission_data: schemas.ClusterPermissionGrantRequest,
     request: Request,
@@ -149,7 +149,7 @@ async def grant_cluster_permission(
 
 
 @router.post("/users/{user_id}/namespaces", response_model=schemas.NamespacePermissionResponse, status_code=status.HTTP_201_CREATED)
-async def grant_namespace_permission(
+def grant_namespace_permission(
     user_id: int,
     permission_data: schemas.NamespacePermissionGrantRequest,
     request: Request,
@@ -232,7 +232,7 @@ async def grant_namespace_permission(
 
 
 @router.put("/clusters/{permission_id}", response_model=schemas.ClusterPermissionResponse)
-async def update_cluster_permission(
+def update_cluster_permission(
     permission_id: int,
     permission_data: schemas.PermissionUpdateRequest,
     request: Request,
@@ -285,7 +285,7 @@ async def update_cluster_permission(
 
 
 @router.put("/namespaces/{permission_id}", response_model=schemas.NamespacePermissionResponse)
-async def update_namespace_permission(
+def update_namespace_permission(
     permission_id: int,
     permission_data: schemas.PermissionUpdateRequest,
     request: Request,
@@ -340,7 +340,7 @@ async def update_namespace_permission(
 
 
 @router.delete("/clusters/{permission_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def revoke_cluster_permission(
+def revoke_cluster_permission(
     permission_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -382,7 +382,7 @@ async def revoke_cluster_permission(
 
 
 @router.delete("/namespaces/{permission_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def revoke_namespace_permission(
+def revoke_namespace_permission(
     permission_id: int,
     request: Request,
     db: Session = Depends(get_db),

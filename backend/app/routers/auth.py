@@ -19,7 +19,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def register(
+def register(
     register_data: UserRegister,
     db: Session = Depends(database.get_db),
 ):
@@ -56,7 +56,7 @@ async def register(
 
 
 @router.post("/login", response_model=Token)
-async def login(
+def login(
     login_data: LoginRequest,
     request: Request,
     db: Session = Depends(database.get_db)
@@ -82,7 +82,7 @@ async def login(
 
 
 @router.post("/token", response_model=Token)
-async def login_for_access_token(
+def login_for_access_token(
     request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(database.get_db)
@@ -108,7 +108,7 @@ async def login_for_access_token(
 
 
 @router.post("/refresh", response_model=Token)
-async def refresh_token(
+def refresh_token(
     refresh_data: RefreshTokenRequest,
     db: Session = Depends(database.get_db)
 ):
@@ -130,7 +130,7 @@ async def refresh_token(
 
 
 @router.post("/logout")
-async def logout(
+def logout(
     refresh_data: RefreshTokenRequest,
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(database.get_db)
@@ -147,7 +147,7 @@ async def logout(
 
 
 @router.get("/me")
-async def read_users_me(current_user: models.User = Depends(get_current_user)):
+def read_users_me(current_user: models.User = Depends(get_current_user)):
     """获取当前用户信息"""
     return {
         "id": current_user.id,
@@ -159,7 +159,7 @@ async def read_users_me(current_user: models.User = Depends(get_current_user)):
 
 
 @router.post("/verify-token")
-async def verify_token_endpoint(current_user: models.User = Depends(get_current_user)):
+def verify_token_endpoint(current_user: models.User = Depends(get_current_user)):
     """验证token是否有效"""
     return {
         "valid": True,
@@ -174,7 +174,7 @@ async def verify_token_endpoint(current_user: models.User = Depends(get_current_
 # ========== 会话管理 ==========
 
 @router.get("/sessions", response_model=UserSessionListResponse)
-async def get_sessions(
+def get_sessions(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(database.get_db)
 ):
@@ -187,7 +187,7 @@ async def get_sessions(
 
 
 @router.post("/sessions/revoke")
-async def revoke_sessions(
+def revoke_sessions(
     revoke_data: SessionRevokeRequest,
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(database.get_db)
@@ -201,7 +201,7 @@ async def revoke_sessions(
 
 
 @router.post("/sessions/revoke-all")
-async def revoke_all_sessions(
+def revoke_all_sessions(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(database.get_db)
 ):
@@ -216,7 +216,7 @@ async def revoke_all_sessions(
 # ========== API密钥管理 ==========
 
 @router.post("/api-keys", response_model=APIKeyCreateResponse)
-async def create_api_key(
+def create_api_key(
     key_data: APIKeyCreate,
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(database.get_db)
@@ -242,7 +242,7 @@ async def create_api_key(
 
 
 @router.get("/api-keys", response_model=APIKeyListResponse)
-async def list_api_keys(
+def list_api_keys(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(database.get_db)
 ):
@@ -255,7 +255,7 @@ async def list_api_keys(
 
 
 @router.delete("/api-keys/{key_id}")
-async def revoke_api_key(
+def revoke_api_key(
     key_id: int,
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(database.get_db)

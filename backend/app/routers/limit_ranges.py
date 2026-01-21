@@ -39,7 +39,7 @@ class LimitRangeDetails(BaseModel):
 
 
 @router.get("/clusters/{cluster_id}/namespaces/{namespace}/limit-ranges", response_model=List[LimitRangeInfo])
-async def list_limit_ranges(
+def list_limit_ranges(
     cluster_id: int,
     namespace: str,
     request: Request,
@@ -61,7 +61,7 @@ async def list_limit_ranges(
 
 
 @router.get("/clusters/{cluster_id}/namespaces/{namespace}/limit-ranges/{name}", response_model=LimitRangeDetails)
-async def get_limit_range(
+def get_limit_range(
     cluster_id: int,
     namespace: str,
     name: str,
@@ -86,7 +86,7 @@ async def get_limit_range(
 
 
 @router.delete("/clusters/{cluster_id}/namespaces/{namespace}/limit-ranges/{name}")
-async def delete_limit_range_handler(
+def delete_limit_range_handler(
     cluster_id: int,
     namespace: str,
     name: str,

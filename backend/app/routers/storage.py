@@ -90,7 +90,7 @@ class FileItem(BaseModel):
 # ========== 存储类管理 ==========
 
 @router.get("/classes", response_model=List[StorageClassInfo])
-async def get_storage_classes_list(
+def get_storage_classes_list(
     cluster_id: Optional[int] = Query(None, description="集群ID，不传则获取所有活跃集群"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_read_only)
@@ -132,7 +132,7 @@ async def get_storage_classes_list(
         raise HTTPException(status_code=500, detail=f"获取存储类信息失败: {str(e)}")
 
 @router.post("/classes", response_model=StorageClassInfo)
-async def create_storage_class_endpoint(
+def create_storage_class_endpoint(
     storage_class: StorageClassCreate,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
@@ -189,7 +189,7 @@ async def create_storage_class_endpoint(
         raise HTTPException(status_code=500, detail=f"创建存储类失败: {str(e)}")
 
 @router.delete("/classes/{storage_class_name}")
-async def delete_storage_class_endpoint(
+def delete_storage_class_endpoint(
     storage_class_name: str,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
@@ -215,7 +215,7 @@ async def delete_storage_class_endpoint(
 # ========== PV管理 ==========
 
 @router.get("/volumes", response_model=List[PersistentVolumeInfo])
-async def get_persistent_volumes_list(
+def get_persistent_volumes_list(
     cluster_id: Optional[int] = Query(None, description="集群ID，不传则获取所有活跃集群"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_read_only)
@@ -257,7 +257,7 @@ async def get_persistent_volumes_list(
         raise HTTPException(status_code=500, detail=f"获取持久卷信息失败: {str(e)}")
 
 @router.get("/volumes/{pv_name}", response_model=PersistentVolumeInfo)
-async def get_pv_details_endpoint(
+def get_pv_details_endpoint(
     pv_name: str,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
@@ -286,7 +286,7 @@ async def get_pv_details_endpoint(
         raise HTTPException(status_code=500, detail=f"获取PV详情失败: {str(e)}")
 
 @router.post("/volumes", response_model=PersistentVolumeInfo)
-async def create_pv_endpoint(
+def create_pv_endpoint(
     pv: PVCreate,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
@@ -315,7 +315,7 @@ async def create_pv_endpoint(
         raise HTTPException(status_code=500, detail=f"创建持久卷失败: {str(e)}")
 
 @router.delete("/volumes/{pv_name}")
-async def delete_pv_endpoint(
+def delete_pv_endpoint(
     pv_name: str,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
@@ -341,7 +341,7 @@ async def delete_pv_endpoint(
 # ========== PVC管理 ==========
 
 @router.get("/claims", response_model=List[PersistentVolumeClaimInfo])
-async def get_persistent_volume_claims_list(
+def get_persistent_volume_claims_list(
     cluster_id: Optional[int] = Query(None, description="集群ID，不传则获取所有活跃集群"),
     namespace: Optional[str] = Query(None, description="命名空间过滤"),
     db: Session = Depends(get_db),
@@ -387,7 +387,7 @@ async def get_persistent_volume_claims_list(
         raise HTTPException(status_code=500, detail=f"获取PVC信息失败: {str(e)}")
 
 @router.get("/claims/{namespace}/{pvc_name}", response_model=PersistentVolumeClaimInfo)
-async def get_pvc_details_endpoint(
+def get_pvc_details_endpoint(
     namespace: str,
     pvc_name: str,
     cluster_id: int = Query(..., description="集群ID"),
@@ -417,7 +417,7 @@ async def get_pvc_details_endpoint(
         raise HTTPException(status_code=500, detail=f"获取PVC详情失败: {str(e)}")
 
 @router.post("/claims", response_model=PersistentVolumeClaimInfo)
-async def create_pvc_endpoint(
+def create_pvc_endpoint(
     pvc: PVCCreate,
     cluster_id: int = Query(..., description="集群ID"),
     db: Session = Depends(get_db),
@@ -446,7 +446,7 @@ async def create_pvc_endpoint(
         raise HTTPException(status_code=500, detail=f"创建PVC失败: {str(e)}")
 
 @router.delete("/claims/{namespace}/{pvc_name}")
-async def delete_pvc_endpoint(
+def delete_pvc_endpoint(
     namespace: str,
     pvc_name: str,
     cluster_id: int = Query(..., description="集群ID"),
@@ -473,7 +473,7 @@ async def delete_pvc_endpoint(
 # ========== 卷文件浏览 ==========
 
 @router.get("/volumes/{pv_name}/files")
-async def browse_volume_files_endpoint(
+def browse_volume_files_endpoint(
     pv_name: str,
     path: str = Query("/", description="浏览路径"),
     cluster_id: int = Query(..., description="集群ID"),
@@ -527,7 +527,7 @@ async def browse_volume_files_endpoint(
         raise HTTPException(status_code=500, detail=f"浏览卷文件失败: {str(e)}")
 
 @router.get("/volumes/{pv_name}/files/content")
-async def read_volume_file_endpoint(
+def read_volume_file_endpoint(
     pv_name: str,
     file_path: str = Query(..., description="文件路径"),
     cluster_id: int = Query(..., description="集群ID"),

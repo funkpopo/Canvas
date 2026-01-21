@@ -48,7 +48,7 @@ class HPADetails(BaseModel):
 
 
 @router.get("/clusters/{cluster_id}/namespaces/{namespace}/hpas", response_model=List[HPAInfo])
-async def list_hpas(
+def list_hpas(
     cluster_id: int,
     namespace: str,
     request: Request,
@@ -70,7 +70,7 @@ async def list_hpas(
 
 
 @router.get("/clusters/{cluster_id}/namespaces/{namespace}/hpas/{name}", response_model=HPADetails)
-async def get_hpa(
+def get_hpa(
     cluster_id: int,
     namespace: str,
     name: str,
@@ -95,7 +95,7 @@ async def get_hpa(
 
 
 @router.delete("/clusters/{cluster_id}/namespaces/{namespace}/hpas/{name}")
-async def delete_hpa_handler(
+def delete_hpa_handler(
     cluster_id: int,
     namespace: str,
     name: str,

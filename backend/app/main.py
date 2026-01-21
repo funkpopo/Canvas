@@ -7,6 +7,7 @@ import time
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.responses import Response
 from contextlib import asynccontextmanager
 from .database import create_tables, init_default_user
 from .routers import auth, clusters, stats, nodes, namespaces, pods, deployments, storage, services, configmaps, secrets, network_policies, resource_quotas, events, jobs, websocket, users, audit_logs, rbac, permissions, app_rbac, statefulsets, daemonsets, hpas, cronjobs, ingresses, limit_ranges, pdbs, metrics, alerts, monitoring
@@ -103,6 +104,12 @@ async def request_id_metrics_and_envelope(request, call_next):
         response = await call_next(request)
         response.headers["X-Request-ID"] = request_id
 
+        # 成功 envelope 可配置：默认启用，但对大响应/特定前缀直接透传，避免读完整 body 再二次序列化
+        envelope_enabled = os.getenv("SUCCESS_ENVELOPE_ENABLED", "true").lower() == "true"
+        if not envelope_enabled:
+            final_response = response
+            return final_response
+
         # 仅包装成功的 JSON 响应
         if response.status_code >= 400 or response.status_code == 204:
             final_response = response
@@ -113,10 +120,33 @@ async def request_id_metrics_and_envelope(request, call_next):
             final_response = response
             return final_response
 
-        # 读取 body_iterator（可能是 StreamingResponse）
-        body = b""
+        path = request.url.path or ""
+        skip_prefixes_raw = os.getenv(
+            "SUCCESS_ENVELOPE_SKIP_PREFIXES",
+            "/api/pods,/api/events,/api/metrics,/api/nodes,/api/namespaces,/api/monitoring",
+        )
+        skip_prefixes = [p.strip() for p in skip_prefixes_raw.split(",") if p.strip()]
+        if any(path.startswith(p) for p in skip_prefixes):
+            final_response = response
+            return final_response
+
+        # 如果响应体过大，则跳过 envelope，避免 json.loads/dumps 的 CPU/内存开销
+        max_bytes = int(os.getenv("SUCCESS_ENVELOPE_MAX_BYTES", "100000"))  # 100KB
+        content_length = response.headers.get("content-length")
+        if content_length:
+            try:
+                if int(content_length) > max_bytes:
+                    final_response = response
+                    return final_response
+            except ValueError:
+                # 非法 content-length 时不做大小判断，继续走后续逻辑
+                pass
+
+        # 读取 body_iterator（BaseHTTPMiddleware 返回的 response 多为流式），但仅对小 JSON 响应做聚合
+        chunks = []
         async for chunk in response.body_iterator:
-            body += chunk
+            chunks.append(chunk)
+        body = b"".join(chunks)
 
         if not body:
             final_response = response
@@ -125,12 +155,17 @@ async def request_id_metrics_and_envelope(request, call_next):
         try:
             payload = json.loads(body)
         except Exception:
-            final_response = response
+            # body_iterator 已被消费，必须重建响应以避免返回空 body
+            headers = dict(response.headers)
+            headers.pop("content-length", None)
+            final_response = Response(content=body, status_code=response.status_code, headers=headers, media_type=content_type)
             return final_response
 
         # 已经是 envelope 则不重复包装
         if isinstance(payload, dict) and payload.get("success") is True and "request_id" in payload:
-            final_response = response
+            headers = dict(response.headers)
+            headers.pop("content-length", None)
+            final_response = Response(content=body, status_code=response.status_code, headers=headers, media_type=content_type)
             return final_response
 
         wrapped = {"success": True, "data": payload, "request_id": request_id}
