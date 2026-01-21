@@ -74,14 +74,19 @@ async def audit_log_cleanup_worker(stop_event: asyncio.Event) -> None:
 
     while not stop_event.is_set():
         try:
-            cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
-            db = SessionLocal()
-            try:
-                deleted = purge_audit_logs_older_than(db, cutoff, AUDIT_LOG_CLEANUP_BATCH_SIZE)
-                if deleted:
-                    logger.info("Audit log cleanup deleted=%s cutoff=%s", deleted, cutoff.isoformat())
-            finally:
-                db.close()
+            # SQLAlchemy 同步 I/O：放入线程池，避免阻塞 FastAPI 事件循环。
+            def _run_once() -> tuple[int, str]:
+                cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
+                db = SessionLocal()
+                try:
+                    deleted = purge_audit_logs_older_than(db, cutoff, AUDIT_LOG_CLEANUP_BATCH_SIZE)
+                    return int(deleted or 0), cutoff.isoformat()
+                finally:
+                    db.close()
+
+            deleted, cutoff_iso = await asyncio.to_thread(_run_once)
+            if deleted:
+                logger.info("Audit log cleanup deleted=%s cutoff=%s", deleted, cutoff_iso)
         except Exception as e:
             logger.exception("Audit log cleanup failed: %s", e)
 

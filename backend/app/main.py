@@ -4,6 +4,7 @@ import asyncio
 import json
 import uuid
 import time
+import tempfile
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -15,6 +16,67 @@ from .exceptions import register_exception_handlers
 from .core.logging import setup_logging, get_logger
 from .core.request_context import request_id_var
 from .observability import request_metrics
+
+
+def _acquire_background_tasks_lock(logger):
+    """
+    通过文件锁确保后台任务在多 worker 场景下仅启动一次。
+
+    说明：该锁仅对同一台机器/同一容器内的多进程有效；若需跨实例，请迁移到独立 worker 或做分布式锁。
+    """
+    lock_path = os.getenv("BACKGROUND_TASKS_LOCKFILE") or os.path.join(
+        tempfile.gettempdir(), "canvas_background_tasks.lock"
+    )
+    try:
+        fh = open(lock_path, "a+")
+        fh.seek(0)
+        try:
+            if os.name == "nt":
+                import msvcrt
+
+                # 锁定 1 个字节即可表示互斥
+                msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+            fh.seek(0)
+            fh.truncate()
+            fh.write(str(os.getpid()))
+            fh.flush()
+            return fh
+        except Exception:
+            try:
+                fh.close()
+            except Exception:
+                pass
+            return None
+    except Exception as e:
+        logger.warning("Background tasks lock init failed: %s", e)
+        return None
+
+
+def _release_background_tasks_lock(fh) -> None:
+    if not fh:
+        return
+    try:
+        if os.name == "nt":
+            import msvcrt
+
+            fh.seek(0)
+            msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+    except Exception:
+        pass
+    try:
+        fh.close()
+    except Exception:
+        pass
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -37,16 +99,30 @@ async def lifespan(app: FastAPI):
     await manager.start_heartbeat_monitor()
     logger.info("WebSocket心跳检测已启动")
 
-    # 启动告警检查器
-    from .services.alert_checker import alert_checker
-    asyncio.create_task(alert_checker.start())
-    logger.info("告警检查器已启动")
+    # 后台任务：可通过开关禁用，并通过文件锁避免多 worker 重复启动
+    enable_bg = os.getenv("ENABLE_BACKGROUND_TASKS", "true").lower() == "true"
+    bg_lock_fh = None
+    alert_checker = None
+    audit_stop_event = None
+    audit_cleanup_task = None
 
-    # 启动审计日志归档/清理任务
-    from .services.audit_archive import audit_log_cleanup_worker
-    audit_stop_event = asyncio.Event()
-    audit_cleanup_task = asyncio.create_task(audit_log_cleanup_worker(audit_stop_event))
-    logger.info("审计日志清理任务已启动")
+    if enable_bg:
+        bg_lock_fh = _acquire_background_tasks_lock(logger)
+        if bg_lock_fh:
+            from .services.alert_checker import alert_checker as _alert_checker
+            from .services.audit_archive import audit_log_cleanup_worker
+
+            alert_checker = _alert_checker
+            asyncio.create_task(alert_checker.start())
+            logger.info("告警检查器已启动")
+
+            audit_stop_event = asyncio.Event()
+            audit_cleanup_task = asyncio.create_task(audit_log_cleanup_worker(audit_stop_event))
+            logger.info("审计日志清理任务已启动")
+        else:
+            logger.info("后台任务未启动：未获取到进程锁（可能已有其他 worker 在运行后台任务）")
+    else:
+        logger.info("后台任务已禁用（ENABLE_BACKGROUND_TASKS=false）")
 
     yield
 
@@ -54,8 +130,9 @@ async def lifespan(app: FastAPI):
     logger.info("正在关闭应用...")
 
     # 停止告警检查器
-    await alert_checker.stop()
-    logger.info("告警检查器已停止")
+    if alert_checker:
+        await alert_checker.stop()
+        logger.info("告警检查器已停止")
 
     # 停止Kubernetes连接池清理线程
     _client_pool.stop_cleanup_thread()
@@ -71,13 +148,16 @@ async def lifespan(app: FastAPI):
     logger.info("所有Kubernetes监听器已停止")
 
     # 停止审计日志清理任务
-    audit_stop_event.set()
-    audit_cleanup_task.cancel()
-    try:
-        await audit_cleanup_task
-    except asyncio.CancelledError:
-        pass
-    logger.info("审计日志清理任务已停止")
+    if audit_stop_event and audit_cleanup_task:
+        audit_stop_event.set()
+        audit_cleanup_task.cancel()
+        try:
+            await audit_cleanup_task
+        except asyncio.CancelledError:
+            pass
+        logger.info("审计日志清理任务已停止")
+
+    _release_background_tasks_lock(bg_lock_fh)
 
 # 日志初始化需尽早执行（支持彩色/JSON输出、文件轮转）
 setup_logging()

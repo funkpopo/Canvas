@@ -11,6 +11,7 @@ from kubernetes.client.rest import ApiException
 
 from ...models import Cluster
 from ...core.logging import get_logger
+from ...cache import cache_manager, K8S_STATS_TTL, K8S_NODES_TTL
 from .client_pool import KubernetesClientContext
 from .utils import calculate_age, parse_cpu, parse_memory
 
@@ -20,6 +21,11 @@ logger = get_logger(__name__)
 
 def get_cluster_stats(cluster: Cluster) -> Dict[str, Any]:
     """获取集群统计信息"""
+    cache_key = f"k8s:stats:cluster:{cluster.id}:ns:_all"
+    cached = cache_manager.get(cache_key)
+    if cached is not None:
+        return cached
+
     with KubernetesClientContext(cluster) as client_instance:
         if not client_instance:
             return {}
@@ -74,6 +80,7 @@ def get_cluster_stats(cluster: Cluster) -> Dict[str, Any]:
                 logger.warning("获取服务信息失败: %s", e)
                 stats['services'] = 0
 
+            cache_manager.set(cache_key, stats, K8S_STATS_TTL)
             return stats
 
         except Exception as e:
@@ -83,6 +90,11 @@ def get_cluster_stats(cluster: Cluster) -> Dict[str, Any]:
 
 def get_nodes_info(cluster: Cluster) -> List[Dict[str, Any]]:
     """获取集群节点基本信息"""
+    cache_key = f"k8s:nodes:cluster:{cluster.id}:ns:_all"
+    cached = cache_manager.get(cache_key)
+    if cached is not None:
+        return cached
+
     with KubernetesClientContext(cluster) as client_instance:
         if not client_instance:
             return []
@@ -198,6 +210,7 @@ def get_nodes_info(cluster: Cluster) -> List[Dict[str, Any]]:
                 }
                 node_list.append(node_info)
 
+            cache_manager.set(cache_key, node_list, K8S_NODES_TTL)
             return node_list
 
         except Exception as e:
@@ -215,60 +228,60 @@ def get_node_details(cluster: Cluster, node_name: str) -> Optional[Dict[str, Any
             core_v1 = client.CoreV1Api(client_instance)
             node = core_v1.read_node(node_name)
 
-        # 获取节点状态
-        status = "Unknown"
-        for condition in node.status.conditions:
-            if condition.type == "Ready":
-                status = "Ready" if condition.status == "True" else "NotReady"
-                break
+            # 获取节点状态
+            status = "Unknown"
+            for condition in (node.status.conditions or []):
+                if condition.type == "Ready":
+                    status = "Ready" if condition.status == "True" else "NotReady"
+                    break
 
-        # 获取节点角色
-        roles = []
-        if node.metadata.labels:
-            if node.metadata.labels.get("node-role.kubernetes.io/master") == "true" or \
-               node.metadata.labels.get("node-role.kubernetes.io/control-plane") == "true":
+            # 获取节点角色
+            roles = []
+            labels = dict(node.metadata.labels) if node.metadata.labels else {}
+            if labels.get("node-role.kubernetes.io/master") == "true" or labels.get("node-role.kubernetes.io/control-plane") == "true":
                 roles.append("master")
-            if node.metadata.labels.get("node-role.kubernetes.io/worker") == "true":
+            if labels.get("node-role.kubernetes.io/worker") == "true":
                 roles.append("worker")
 
-        # 获取IP地址
-        internal_ip = None
-        external_ip = None
-        for address in node.status.addresses:
-            if address.type == "InternalIP":
-                internal_ip = address.address
-            elif address.type == "ExternalIP":
-                external_ip = address.address
+            # 获取IP地址
+            internal_ip = None
+            external_ip = None
+            for address in (node.status.addresses or []):
+                if address.type == "InternalIP":
+                    internal_ip = address.address
+                elif address.type == "ExternalIP":
+                    external_ip = address.address
 
-        # 获取资源容量
-        cpu_capacity = node.status.capacity.get("cpu", "0")
-        memory_capacity = node.status.capacity.get("memory", "0")
-        pods_capacity = node.status.capacity.get("pods", "0")
+            # 获取资源容量
+            capacity = getattr(getattr(node, "status", None), "capacity", None) or {}
+            cpu_capacity = capacity.get("cpu", "0")
+            memory_capacity = capacity.get("memory", "0")
+            pods_capacity = capacity.get("pods", "0")
 
-        # 计算节点年龄
-        age = calculate_age(node.metadata.creation_timestamp)
+            # 计算节点年龄
+            age = calculate_age(node.metadata.creation_timestamp)
 
-        # 获取条件状态
-        conditions = []
-        for condition in node.status.conditions:
-            conditions.append({
-                "type": condition.type,
-                "status": condition.status,
-                "last_heartbeat_time": str(condition.last_heartbeat_time) if condition.last_heartbeat_time else None,
-                "last_transition_time": str(condition.last_transition_time) if condition.last_transition_time else None,
-                "reason": condition.reason,
-                "message": condition.message
-            })
-
-        # 获取污点
-        taints = []
-        if node.spec.taints:
-            for taint in node.spec.taints:
-                taints.append({
-                    "key": taint.key,
-                    "value": taint.value,
-                    "effect": taint.effect
+            # 获取条件状态
+            conditions = []
+            for condition in (node.status.conditions or []):
+                conditions.append({
+                    "type": condition.type,
+                    "status": condition.status,
+                    "last_heartbeat_time": str(condition.last_heartbeat_time) if condition.last_heartbeat_time else None,
+                    "last_transition_time": str(condition.last_transition_time) if condition.last_transition_time else None,
+                    "reason": condition.reason,
+                    "message": condition.message,
                 })
+
+            # 获取污点
+            taints = []
+            if getattr(getattr(node, "spec", None), "taints", None):
+                for taint in node.spec.taints:
+                    taints.append({
+                        "key": taint.key,
+                        "value": taint.value,
+                        "effect": taint.effect,
+                    })
 
             return {
                 "name": node.metadata.name,
@@ -281,7 +294,7 @@ def get_node_details(cluster: Cluster, node_name: str) -> Optional[Dict[str, Any
                 "cpu_capacity": cpu_capacity,
                 "memory_capacity": memory_capacity,
                 "pods_capacity": pods_capacity,
-                "labels": dict(node.metadata.labels) if node.metadata.labels else {},
+                "labels": labels,
                 "annotations": dict(node.metadata.annotations) if node.metadata.annotations else {},
                 "conditions": conditions,
                 "taints": taints,
@@ -307,71 +320,60 @@ def get_cluster_events(
 
         try:
             core_v1 = client.CoreV1Api(client_instance)
-            events = []
 
-        if namespace:
-            event_list = core_v1.list_namespaced_event(namespace, limit=limit, _continue=continue_token)
-        else:
-            event_list = core_v1.list_event_for_all_namespaces(limit=limit, _continue=continue_token)
+            if namespace:
+                event_list = core_v1.list_namespaced_event(namespace, limit=limit, _continue=continue_token)
+            else:
+                event_list = core_v1.list_event_for_all_namespaces(limit=limit, _continue=continue_token)
 
-        next_token = getattr(getattr(event_list, "metadata", None), "_continue", None)
+            next_token = getattr(getattr(event_list, "metadata", None), "_continue", None)
 
-        # 按时间排序，最新的在前
-        def get_event_time(event):
-            # 优先使用last_timestamp，如果没有则使用event_time，如果都没有则使用first_timestamp
-            timestamp = event.last_timestamp or event.event_time or event.first_timestamp
-            if timestamp:
-                # 如果是datetime对象，返回它，否则返回一个很早的时间
-                if hasattr(timestamp, 'timestamp'):
-                    return timestamp.timestamp()
-                else:
-                    # 如果是字符串或其他格式，尝试转换
+            # 按时间排序，最新的在前
+            def get_event_time(evt):
+                ts = evt.last_timestamp or evt.event_time or evt.first_timestamp
+                if ts and hasattr(ts, "timestamp"):
+                    return ts.timestamp()
+                if ts:
                     try:
-                        return datetime.fromisoformat(str(timestamp).replace('Z', '+00:00')).timestamp()
-                    except:
-                        pass
-            # 如果都没有有效时间戳，返回0（最早的时间）
-            return 0
+                        return datetime.fromisoformat(str(ts).replace("Z", "+00:00")).timestamp()
+                    except Exception:
+                        return 0
+                return 0
 
-        sorted_events = sorted(event_list.items, key=get_event_time, reverse=True)
+            sorted_events = sorted(getattr(event_list, "items", []) or [], key=get_event_time, reverse=True)
 
-        for event in sorted_events:
-            # 计算事件年龄
-            age = "Unknown"
-            if event.last_timestamp:
-                now = datetime.now(timezone.utc)
-                last_time = event.last_timestamp
-                if hasattr(last_time, 'replace'):  # datetime对象
-                    delta = now - last_time.replace(tzinfo=timezone.utc)
-                else:  # 其他格式
-                    continue
+            events: List[Dict[str, Any]] = []
+            for evt in sorted_events:
+                age = "Unknown"
+                if evt.last_timestamp and hasattr(evt.last_timestamp, "replace"):
+                    now = datetime.now(timezone.utc)
+                    delta = now - evt.last_timestamp.replace(tzinfo=timezone.utc)
+                    if delta.days > 0:
+                        age = f"{delta.days}d"
+                    elif delta.seconds // 3600 > 0:
+                        age = f"{delta.seconds // 3600}h"
+                    elif delta.seconds // 60 > 0:
+                        age = f"{delta.seconds // 60}m"
+                    else:
+                        age = f"{delta.seconds}s"
 
-                if delta.days > 0:
-                    age = f"{delta.days}d"
-                elif delta.seconds // 3600 > 0:
-                    age = f"{delta.seconds // 3600}h"
-                elif delta.seconds // 60 > 0:
-                    age = f"{delta.seconds // 60}m"
-                else:
-                    age = f"{delta.seconds}s"
-
-            events.append({
-                "name": event.metadata.name,
-                "namespace": event.metadata.namespace,
-                "type": event.type,
-                "reason": event.reason,
-                "message": event.message,
-                "source": event.source.component if event.source else None,
-                "count": event.count,
-                "first_timestamp": str(event.first_timestamp) if event.first_timestamp else None,
-                "last_timestamp": str(event.last_timestamp) if event.last_timestamp else None,
-                "age": age,
-                "involved_object": {
-                    "kind": event.involved_object.kind,
-                    "name": event.involved_object.name,
-                    "namespace": event.involved_object.namespace
-                } if event.involved_object else None
-            })
+                events.append({
+                    "name": evt.metadata.name,
+                    "namespace": evt.metadata.namespace,
+                    "type": evt.type,
+                    "reason": evt.reason,
+                    "message": evt.message,
+                    "source": evt.source.component if evt.source else None,
+                    "count": evt.count,
+                    "first_timestamp": str(evt.first_timestamp) if evt.first_timestamp else None,
+                    "last_timestamp": str(evt.last_timestamp) if evt.last_timestamp else None,
+                    "age": age,
+                    "involved_object": {
+                        "kind": evt.involved_object.kind,
+                        "name": evt.involved_object.name,
+                        "namespace": evt.involved_object.namespace,
+                    } if evt.involved_object else None,
+                })
 
             return {"items": events, "continue_token": next_token}
 

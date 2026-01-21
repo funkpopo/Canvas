@@ -37,7 +37,10 @@ from .utils import (
 from .client_pool import (
     KubernetesClientPool,
     KubernetesClientContext,
+    KubernetesOneOffClientContext,
     create_k8s_client,
+    create_one_off_k8s_client,
+    close_one_off_k8s_client,
     return_k8s_client,
     test_cluster_connection,
     get_client_pool,
@@ -268,7 +271,10 @@ __all__ = [
     # 连接池管理
     'KubernetesClientPool',
     'KubernetesClientContext',
+    'KubernetesOneOffClientContext',
     'create_k8s_client',
+    'create_one_off_k8s_client',
+    'close_one_off_k8s_client',
     'return_k8s_client',
     'test_cluster_connection',
     'get_client_pool',

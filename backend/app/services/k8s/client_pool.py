@@ -378,12 +378,51 @@ class KubernetesClientContext:
             _client_pool.return_client(self.cluster, self.client_instance)
 
 
+def create_one_off_k8s_client(cluster: Cluster) -> Tuple[Optional[client.ApiClient], List[str]]:
+    """
+    创建一个“非池化”的一次性 Kubernetes ApiClient。
+
+    适用场景：长连接/监听器（watch）、一次性探测（test connection）等，
+    不应占用/污染连接池，也不应被复用。
+
+    Returns:
+        (client_instance, temp_files)
+    """
+    return _client_pool._create_new_connection(cluster)
+
+
+def close_one_off_k8s_client(client_instance: Optional[client.ApiClient], temp_files: Optional[List[str]] = None) -> None:
+    """关闭一次性客户端并清理其关联的临时文件（如 CA cert）。"""
+    if not client_instance:
+        return
+    KubernetesClientPool._close_connection({"client": client_instance, "temp_files": temp_files or []})
+
+
+class KubernetesOneOffClientContext:
+    """一次性 Kubernetes 客户端上下文：创建/关闭 + 临时文件清理。"""
+
+    def __init__(self, cluster: Cluster):
+        self.cluster = cluster
+        self.client_instance: Optional[client.ApiClient] = None
+        self._temp_files: List[str] = []
+
+    def __enter__(self) -> Optional[client.ApiClient]:
+        self.client_instance, self._temp_files = create_one_off_k8s_client(self.cluster)
+        return self.client_instance
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        close_one_off_k8s_client(self.client_instance, self._temp_files)
+        self.client_instance = None
+        self._temp_files = []
+
+
 def create_k8s_client(cluster: Cluster) -> Optional[client.ApiClient]:
     """
     根据集群配置从连接池获取Kubernetes客户端
 
-    注意：使用此函数获取的客户端在使用完毕后不会自动返回连接池。
-    建议使用KubernetesClientContext上下文管理器来自动管理连接。
+    注意：该客户端来自连接池，业务代码不要直接 `.close()`。
+    建议使用 KubernetesClientContext 上下文管理器自动“借/还”。
+    若使用此函数手动获取，请在使用完毕后调用 return_k8s_client 归还。
 
     Args:
         cluster: 集群配置
@@ -408,20 +447,19 @@ def return_k8s_client(cluster: Cluster, client_instance: client.ApiClient) -> No
 def test_cluster_connection(cluster: Cluster) -> Dict[str, Any]:
     """测试集群连接"""
     try:
-        client_instance = create_k8s_client(cluster)
-        if not client_instance:
-            return {"success": False, "message": "无法创建Kubernetes客户端"}
+        # 测试连接属于“一次性探测”场景，避免占用/污染连接池。
+        with KubernetesOneOffClientContext(cluster) as client_instance:
+            if not client_instance:
+                return {"success": False, "message": "无法创建Kubernetes客户端"}
 
-        # 尝试获取集群版本信息
-        version_api = client.VersionApi(client_instance)
-        version = version_api.get_code()
+            version_api = client.VersionApi(client_instance)
+            version = version_api.get_code()
 
-        client_instance.close()
-        return {
-            "success": True,
-            "message": "连接成功",
-            "version": f"{version.major}.{version.minor}"
-        }
+            return {
+                "success": True,
+                "message": "连接成功",
+                "version": f"{version.major}.{version.minor}",
+            }
 
     except Exception as e:
         return {"success": False, "message": f"连接失败: {str(e)}"}

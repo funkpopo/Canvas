@@ -26,6 +26,20 @@ CLUSTER_LIST_TTL = 600  # 集群列表10分钟
 USER_INFO_TTL = 1800  # 用户信息30分钟
 K8S_RESOURCE_TTL = 60  # Kubernetes资源列表1分钟
 
+# 热点接口建议更短 TTL（15~60s），便于在前端频繁刷新时削峰
+try:
+    K8S_STATS_TTL = int(os.getenv("K8S_STATS_TTL", "30"))
+except ValueError:
+    K8S_STATS_TTL = 30
+try:
+    K8S_NODES_TTL = int(os.getenv("K8S_NODES_TTL", "30"))
+except ValueError:
+    K8S_NODES_TTL = 30
+try:
+    K8S_PODS_PAGE_TTL = int(os.getenv("K8S_PODS_PAGE_TTL", "15"))
+except ValueError:
+    K8S_PODS_PAGE_TTL = 15
+
 
 class CacheManager:
     """Redis缓存管理器"""
@@ -111,10 +125,19 @@ class CacheManager:
             return 0
 
         try:
-            keys = self.client.keys(pattern)
-            if keys:
-                return self.client.delete(*keys)
-            return 0
+            # 避免 KEYS 阻塞 Redis：使用 SCAN 迭代删除
+            total_deleted = 0
+            batch = []
+            for key in self.client.scan_iter(match=pattern, count=500):
+                batch.append(key)
+                if len(batch) >= 500:
+                    total_deleted += int(self.client.delete(*batch) or 0)
+                    batch = []
+
+            if batch:
+                total_deleted += int(self.client.delete(*batch) or 0)
+
+            return total_deleted
         except Exception as e:
             logger.warning("批量删除缓存失败: pattern=%s error=%s", pattern, e)
             return 0
@@ -258,7 +281,8 @@ def get_cached_k8s_resource(resource_type: str, cluster_id: int, namespace: str)
 def invalidate_k8s_cache(cluster_id: int = None, namespace: str = None):
     """使Kubernetes资源缓存失效"""
     if cluster_id and namespace:
-        pattern = f"k8s:*:cluster:{cluster_id}:ns:{namespace}"
+        # 允许资源 key 在 ns 后追加更多维度（如分页/limit/continue），因此需通配符
+        pattern = f"k8s:*:cluster:{cluster_id}:ns:{namespace}*"
     elif cluster_id:
         pattern = f"k8s:*:cluster:{cluster_id}:*"
     else:

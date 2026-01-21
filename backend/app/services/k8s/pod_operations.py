@@ -10,6 +10,7 @@ from kubernetes.client.rest import ApiException
 
 from ...models import Cluster
 from ...core.logging import get_logger
+from ...cache import cache_manager, K8S_PODS_PAGE_TTL, invalidate_cache
 from .client_pool import KubernetesClientContext
 from .utils import calculate_age
 
@@ -76,6 +77,13 @@ def get_pods_page(
     continue_token: Optional[str] = None,
 ) -> Dict[str, Any]:
     """分页获取Pod信息（使用K8s API limit/_continue）"""
+    ns_key = namespace or "_all"
+    cont_key = continue_token or "none"
+    cache_key = f"k8s:pods:cluster:{cluster.id}:ns:{ns_key}:limit:{limit}:continue:{cont_key}"
+    cached = cache_manager.get(cache_key)
+    if cached is not None:
+        return cached
+
     with KubernetesClientContext(cluster) as client_instance:
         if not client_instance:
             return {"items": [], "continue_token": None}
@@ -116,7 +124,9 @@ def get_pods_page(
                 }
                 pod_list.append(pod_info)
 
-            return {"items": pod_list, "continue_token": next_token}
+            result = {"items": pod_list, "continue_token": next_token}
+            cache_manager.set(cache_key, result, K8S_PODS_PAGE_TTL)
+            return result
         except Exception as e:
             logger.exception("分页获取Pod信息失败: %s", e)
             return {"items": [], "continue_token": None}
@@ -132,35 +142,39 @@ def get_pod_details(cluster: Cluster, namespace: str, pod_name: str) -> Optional
             core_v1 = client.CoreV1Api(client_instance)
             pod = core_v1.read_namespaced_pod(pod_name, namespace)
 
-        # 获取Pod状态
-        status = pod.status.phase
+            # 获取Pod状态
+            status = pod.status.phase
 
-        # 获取容器信息
-        restarts = 0
-        ready_containers = "0/0"
-        containers = []
-        if pod.status.container_statuses:
-            total_containers = len(pod.status.container_statuses)
-            ready_count = sum(1 for cs in pod.status.container_statuses if cs.ready)
-            ready_containers = f"{ready_count}/{total_containers}"
-            restarts = sum(cs.restart_count for cs in pod.status.container_statuses if cs.restart_count)
+            # 获取容器信息
+            restarts = 0
+            ready_containers = "0/0"
+            containers = []
+            if pod.status.container_statuses:
+                total_containers = len(pod.status.container_statuses)
+                ready_count = sum(1 for cs in pod.status.container_statuses if cs.ready)
+                ready_containers = f"{ready_count}/{total_containers}"
+                restarts = sum(cs.restart_count for cs in pod.status.container_statuses if cs.restart_count)
 
-            for i, cs in enumerate(pod.status.container_statuses):
-                container_spec = pod.spec.containers[i] if i < len(pod.spec.containers) else None
-                container_info = {
-                    "name": cs.name,
-                    "image": cs.image,
-                    "ready": cs.ready,
-                    "restart_count": cs.restart_count,
-                    "state": str(cs.state) if cs.state else "Unknown",
-                    "resources": {}
-                }
-                containers.append(container_info)
+                for i, cs in enumerate(pod.status.container_statuses):
+                    container_spec = pod.spec.containers[i] if i < len(pod.spec.containers) else None
+                    container_info = {
+                        "name": cs.name,
+                        "image": cs.image,
+                        "ready": cs.ready,
+                        "restart_count": cs.restart_count,
+                        "state": str(cs.state) if cs.state else "Unknown",
+                        "resources": {},
+                    }
+                    if container_spec and container_spec.resources:
+                        container_info["resources"] = {
+                            "requests": dict(container_spec.resources.requests) if container_spec.resources.requests else {},
+                            "limits": dict(container_spec.resources.limits) if container_spec.resources.limits else {},
+                        }
+                    containers.append(container_info)
 
-        # 获取卷信息
-        volumes = []
-        if pod.spec.volumes:
-            for volume in pod.spec.volumes:
+            # 获取卷信息
+            volumes = []
+            for volume in (pod.spec.volumes or []):
                 volume_info = {"name": volume.name, "type": "Unknown"}
                 if volume.config_map:
                     volume_info["type"] = "ConfigMap"
@@ -173,24 +187,24 @@ def get_pod_details(cluster: Cluster, namespace: str, pod_name: str) -> Optional
                     volume_info["source"] = volume.persistent_volume_claim.claim_name
                 volumes.append(volume_info)
 
-        # 计算Pod年龄
-        age = calculate_age(pod.metadata.creation_timestamp)
+            # 计算Pod年龄
+            age = calculate_age(pod.metadata.creation_timestamp)
 
-        # 获取事件（简化版本）
-        events = []
-        try:
-            events_api = client.EventsV1Api(client_instance)
-            pod_events = events_api.list_namespaced_event(namespace, field_selector=f"involvedObject.name={pod_name}")
-            for event in pod_events.items[:10]:  # 只获取最近10个事件
-                events.append({
-                    "type": event.type,
-                    "reason": event.reason,
-                    "message": event.note,
-                    "count": event.count,
-                    "last_timestamp": str(event.last_timestamp) if event.last_timestamp else None
-                })
-        except:
-            pass
+            # 获取事件（简化版本）
+            events = []
+            try:
+                events_api = client.EventsV1Api(client_instance)
+                pod_events = events_api.list_namespaced_event(namespace, field_selector=f"involvedObject.name={pod_name}")
+                for event in (pod_events.items or [])[:10]:  # 只获取最近10个事件
+                    events.append({
+                        "type": event.type,
+                        "reason": event.reason,
+                        "message": getattr(event, "note", None),
+                        "count": event.count,
+                        "last_timestamp": str(event.last_timestamp) if event.last_timestamp else None,
+                    })
+            except Exception:
+                pass
 
             return {
                 "name": pod.metadata.name,

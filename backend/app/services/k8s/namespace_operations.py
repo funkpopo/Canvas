@@ -12,6 +12,7 @@ from kubernetes.client.rest import ApiException
 
 from ...models import Cluster
 from ...core.logging import get_logger
+from ...cache import cache_manager, K8S_RESOURCE_TTL, invalidate_cache
 from .client_pool import KubernetesClientContext
 from .utils import calculate_age, parse_cpu, parse_memory
 
@@ -21,6 +22,11 @@ logger = get_logger(__name__)
 
 def get_namespaces_info(cluster: Cluster) -> List[Dict[str, Any]]:
     """获取集群命名空间信息"""
+    cache_key = f"k8s:namespaces:cluster:{cluster.id}:ns:_all"
+    cached = cache_manager.get(cache_key)
+    if cached is not None:
+        return cached
+
     with KubernetesClientContext(cluster) as client_instance:
         if not client_instance:
             # 如果无法创建客户端，返回模拟数据以便演示
@@ -54,6 +60,7 @@ def get_namespaces_info(cluster: Cluster) -> List[Dict[str, Any]]:
                 }
                 namespace_list.append(namespace_info)
 
+            cache_manager.set(cache_key, namespace_list, K8S_RESOURCE_TTL)
             return namespace_list
 
         except Exception:
@@ -130,6 +137,10 @@ def create_namespace(cluster: Cluster, namespace_name: str, labels: Optional[dic
             )
 
             core_v1.create_namespace(namespace)
+
+            # 失效缓存：namespaces 列表 + dashboard stats（namespaces count）
+            invalidate_cache(f"k8s:namespaces:cluster:{cluster.id}:ns:_all*")
+            invalidate_cache(f"k8s:stats:cluster:{cluster.id}:ns:_all*")
             return True
 
         except ApiException as e:
@@ -149,6 +160,10 @@ def delete_namespace(cluster: Cluster, namespace_name: str) -> bool:
         try:
             core_v1 = client.CoreV1Api(client_instance)
             core_v1.delete_namespace(namespace_name)
+
+            # 失效缓存：namespaces 列表 + dashboard stats（namespaces count）
+            invalidate_cache(f"k8s:namespaces:cluster:{cluster.id}:ns:_all*")
+            invalidate_cache(f"k8s:stats:cluster:{cluster.id}:ns:_all*")
             return True
 
         except ApiException as e:
@@ -168,47 +183,49 @@ def get_namespace_resources(cluster: Cluster, namespace_name: str) -> Optional[D
         try:
             core_v1 = client.CoreV1Api(client_instance)
 
-        # 获取Pods
-        pods = core_v1.list_namespaced_pod(namespace_name)
-        pod_count = len(pods.items)
+            # 获取Pods
+            pods = core_v1.list_namespaced_pod(namespace_name)
+            pod_count = len(pods.items)
 
-        # 获取Services
-        services = core_v1.list_namespaced_service(namespace_name)
-        service_count = len(services.items)
+            # 获取Services
+            services = core_v1.list_namespaced_service(namespace_name)
+            service_count = len(services.items)
 
-        # 获取ConfigMaps
-        configmaps = core_v1.list_namespaced_config_map(namespace_name)
-        configmap_count = len(configmaps.items)
+            # 获取ConfigMaps
+            configmaps = core_v1.list_namespaced_config_map(namespace_name)
+            configmap_count = len(configmaps.items)
 
-        # 获取Secrets
-        secrets = core_v1.list_namespaced_secret(namespace_name)
-        secret_count = len(secrets.items)
+            # 获取Secrets
+            secrets = core_v1.list_namespaced_secret(namespace_name)
+            secret_count = len(secrets.items)
 
-        # 获取PVCs
-        pvcs = core_v1.list_namespaced_persistent_volume_claim(namespace_name)
-        pvc_count = len(pvcs.items)
+            # 获取PVCs
+            pvcs = core_v1.list_namespaced_persistent_volume_claim(namespace_name)
+            pvc_count = len(pvcs.items)
 
-        # 计算资源使用情况（简化的版本）
-        cpu_requests = 0
-        cpu_limits = 0
-        memory_requests = 0
-        memory_limits = 0
+            # 计算资源使用情况（简化的版本）
+            cpu_requests = 0
+            cpu_limits = 0
+            memory_requests = 0
+            memory_limits = 0
 
-        for pod in pods.items:
-            if pod.spec.containers:
-                for container in pod.spec.containers:
-                    if container.resources:
-                        if container.resources.requests:
-                            if container.resources.requests.get('cpu'):
-                                cpu_requests += parse_cpu(container.resources.requests['cpu'])
-                            if container.resources.requests.get('memory'):
-                                memory_requests += parse_memory(container.resources.requests['memory'])
+            for pod in pods.items:
+                for container in (pod.spec.containers or []):
+                    res = container.resources
+                    if not res:
+                        continue
 
-                        if container.resources.limits:
-                            if container.resources.limits.get('cpu'):
-                                cpu_limits += parse_cpu(container.resources.limits['cpu'])
-                            if container.resources.limits.get('memory'):
-                                memory_limits += parse_memory(container.resources.limits['memory'])
+                    if res.requests:
+                        if res.requests.get("cpu"):
+                            cpu_requests += parse_cpu(res.requests["cpu"])
+                        if res.requests.get("memory"):
+                            memory_requests += parse_memory(res.requests["memory"])
+
+                    if res.limits:
+                        if res.limits.get("cpu"):
+                            cpu_limits += parse_cpu(res.limits["cpu"])
+                        if res.limits.get("memory"):
+                            memory_limits += parse_memory(res.limits["memory"])
 
             return {
                 "cpu_requests": f"{cpu_requests:.1f}",
@@ -237,61 +254,54 @@ def get_namespace_crds(cluster: Cluster, namespace_name: str) -> List[Dict[str, 
             # 使用CustomObjectsApi获取CRDs
             custom_api = client.CustomObjectsApi(client_instance)
 
-        # 首先获取所有CRDs定义
-        api_client = client.ApiextensionsV1Api(client_instance)
-        crds = api_client.list_custom_resource_definition()
+            # 首先获取所有CRDs定义
+            api_client = client.ApiextensionsV1Api(client_instance)
+            crds = api_client.list_custom_resource_definition()
 
-        crd_list = []
-        for crd in crds.items:
-            # 检查CRD是否支持命名空间范围
-            scope = crd.spec.scope
-            if scope == "Namespaced":
-                # 尝试获取该CRD的实例
+            crd_list: List[Dict[str, Any]] = []
+            for crd in crds.items:
+                # 仅处理命名空间级别的 CRD
+                if getattr(getattr(crd, "spec", None), "scope", None) != "Namespaced":
+                    continue
+
                 group = crd.spec.group
                 version = crd.spec.versions[0].version if crd.spec.versions else "v1"
                 plural = crd.spec.names.plural
 
                 try:
-                    # 获取该命名空间中的CRD实例
-                    resources = custom_api.list_namespaced_custom_object(
-                        group, version, namespace_name, plural
-                    )
-
-                    for resource in resources.get('items', []):
-                        # 计算年龄
-                        age = "Unknown"
-                        if resource.get('metadata', {}).get('creationTimestamp'):
-                            created_str = resource['metadata']['creationTimestamp']
-                            try:
-                                created = datetime.fromisoformat(created_str.replace('Z', '+00:00'))
-                                now = datetime.now(created.tzinfo)
-                                delta = now - created
-                                if delta.days > 0:
-                                    age = f"{delta.days}d"
-                                elif delta.seconds // 3600 > 0:
-                                    age = f"{delta.seconds // 3600}h"
-                                elif delta.seconds // 60 > 0:
-                                    age = f"{delta.seconds // 60}m"
-                                else:
-                                    age = f"{delta.seconds}s"
-                            except:
-                                pass
-
-                        crd_info = {
-                            "name": resource.get('metadata', {}).get('name', ''),
-                            "namespace": namespace_name,
-                            "kind": crd.spec.names.kind,
-                            "group": group,
-                            "version": version,
-                            "age": age,
-                            "labels": resource.get('metadata', {}).get('labels', {}),
-                            "annotations": resource.get('metadata', {}).get('annotations', {})
-                        }
-                        crd_list.append(crd_info)
-
-                except Exception as e:
-                    # 如果无法获取该CRD的实例，跳过
+                    resources = custom_api.list_namespaced_custom_object(group, version, namespace_name, plural)
+                except Exception:
                     continue
+
+                for resource in resources.get("items", []):
+                    age = "Unknown"
+                    created_str = (resource.get("metadata") or {}).get("creationTimestamp")
+                    if created_str:
+                        try:
+                            created = datetime.fromisoformat(str(created_str).replace("Z", "+00:00"))
+                            now = datetime.now(created.tzinfo)
+                            delta = now - created
+                            if delta.days > 0:
+                                age = f"{delta.days}d"
+                            elif delta.seconds // 3600 > 0:
+                                age = f"{delta.seconds // 3600}h"
+                            elif delta.seconds // 60 > 0:
+                                age = f"{delta.seconds // 60}m"
+                            else:
+                                age = f"{delta.seconds}s"
+                        except Exception:
+                            pass
+
+                    crd_list.append({
+                        "name": (resource.get("metadata") or {}).get("name", ""),
+                        "namespace": namespace_name,
+                        "kind": crd.spec.names.kind,
+                        "group": group,
+                        "version": version,
+                        "age": age,
+                        "labels": (resource.get("metadata") or {}).get("labels", {}),
+                        "annotations": (resource.get("metadata") or {}).get("annotations", {}),
+                    })
 
             return crd_list
 

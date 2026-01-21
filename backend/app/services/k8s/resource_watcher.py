@@ -14,7 +14,7 @@ from kubernetes import client, watch
 
 from ...models import Cluster
 from ...core.logging import get_logger
-from .client_pool import create_k8s_client
+from .client_pool import create_one_off_k8s_client, close_one_off_k8s_client
 from .utils import calculate_age
 
 
@@ -27,6 +27,7 @@ class KubernetesResourceWatcher:
     def __init__(self, cluster: Cluster):
         self.cluster = cluster
         self.client_instance = None
+        self._client_temp_files = []
         self.watchers: Dict[str, Any] = {}  # 存储不同资源类型的监听器
         self.executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix=f"k8s-watcher-{cluster.id}")
         self.running = False
@@ -39,7 +40,7 @@ class KubernetesResourceWatcher:
             return
 
         self.running = True
-        self.client_instance = create_k8s_client(self.cluster)
+        self.client_instance, self._client_temp_files = create_one_off_k8s_client(self.cluster)
 
         if not self.client_instance:
             logger.error(f"Failed to create Kubernetes client for cluster {self.cluster.id}")
@@ -103,10 +104,11 @@ class KubernetesResourceWatcher:
         # 关闭客户端连接
         if self.client_instance:
             try:
-                self.client_instance.close()
+                close_one_off_k8s_client(self.client_instance, self._client_temp_files)
             except Exception as e:
                 logger.error(f"Error closing Kubernetes client: {e}")
             self.client_instance = None
+            self._client_temp_files = []
 
         # 关闭线程池
         self.executor.shutdown(wait=False)
