@@ -90,6 +90,18 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# 成功 envelope 策略：默认启用，但对大响应/特定前缀跳过，避免读完整 body 再二次序列化
+SUCCESS_ENVELOPE_ENABLED = os.getenv("SUCCESS_ENVELOPE_ENABLED", "true").lower() == "true"
+SUCCESS_ENVELOPE_SKIP_PREFIXES_RAW = os.getenv(
+    "SUCCESS_ENVELOPE_SKIP_PREFIXES",
+    "/api/pods,/api/events,/api/metrics,/api/nodes,/api/namespaces,/api/monitoring",
+)
+SUCCESS_ENVELOPE_SKIP_PREFIXES = [p.strip() for p in SUCCESS_ENVELOPE_SKIP_PREFIXES_RAW.split(",") if p.strip()]
+try:
+    SUCCESS_ENVELOPE_MAX_BYTES = int(os.getenv("SUCCESS_ENVELOPE_MAX_BYTES", "100000"))  # 100KB
+except ValueError:
+    SUCCESS_ENVELOPE_MAX_BYTES = 100000
+
 # ============ request_id + 统一成功响应包装 ============
 @app.middleware("http")
 async def request_id_metrics_and_envelope(request, call_next):
@@ -104,9 +116,7 @@ async def request_id_metrics_and_envelope(request, call_next):
         response = await call_next(request)
         response.headers["X-Request-ID"] = request_id
 
-        # 成功 envelope 可配置：默认启用，但对大响应/特定前缀直接透传，避免读完整 body 再二次序列化
-        envelope_enabled = os.getenv("SUCCESS_ENVELOPE_ENABLED", "true").lower() == "true"
-        if not envelope_enabled:
+        if not SUCCESS_ENVELOPE_ENABLED:
             final_response = response
             return final_response
 
@@ -121,21 +131,19 @@ async def request_id_metrics_and_envelope(request, call_next):
             return final_response
 
         path = request.url.path or ""
-        skip_prefixes_raw = os.getenv(
-            "SUCCESS_ENVELOPE_SKIP_PREFIXES",
-            "/api/pods,/api/events,/api/metrics,/api/nodes,/api/namespaces,/api/monitoring",
-        )
-        skip_prefixes = [p.strip() for p in skip_prefixes_raw.split(",") if p.strip()]
-        if any(path.startswith(p) for p in skip_prefixes):
+        if any(path.startswith(p) for p in SUCCESS_ENVELOPE_SKIP_PREFIXES):
             final_response = response
             return final_response
 
         # 如果响应体过大，则跳过 envelope，避免 json.loads/dumps 的 CPU/内存开销
-        max_bytes = int(os.getenv("SUCCESS_ENVELOPE_MAX_BYTES", "100000"))  # 100KB
         content_length = response.headers.get("content-length")
+        if not content_length:
+            # 没有 content-length 的响应多为流式/未知大小，避免聚合 body_iterator
+            final_response = response
+            return final_response
         if content_length:
             try:
-                if int(content_length) > max_bytes:
+                if int(content_length) > SUCCESS_ENVELOPE_MAX_BYTES:
                     final_response = response
                     return final_response
             except ValueError:
@@ -158,14 +166,14 @@ async def request_id_metrics_and_envelope(request, call_next):
             # body_iterator 已被消费，必须重建响应以避免返回空 body
             headers = dict(response.headers)
             headers.pop("content-length", None)
-            final_response = Response(content=body, status_code=response.status_code, headers=headers, media_type=content_type)
+            final_response = Response(content=body, status_code=response.status_code, headers=headers)
             return final_response
 
         # 已经是 envelope 则不重复包装
         if isinstance(payload, dict) and payload.get("success") is True and "request_id" in payload:
             headers = dict(response.headers)
             headers.pop("content-length", None)
-            final_response = Response(content=body, status_code=response.status_code, headers=headers, media_type=content_type)
+            final_response = Response(content=body, status_code=response.status_code, headers=headers)
             return final_response
 
         wrapped = {"success": True, "data": payload, "request_id": request_id}

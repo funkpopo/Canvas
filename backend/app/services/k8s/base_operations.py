@@ -11,7 +11,7 @@ from kubernetes.client.rest import ApiException
 
 from ...models import Cluster
 from ...core.logging import get_logger
-from .client_pool import create_k8s_client, KubernetesClientContext
+from .client_pool import KubernetesClientContext
 from .utils import calculate_age, parse_cpu, parse_memory
 
 
@@ -207,13 +207,13 @@ def get_nodes_info(cluster: Cluster) -> List[Dict[str, Any]]:
 
 def get_node_details(cluster: Cluster, node_name: str) -> Optional[Dict[str, Any]]:
     """获取节点详细信息"""
-    client_instance = create_k8s_client(cluster)
-    if not client_instance:
-        return None
+    with KubernetesClientContext(cluster) as client_instance:
+        if not client_instance:
+            return None
 
-    try:
-        core_v1 = client.CoreV1Api(client_instance)
-        node = core_v1.read_node(node_name)
+        try:
+            core_v1 = client.CoreV1Api(client_instance)
+            node = core_v1.read_node(node_name)
 
         # 获取节点状态
         status = "Unknown"
@@ -270,31 +270,28 @@ def get_node_details(cluster: Cluster, node_name: str) -> Optional[Dict[str, Any
                     "effect": taint.effect
                 })
 
-        return {
-            "name": node.metadata.name,
-            "status": status,
-            "roles": roles,
-            "age": age,
-            "version": node.status.node_info.kubelet_version if node.status.node_info else "Unknown",
-            "internal_ip": internal_ip,
-            "external_ip": external_ip,
-            "cpu_capacity": cpu_capacity,
-            "memory_capacity": memory_capacity,
-            "pods_capacity": pods_capacity,
-            "labels": dict(node.metadata.labels) if node.metadata.labels else {},
-            "annotations": dict(node.metadata.annotations) if node.metadata.annotations else {},
-            "conditions": conditions,
-            "taints": taints,
-            "cluster_name": cluster.name,
-            "cluster_id": cluster.id
-        }
+            return {
+                "name": node.metadata.name,
+                "status": status,
+                "roles": roles,
+                "age": age,
+                "version": node.status.node_info.kubelet_version if node.status.node_info else "Unknown",
+                "internal_ip": internal_ip,
+                "external_ip": external_ip,
+                "cpu_capacity": cpu_capacity,
+                "memory_capacity": memory_capacity,
+                "pods_capacity": pods_capacity,
+                "labels": dict(node.metadata.labels) if node.metadata.labels else {},
+                "annotations": dict(node.metadata.annotations) if node.metadata.annotations else {},
+                "conditions": conditions,
+                "taints": taints,
+                "cluster_name": cluster.name,
+                "cluster_id": cluster.id,
+            }
 
-    except Exception as e:
-        logger.exception("获取节点详情失败: %s", e)
-        return None
-    finally:
-        if client_instance:
-            client_instance.close()
+        except Exception as e:
+            logger.exception("获取节点详情失败: %s", e)
+            return None
 
 
 def get_cluster_events(
@@ -304,13 +301,13 @@ def get_cluster_events(
     continue_token: Optional[str] = None,
 ) -> Dict[str, Any]:
     """分页获取集群或命名空间的事件（使用K8s API limit/_continue）"""
-    client_instance = create_k8s_client(cluster)
-    if not client_instance:
-        return {"items": [], "continue_token": None}
+    with KubernetesClientContext(cluster) as client_instance:
+        if not client_instance:
+            return {"items": [], "continue_token": None}
 
-    try:
-        core_v1 = client.CoreV1Api(client_instance)
-        events = []
+        try:
+            core_v1 = client.CoreV1Api(client_instance)
+            events = []
 
         if namespace:
             event_list = core_v1.list_namespaced_event(namespace, limit=limit, _continue=continue_token)
@@ -376,11 +373,8 @@ def get_cluster_events(
                 } if event.involved_object else None
             })
 
-        return {"items": events, "continue_token": next_token}
+            return {"items": events, "continue_token": next_token}
 
-    except Exception as e:
-        logger.exception("获取集群事件失败: %s", e)
-        return {"items": [], "continue_token": None}
-    finally:
-        if client_instance:
-            client_instance.close()
+        except Exception as e:
+            logger.exception("获取集群事件失败: %s", e)
+            return {"items": [], "continue_token": None}

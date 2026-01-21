@@ -12,7 +12,7 @@ from kubernetes.client.rest import ApiException
 
 from ...models import Cluster
 from ...core.logging import get_logger
-from .client_pool import create_k8s_client
+from .client_pool import KubernetesClientContext
 from .utils import calculate_age, parse_cpu, parse_memory
 
 
@@ -21,47 +21,44 @@ logger = get_logger(__name__)
 
 def get_namespaces_info(cluster: Cluster) -> List[Dict[str, Any]]:
     """获取集群命名空间信息"""
-    client_instance = create_k8s_client(cluster)
-    if not client_instance:
-        # 如果无法创建客户端，返回模拟数据以便演示
-        return get_mock_namespaces()
+    with KubernetesClientContext(cluster) as client_instance:
+        if not client_instance:
+            # 如果无法创建客户端，返回模拟数据以便演示
+            return get_mock_namespaces()
 
-    try:
-        core_v1 = client.CoreV1Api(client_instance)
-        namespaces = core_v1.list_namespace()
+        try:
+            core_v1 = client.CoreV1Api(client_instance)
+            namespaces = core_v1.list_namespace()
 
-        namespace_list = []
-        for ns in namespaces.items:
-            # 获取命名空间状态
-            status = "Active"
-            for condition in ns.status.conditions:
-                if condition.type == "NamespaceDeletionContentFailure" or condition.type == "NamespaceDeletionDiscoveryFailure":
-                    status = "Terminating"
-                    break
-                elif condition.type == "NamespaceDeletionGroupVersionParsingFailure":
-                    status = "Failed"
-                    break
+            namespace_list = []
+            for ns in namespaces.items:
+                # 获取命名空间状态
+                status = "Active"
+                for condition in ns.status.conditions:
+                    if condition.type in ("NamespaceDeletionContentFailure", "NamespaceDeletionDiscoveryFailure"):
+                        status = "Terminating"
+                        break
+                    if condition.type == "NamespaceDeletionGroupVersionParsingFailure":
+                        status = "Failed"
+                        break
 
-            # 计算命名空间年龄
-            age = calculate_age(ns.metadata.creation_timestamp)
+                # 计算命名空间年龄
+                age = calculate_age(ns.metadata.creation_timestamp)
 
-            namespace_info = {
-                "name": ns.metadata.name,
-                "status": status,
-                "age": age,
-                "labels": dict(ns.metadata.labels) if ns.metadata.labels else {},
-                "annotations": dict(ns.metadata.annotations) if ns.metadata.annotations else {}
-            }
-            namespace_list.append(namespace_info)
+                namespace_info = {
+                    "name": ns.metadata.name,
+                    "status": status,
+                    "age": age,
+                    "labels": dict(ns.metadata.labels) if ns.metadata.labels else {},
+                    "annotations": dict(ns.metadata.annotations) if ns.metadata.annotations else {},
+                }
+                namespace_list.append(namespace_info)
 
-        return namespace_list
+            return namespace_list
 
-    except Exception as e:
-        # 如果连接失败，返回模拟数据
-        return get_mock_namespaces()
-    finally:
-        if client_instance:
-            client_instance.close()
+        except Exception:
+            # 如果连接失败，返回模拟数据
+            return get_mock_namespaces()
 
 
 def get_mock_namespaces() -> List[Dict[str, Any]]:
@@ -117,65 +114,59 @@ def get_mock_namespaces() -> List[Dict[str, Any]]:
 
 def create_namespace(cluster: Cluster, namespace_name: str, labels: Optional[dict] = None) -> bool:
     """创建命名空间"""
-    client_instance = create_k8s_client(cluster)
-    if not client_instance:
-        return False
+    with KubernetesClientContext(cluster) as client_instance:
+        if not client_instance:
+            return False
 
-    try:
-        core_v1 = client.CoreV1Api(client_instance)
+        try:
+            core_v1 = client.CoreV1Api(client_instance)
 
-        # 创建命名空间对象
-        namespace = client.V1Namespace(
-            metadata=client.V1ObjectMeta(
-                name=namespace_name,
-                labels=labels
+            # 创建命名空间对象
+            namespace = client.V1Namespace(
+                metadata=client.V1ObjectMeta(
+                    name=namespace_name,
+                    labels=labels,
+                )
             )
-        )
 
-        core_v1.create_namespace(namespace)
-        return True
+            core_v1.create_namespace(namespace)
+            return True
 
-    except ApiException as e:
-        logger.warning("创建命名空间失败: %s", e)
-        return False
-    except Exception as e:
-        logger.exception("创建命名空间异常: %s", e)
-        return False
-    finally:
-        if client_instance:
-            client_instance.close()
+        except ApiException as e:
+            logger.warning("创建命名空间失败: %s", e)
+            return False
+        except Exception as e:
+            logger.exception("创建命名空间异常: %s", e)
+            return False
 
 
 def delete_namespace(cluster: Cluster, namespace_name: str) -> bool:
     """删除命名空间"""
-    client_instance = create_k8s_client(cluster)
-    if not client_instance:
-        return False
+    with KubernetesClientContext(cluster) as client_instance:
+        if not client_instance:
+            return False
 
-    try:
-        core_v1 = client.CoreV1Api(client_instance)
-        core_v1.delete_namespace(namespace_name)
-        return True
+        try:
+            core_v1 = client.CoreV1Api(client_instance)
+            core_v1.delete_namespace(namespace_name)
+            return True
 
-    except ApiException as e:
-        logger.warning("删除命名空间失败: %s", e)
-        return False
-    except Exception as e:
-        logger.exception("删除命名空间异常: %s", e)
-        return False
-    finally:
-        if client_instance:
-            client_instance.close()
+        except ApiException as e:
+            logger.warning("删除命名空间失败: %s", e)
+            return False
+        except Exception as e:
+            logger.exception("删除命名空间异常: %s", e)
+            return False
 
 
 def get_namespace_resources(cluster: Cluster, namespace_name: str) -> Optional[Dict[str, Any]]:
     """获取命名空间资源使用情况"""
-    client_instance = create_k8s_client(cluster)
-    if not client_instance:
-        return None
+    with KubernetesClientContext(cluster) as client_instance:
+        if not client_instance:
+            return None
 
-    try:
-        core_v1 = client.CoreV1Api(client_instance)
+        try:
+            core_v1 = client.CoreV1Api(client_instance)
 
         # 获取Pods
         pods = core_v1.list_namespaced_pod(namespace_name)
@@ -219,35 +210,32 @@ def get_namespace_resources(cluster: Cluster, namespace_name: str) -> Optional[D
                             if container.resources.limits.get('memory'):
                                 memory_limits += parse_memory(container.resources.limits['memory'])
 
-        return {
-            "cpu_requests": f"{cpu_requests:.1f}",
-            "cpu_limits": f"{cpu_limits:.1f}",
-            "memory_requests": f"{memory_requests}Mi",
-            "memory_limits": f"{memory_limits}Mi",
-            "pods": pod_count,
-            "persistent_volume_claims": pvc_count,
-            "config_maps": configmap_count,
-            "secrets": secret_count,
-            "services": service_count
-        }
+            return {
+                "cpu_requests": f"{cpu_requests:.1f}",
+                "cpu_limits": f"{cpu_limits:.1f}",
+                "memory_requests": f"{memory_requests}Mi",
+                "memory_limits": f"{memory_limits}Mi",
+                "pods": pod_count,
+                "persistent_volume_claims": pvc_count,
+                "config_maps": configmap_count,
+                "secrets": secret_count,
+                "services": service_count,
+            }
 
-    except Exception as e:
-        logger.exception("获取命名空间资源信息失败: %s", e)
-        return None
-    finally:
-        if client_instance:
-            client_instance.close()
+        except Exception as e:
+            logger.exception("获取命名空间资源信息失败: %s", e)
+            return None
 
 
 def get_namespace_crds(cluster: Cluster, namespace_name: str) -> List[Dict[str, Any]]:
     """获取命名空间中的自定义资源"""
-    client_instance = create_k8s_client(cluster)
-    if not client_instance:
-        return []
+    with KubernetesClientContext(cluster) as client_instance:
+        if not client_instance:
+            return []
 
-    try:
-        # 使用CustomObjectsApi获取CRDs
-        custom_api = client.CustomObjectsApi(client_instance)
+        try:
+            # 使用CustomObjectsApi获取CRDs
+            custom_api = client.CustomObjectsApi(client_instance)
 
         # 首先获取所有CRDs定义
         api_client = client.ApiextensionsV1Api(client_instance)
@@ -305,11 +293,8 @@ def get_namespace_crds(cluster: Cluster, namespace_name: str) -> List[Dict[str, 
                     # 如果无法获取该CRD的实例，跳过
                     continue
 
-        return crd_list
+            return crd_list
 
-    except Exception as e:
-        logger.exception("获取命名空间CRD失败: %s", e)
-        return []
-    finally:
-        if client_instance:
-            client_instance.close()
+        except Exception as e:
+            logger.exception("获取命名空间CRD失败: %s", e)
+            return []
