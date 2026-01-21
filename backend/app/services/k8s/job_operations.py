@@ -13,11 +13,20 @@ from kubernetes.client.rest import ApiException
 
 from ...models import Cluster
 from ...core.logging import get_logger
+from ...cache import invalidate_cache
 from .client_pool import KubernetesClientContext
 from .utils import calculate_age
 
 
 logger = get_logger(__name__)
+
+
+def _invalidate_job_related_caches(cluster: Cluster, namespace: str) -> None:
+    # Job 的创建/删除/重启会影响 pods 列表与 stats（pods 计数）
+    invalidate_cache(f"k8s:pods:cluster:{cluster.id}:ns:{namespace}*")
+    invalidate_cache(f"k8s:pods:cluster:{cluster.id}:ns:_all*")
+    invalidate_cache(f"k8s:stats:cluster:{cluster.id}:ns:_all*")
+    invalidate_cache(f"k8s:nodes:cluster:{cluster.id}:ns:_all*")
 
 
 def get_namespace_jobs(cluster: Cluster, namespace: str) -> List[Dict[str, Any]]:
@@ -168,6 +177,7 @@ def create_job(cluster: Cluster, namespace: str, job_data: Dict[str, Any]) -> Di
 
             # 创建Job
             result = batch_v1.create_namespaced_job(namespace, job)
+            _invalidate_job_related_caches(cluster, namespace)
 
             return {
                 "success": True,
@@ -197,6 +207,7 @@ def delete_job(cluster: Cluster, namespace: str, job_name: str) -> Dict[str, Any
             )
 
             batch_v1.delete_namespaced_job(job_name, namespace, body=delete_options)
+            _invalidate_job_related_caches(cluster, namespace)
 
             return {
                 "success": True,
@@ -239,6 +250,7 @@ def restart_job(cluster: Cluster, namespace: str, job_name: str) -> Dict[str, An
 
             # 创建新Job
             batch_v1.create_namespaced_job(namespace, new_job)
+            _invalidate_job_related_caches(cluster, namespace)
 
             return {
                 "success": True,
@@ -261,47 +273,45 @@ def get_job_pods(cluster: Cluster, namespace: str, job_name: str) -> List[Dict[s
         try:
             core_v1 = client.CoreV1Api(client_instance)
 
-        # 获取所有Pod
-        pod_list = core_v1.list_namespaced_pod(namespace)
+            # Job controller 会给 Pod 标注 label: job-name=<job_name>，优先用 label_selector 减少全量扫描
+            pod_list = core_v1.list_namespaced_pod(namespace, label_selector=f"job-name={job_name}")
 
-        job_pods = []
-        for pod in pod_list.items:
-            # 检查Pod是否属于指定的Job
-            if pod.metadata.owner_references:
-                for owner_ref in pod.metadata.owner_references:
-                    if owner_ref.kind == "Job" and owner_ref.name == job_name:
-                        # 计算Pod年龄
-                        age = calculate_age(pod.metadata.creation_timestamp)
+            job_pods: List[Dict[str, Any]] = []
+            for pod in pod_list.items or []:
+                age = calculate_age(pod.metadata.creation_timestamp)
 
-                        # 获取Pod状态
-                        status = "Unknown"
-                        if pod.status:
-                            status = pod.status.phase or "Unknown"
+                status = "Unknown"
+                if pod.status:
+                    status = pod.status.phase or "Unknown"
 
-                        # 获取容器重启次数
-                        restarts = 0
-                        ready_containers = "0/0"
-                        if pod.status and pod.status.container_statuses:
-                            for container_status in pod.status.container_statuses:
-                                restarts += container_status.restart_count or 0
-                            ready_containers = f"{sum(1 for cs in pod.status.container_statuses if cs.ready)}/{len(pod.status.container_statuses)}"
+                restarts = 0
+                ready_containers = "0/0"
+                if pod.status and pod.status.container_statuses:
+                    restarts = sum((cs.restart_count or 0) for cs in pod.status.container_statuses)
+                    ready_containers = (
+                        f"{sum(1 for cs in pod.status.container_statuses if cs.ready)}/{len(pod.status.container_statuses)}"
+                    )
 
-                        job_pods.append({
-                            "name": pod.metadata.name,
-                            "namespace": namespace,
-                            "status": status,
-                            "node_name": pod.spec.node_name if pod.spec else None,
-                            "age": age,
-                            "restarts": restarts,
-                            "ready_containers": ready_containers,
-                            "labels": dict(pod.metadata.labels) if pod.metadata.labels else {}
-                        })
-                        break
+                job_pods.append(
+                    {
+                        "name": pod.metadata.name,
+                        "namespace": namespace,
+                        "status": status,
+                        "node_name": pod.spec.node_name if pod.spec else None,
+                        "age": age,
+                        "restarts": restarts,
+                        "ready_containers": ready_containers,
+                        "labels": dict(pod.metadata.labels) if pod.metadata.labels else {},
+                    }
+                )
 
             return job_pods
 
+        except ApiException as e:
+            logger.warning("获取Job Pods失败: cluster=%s ns=%s job=%s error=%s", cluster.name, namespace, job_name, e)
+            return []
         except Exception as e:
-            logger.exception("获取Job Pods失败: %s", e)
+            logger.exception("获取Job Pods失败: cluster=%s ns=%s job=%s error=%s", cluster.name, namespace, job_name, e)
             return []
 
 

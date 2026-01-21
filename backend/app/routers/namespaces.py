@@ -83,7 +83,7 @@ def get_namespaces(
                     all_namespaces.extend(namespaces)
             except Exception as e:
                 # 如果连接失败，使用模拟数据但也要添加集群标识
-                from kubernetes import get_mock_namespaces
+                from ..services.k8s import get_mock_namespaces
                 mock_namespaces = get_mock_namespaces()
                 if mock_namespaces:
                     for ns in mock_namespaces:

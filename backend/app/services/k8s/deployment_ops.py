@@ -13,11 +13,25 @@ from kubernetes.client.rest import ApiException
 
 from ...models import Cluster
 from ...core.logging import get_logger
+from ...cache import invalidate_cache
 from .client_pool import KubernetesClientContext
 from .utils import calculate_age
 
 
 logger = get_logger(__name__)
+
+
+def _invalidate_deployment_related_caches(cluster: Cluster, namespace: str) -> None:
+    """
+    Deployment 的扩缩容/重启/删除会影响：
+    - pods 列表分页缓存（namespace + _all）
+    - dashboard stats（pods 统计）
+    - nodes 列表（每节点 pods 数）
+    """
+    invalidate_cache(f"k8s:pods:cluster:{cluster.id}:ns:{namespace}*")
+    invalidate_cache(f"k8s:pods:cluster:{cluster.id}:ns:_all*")
+    invalidate_cache(f"k8s:stats:cluster:{cluster.id}:ns:_all*")
+    invalidate_cache(f"k8s:nodes:cluster:{cluster.id}:ns:_all*")
 
 
 def get_namespace_deployments(cluster: Cluster, namespace_name: str) -> List[Dict[str, Any]]:
@@ -257,6 +271,7 @@ def scale_deployment(cluster: Cluster, namespace: str, deployment_name: str, rep
             scale = client.V1Scale(spec=client.V1ScaleSpec(replicas=replicas))
 
             apps_v1.patch_namespaced_deployment_scale(deployment_name, namespace, scale)
+            _invalidate_deployment_related_caches(cluster, namespace)
             return True
 
         except Exception as e:
@@ -287,6 +302,7 @@ def restart_deployment(cluster: Cluster, namespace: str, deployment_name: str) -
             }
 
             apps_v1.patch_namespaced_deployment(deployment_name, namespace, restart_annotation)
+            _invalidate_deployment_related_caches(cluster, namespace)
             return True
 
         except Exception as e:
@@ -303,6 +319,7 @@ def delete_deployment(cluster: Cluster, namespace: str, deployment_name: str) ->
         try:
             apps_v1 = client.AppsV1Api(client_instance)
             apps_v1.delete_namespaced_deployment(deployment_name, namespace)
+            _invalidate_deployment_related_caches(cluster, namespace)
             return True
         except Exception as e:
             logger.exception("删除部署失败: %s", e)

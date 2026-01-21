@@ -10,11 +10,25 @@ from kubernetes.client.rest import ApiException
 
 from ...models import Cluster
 from ...core.logging import get_logger
+from ...cache import invalidate_cache
 from .client_pool import KubernetesClientContext
 from .utils import calculate_age
 
 
 logger = get_logger(__name__)
+
+
+def _invalidate_workload_related_caches(cluster: Cluster, namespace: str) -> None:
+    """
+    工作负载的扩缩容/删除通常会导致 Pod 数量变化，从而影响热点缓存：
+    - pods 列表分页缓存（namespace + _all）
+    - dashboard stats（pods 统计）
+    - nodes 列表（每节点 pods 数）
+    """
+    invalidate_cache(f"k8s:pods:cluster:{cluster.id}:ns:{namespace}*")
+    invalidate_cache(f"k8s:pods:cluster:{cluster.id}:ns:_all*")
+    invalidate_cache(f"k8s:stats:cluster:{cluster.id}:ns:_all*")
+    invalidate_cache(f"k8s:nodes:cluster:{cluster.id}:ns:_all*")
 
 
 # ========== StatefulSet 操作 ==========
@@ -96,6 +110,7 @@ def scale_statefulset(cluster: Cluster, namespace: str, name: str, replicas: int
             apps_v1 = client.AppsV1Api(client_instance)
             scale = client.V1Scale(spec=client.V1ScaleSpec(replicas=replicas))
             apps_v1.patch_namespaced_stateful_set_scale(name, namespace, scale)
+            _invalidate_workload_related_caches(cluster, namespace)
             return True
         except Exception as e:
             logger.exception("扩缩容StatefulSet失败: %s", e)
@@ -111,6 +126,7 @@ def delete_statefulset(cluster: Cluster, namespace: str, name: str) -> bool:
         try:
             apps_v1 = client.AppsV1Api(client_instance)
             apps_v1.delete_namespaced_stateful_set(name, namespace)
+            _invalidate_workload_related_caches(cluster, namespace)
             return True
         except Exception as e:
             logger.exception("删除StatefulSet失败: %s", e)
@@ -196,6 +212,7 @@ def delete_daemonset(cluster: Cluster, namespace: str, name: str) -> bool:
         try:
             apps_v1 = client.AppsV1Api(client_instance)
             apps_v1.delete_namespaced_daemon_set(name, namespace)
+            _invalidate_workload_related_caches(cluster, namespace)
             return True
         except Exception as e:
             logger.exception("删除DaemonSet失败: %s", e)
@@ -295,6 +312,7 @@ def delete_cronjob(cluster: Cluster, namespace: str, name: str) -> bool:
         try:
             batch_v1 = client.BatchV1Api(client_instance)
             batch_v1.delete_namespaced_cron_job(name, namespace)
+            _invalidate_workload_related_caches(cluster, namespace)
             return True
         except Exception as e:
             logger.exception("删除CronJob失败: %s", e)

@@ -18,6 +18,26 @@ from .utils import calculate_age
 logger = get_logger(__name__)
 
 
+def _invalidate_pod_related_caches(
+    cluster: Cluster,
+    namespace: Optional[str] = None,
+    *,
+    include_cluster_level: bool = True,
+) -> None:
+    """
+    Pod 的写操作会影响：
+    - pods 列表分页缓存
+    - dashboard stats（total/running pods）
+    - nodes 列表（每节点 pods 数）
+    """
+    if namespace:
+        invalidate_cache(f"k8s:pods:cluster:{cluster.id}:ns:{namespace}*")
+    if include_cluster_level:
+        invalidate_cache(f"k8s:pods:cluster:{cluster.id}:ns:_all*")
+        invalidate_cache(f"k8s:stats:cluster:{cluster.id}:ns:_all*")
+        invalidate_cache(f"k8s:nodes:cluster:{cluster.id}:ns:_all*")
+
+
 def get_pods_info(cluster: Cluster, namespace: Optional[str] = None) -> List[Dict[str, Any]]:
     """获取Pod信息"""
     with KubernetesClientContext(cluster) as client_instance:
@@ -275,6 +295,7 @@ def delete_pod(cluster: Cluster, namespace: str, pod_name: str, force: bool = Fa
                 delete_options.grace_period_seconds = 0
 
             core_v1.delete_namespaced_pod(name=pod_name, namespace=namespace, body=delete_options)
+            _invalidate_pod_related_caches(cluster, namespace=namespace, include_cluster_level=True)
             return True
         except Exception as e:
             logger.exception("删除Pod失败: %s", e)
@@ -304,14 +325,24 @@ def batch_delete_pods(cluster: Cluster, pod_list: List[Dict[str, str]], force: b
         if force:
             delete_options.grace_period_seconds = 0
 
+        touched_namespaces = set()
+        any_success = False
         for pod in pod_list:
             pod_key = f"{pod['namespace']}/{pod['name']}"
             try:
                 core_v1.delete_namespaced_pod(name=pod["name"], namespace=pod["namespace"], body=delete_options)
                 results[pod_key] = True
+                any_success = True
+                touched_namespaces.add(pod["namespace"])
             except Exception as e:
                 logger.warning("删除Pod失败: pod=%s error=%s", pod_key, e)
                 results[pod_key] = False
+
+        if any_success:
+            for ns in touched_namespaces:
+                _invalidate_pod_related_caches(cluster, namespace=ns, include_cluster_level=False)
+            # batch 操作基本都会影响跨 namespace 视图
+            _invalidate_pod_related_caches(cluster, namespace=None, include_cluster_level=True)
 
         return results
 

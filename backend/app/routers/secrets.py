@@ -3,6 +3,8 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from pydantic import BaseModel
 
+import yaml
+
 from ..database import get_db
 from ..models import Cluster, AuditLog, User
 from ..auth import require_read_only, require_resource_management
@@ -103,7 +105,17 @@ def create_secret_yaml_config(
         if not yaml_data.yaml_content:
             raise HTTPException(status_code=400, detail="YAML内容不能为空")
 
-        result = create_secret_yaml(cluster, yaml_data.yaml_content)
+        try:
+            secret_dict = yaml.safe_load(yaml_data.yaml_content) or {}
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"YAML解析失败: {str(e)}")
+
+        metadata = secret_dict.get("metadata") if isinstance(secret_dict, dict) else None
+        namespace = metadata.get("namespace") if isinstance(metadata, dict) else None
+        if not namespace:
+            raise HTTPException(status_code=400, detail="YAML必须包含 metadata.namespace")
+
+        result = create_secret_yaml(cluster, namespace, yaml_data.yaml_content)
         if not result.get("success"):
             raise HTTPException(status_code=500, detail=result.get("message") or "通过YAML创建Secret失败")
 
