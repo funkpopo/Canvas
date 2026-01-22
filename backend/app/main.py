@@ -1,81 +1,19 @@
 import os
-import logging
 import asyncio
-import json
 import uuid
 import time
-import tempfile
+from typing import Optional
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from starlette.responses import Response
 from contextlib import asynccontextmanager
 from .database import create_tables, init_default_user
 from .routers import auth, clusters, stats, nodes, namespaces, pods, deployments, storage, services, configmaps, secrets, network_policies, resource_quotas, events, jobs, websocket, users, audit_logs, rbac, permissions, app_rbac, statefulsets, daemonsets, hpas, cronjobs, ingresses, limit_ranges, pdbs, metrics, alerts, monitoring
 from .exceptions import register_exception_handlers
 from .core.logging import setup_logging, get_logger
+from .core.background_tasks_lock import acquire_background_tasks_lock, release_background_tasks_lock
 from .core.request_context import request_id_var
 from .observability import request_metrics
-
-
-def _acquire_background_tasks_lock(logger):
-    """
-    通过文件锁确保后台任务在多 worker 场景下仅启动一次。
-
-    说明：该锁仅对同一台机器/同一容器内的多进程有效；若需跨实例，请迁移到独立 worker 或做分布式锁。
-    """
-    lock_path = os.getenv("BACKGROUND_TASKS_LOCKFILE") or os.path.join(
-        tempfile.gettempdir(), "canvas_background_tasks.lock"
-    )
-    try:
-        fh = open(lock_path, "a+")
-        fh.seek(0)
-        try:
-            if os.name == "nt":
-                import msvcrt
-
-                # 锁定 1 个字节即可表示互斥
-                msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
-            else:
-                import fcntl
-
-                fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-
-            fh.seek(0)
-            fh.truncate()
-            fh.write(str(os.getpid()))
-            fh.flush()
-            return fh
-        except Exception:
-            try:
-                fh.close()
-            except Exception:
-                pass
-            return None
-    except Exception as e:
-        logger.warning("Background tasks lock init failed: %s", e)
-        return None
-
-
-def _release_background_tasks_lock(fh) -> None:
-    if not fh:
-        return
-    try:
-        if os.name == "nt":
-            import msvcrt
-
-            fh.seek(0)
-            msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
-        else:
-            import fcntl
-
-            fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
-    except Exception:
-        pass
-    try:
-        fh.close()
-    except Exception:
-        pass
 
 
 @asynccontextmanager
@@ -107,7 +45,7 @@ async def lifespan(app: FastAPI):
     audit_cleanup_task = None
 
     if enable_bg:
-        bg_lock_fh = _acquire_background_tasks_lock(logger)
+        bg_lock_fh = acquire_background_tasks_lock(logger)
         if bg_lock_fh:
             from .services.alert_checker import alert_checker as _alert_checker
             from .services.audit_archive import audit_log_cleanup_worker
@@ -157,7 +95,7 @@ async def lifespan(app: FastAPI):
             pass
         logger.info("审计日志清理任务已停止")
 
-    _release_background_tasks_lock(bg_lock_fh)
+    release_background_tasks_lock(bg_lock_fh)
 
 # 日志初始化需尽早执行（支持彩色/JSON输出、文件轮转）
 setup_logging()
@@ -172,15 +110,66 @@ app = FastAPI(
 
 # 成功 envelope 策略：默认启用，但对大响应/特定前缀跳过，避免读完整 body 再二次序列化
 SUCCESS_ENVELOPE_ENABLED = os.getenv("SUCCESS_ENVELOPE_ENABLED", "true").lower() == "true"
+SUCCESS_ENVELOPE_MODE = os.getenv("SUCCESS_ENVELOPE_MODE", "skip").lower()  # skip | whitelist
 SUCCESS_ENVELOPE_SKIP_PREFIXES_RAW = os.getenv(
     "SUCCESS_ENVELOPE_SKIP_PREFIXES",
     "/api/pods,/api/events,/api/metrics,/api/nodes,/api/namespaces,/api/monitoring",
 )
 SUCCESS_ENVELOPE_SKIP_PREFIXES = [p.strip() for p in SUCCESS_ENVELOPE_SKIP_PREFIXES_RAW.split(",") if p.strip()]
+SUCCESS_ENVELOPE_WHITELIST_PREFIXES_RAW = os.getenv(
+    "SUCCESS_ENVELOPE_WHITELIST_PREFIXES",
+    "/api/auth,/api/users,/api/permissions,/api/rbac,/api/app-rbac,/api/clusters",
+)
+SUCCESS_ENVELOPE_WHITELIST_PREFIXES = [
+    p.strip() for p in SUCCESS_ENVELOPE_WHITELIST_PREFIXES_RAW.split(",") if p.strip()
+]
 try:
     SUCCESS_ENVELOPE_MAX_BYTES = int(os.getenv("SUCCESS_ENVELOPE_MAX_BYTES", "100000"))  # 100KB
 except ValueError:
     SUCCESS_ENVELOPE_MAX_BYTES = 100000
+
+
+def _copy_response_headers(src: Response, dst: Response, *, drop_lower_keys: set[str]) -> None:
+    """尽量保留原响应头（含重复头如 Set-Cookie），但剔除会失效的头（如 content-length）。"""
+    try:
+        for k_raw, v_raw in getattr(src, "raw_headers", []) or []:
+            k = k_raw.decode("latin-1")
+            if k.lower() in drop_lower_keys:
+                continue
+            v = v_raw.decode("latin-1")
+            dst.headers.append(k, v)
+    except Exception:
+        # 兜底：raw_headers 不可用时退化为 dict 拷贝（可能丢失重复头）
+        headers = dict(getattr(src, "headers", {}) or {})
+        for k in list(headers.keys()):
+            if k.lower() in drop_lower_keys:
+                headers.pop(k, None)
+        for k, v in headers.items():
+            try:
+                dst.headers[k] = v
+            except Exception:
+                pass
+
+    # 保留 background tasks（主要用于某些 Response 类型）
+    try:
+        dst.background = getattr(src, "background", None)
+    except Exception:
+        pass
+
+
+def _get_response_size_bytes(response: Response) -> Optional[int]:
+    """优先使用 content-length；缺失/非法时尝试从 response.body 推断。"""
+    content_length = response.headers.get("content-length")
+    if content_length:
+        try:
+            return int(content_length)
+        except ValueError:
+            pass
+
+    body = getattr(response, "body", None)
+    if isinstance(body, (bytes, bytearray)):
+        return len(body)
+    return None
 
 # ============ request_id + 统一成功响应包装 ============
 @app.middleware("http")
@@ -210,56 +199,55 @@ async def request_id_metrics_and_envelope(request, call_next):
             final_response = response
             return final_response
 
+        # 已压缩/编码的响应不要做 envelope（避免对压缩后的 body 做 JSON 拼接）
+        content_encoding = (response.headers.get("content-encoding") or "").strip().lower()
+        if content_encoding and content_encoding != "identity":
+            final_response = response
+            return final_response
+
         path = request.url.path or ""
-        if any(path.startswith(p) for p in SUCCESS_ENVELOPE_SKIP_PREFIXES):
+        if SUCCESS_ENVELOPE_MODE == "whitelist":
+            if not any(path.startswith(p) for p in SUCCESS_ENVELOPE_WHITELIST_PREFIXES):
+                final_response = response
+                return final_response
+        else:
+            if any(path.startswith(p) for p in SUCCESS_ENVELOPE_SKIP_PREFIXES):
+                final_response = response
+                return final_response
+
+        # 如果响应体过大/未知大小，则跳过 envelope，避免聚合 body_iterator
+        size = _get_response_size_bytes(response)
+        if size is None or size <= 0:
+            final_response = response
+            return final_response
+        if size > SUCCESS_ENVELOPE_MAX_BYTES:
             final_response = response
             return final_response
 
-        # 如果响应体过大，则跳过 envelope，避免 json.loads/dumps 的 CPU/内存开销
-        content_length = response.headers.get("content-length")
-        if not content_length:
-            # 没有 content-length 的响应多为流式/未知大小，避免聚合 body_iterator
-            final_response = response
-            return final_response
-        if content_length:
-            try:
-                if int(content_length) > SUCCESS_ENVELOPE_MAX_BYTES:
-                    final_response = response
-                    return final_response
-            except ValueError:
-                # 非法 content-length 时不做大小判断，继续走后续逻辑
-                pass
+        # 尽量避免 json.loads/dumps：直接把原始 JSON body 作为 data 字段拼接到 envelope 中。
+        body = getattr(response, "body", None)
+        if isinstance(body, (bytes, bytearray)):
+            body_bytes = bytes(body)
+        else:
+            chunks: list[bytes] = []
+            async for chunk in response.body_iterator:
+                if isinstance(chunk, (bytes, bytearray)):
+                    chunks.append(bytes(chunk))
+                else:
+                    chunks.append(bytes(chunk))
+            body_bytes = b"".join(chunks)
 
-        # 读取 body_iterator（BaseHTTPMiddleware 返回的 response 多为流式），但仅对小 JSON 响应做聚合
-        chunks = []
-        async for chunk in response.body_iterator:
-            chunks.append(chunk)
-        body = b"".join(chunks)
+        data_bytes = body_bytes.strip() or b"null"
+        request_id_bytes = request_id.encode("utf-8")
+        wrapped_bytes = b'{"success":true,"data":' + data_bytes + b',"request_id":"' + request_id_bytes + b'"}'
 
-        if not body:
-            final_response = response
-            return final_response
-
-        try:
-            payload = json.loads(body)
-        except Exception:
-            # body_iterator 已被消费，必须重建响应以避免返回空 body
-            headers = dict(response.headers)
-            headers.pop("content-length", None)
-            final_response = Response(content=body, status_code=response.status_code, headers=headers)
-            return final_response
-
-        # 已经是 envelope 则不重复包装
-        if isinstance(payload, dict) and payload.get("success") is True and "request_id" in payload:
-            headers = dict(response.headers)
-            headers.pop("content-length", None)
-            final_response = Response(content=body, status_code=response.status_code, headers=headers)
-            return final_response
-
-        wrapped = {"success": True, "data": payload, "request_id": request_id}
-        headers = dict(response.headers)
-        headers.pop("content-length", None)
-        final_response = JSONResponse(status_code=response.status_code, content=wrapped, headers=headers)
+        # body_iterator 已可能被消费，必须返回新 Response；复制原 headers（保留 Set-Cookie 等重复头）
+        final_response = Response(
+            content=wrapped_bytes,
+            status_code=response.status_code,
+            media_type=content_type or "application/json",
+        )
+        _copy_response_headers(response, final_response, drop_lower_keys={"content-length", "content-type"})
         return final_response
 
     finally:
