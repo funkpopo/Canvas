@@ -49,6 +49,21 @@ export const deploymentApi = {
     return apiClient.get<Deployment[]>(`/deployments${query}`);
   },
 
+  async getDeploymentsPage(
+    clusterId: number,
+    namespace: string | undefined,
+    limit: number,
+    continueToken: string | null
+  ): Promise<ApiResponse<{ items: Deployment[]; continue_token: string | null }>> {
+    const params = new URLSearchParams();
+    params.append("cluster_id", clusterId.toString());
+    if (namespace) params.append("namespace", namespace);
+    params.append("limit", limit.toString());
+    if (continueToken) params.append("continue_token", continueToken);
+    const query = params.toString() ? `?${params.toString()}` : "";
+    return apiClient.get<{ items: Deployment[]; continue_token: string | null }>(`/deployments/page${query}`);
+  },
+
   async getDeployment(clusterId: number, namespace: string, deploymentName: string): Promise<ApiResponse<DeploymentDetails>> {
     return apiClient.get<DeploymentDetails>(`/deployments/${namespace}/${deploymentName}?cluster_id=${clusterId}`);
   },

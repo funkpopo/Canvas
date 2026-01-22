@@ -139,6 +139,96 @@ def get_namespace_services(cluster: Cluster, namespace: str) -> List[Dict[str, A
             return []
 
 
+def get_services_page(
+    cluster: Cluster,
+    namespace: Optional[str] = None,
+    limit: int = 100,
+    continue_token: Optional[str] = None,
+    label_selector: Optional[str] = None,
+    field_selector: Optional[str] = None,
+) -> Dict[str, Any]:
+    """分页获取 Service 列表（使用 K8s API limit/_continue）。"""
+    with KubernetesClientContext(cluster) as client_instance:
+        if not client_instance:
+            return {"items": [], "continue_token": None}
+
+        try:
+            core_v1 = client.CoreV1Api(client_instance)
+
+            if namespace:
+                services = core_v1.list_namespaced_service(
+                    namespace,
+                    limit=limit,
+                    _continue=continue_token,
+                    label_selector=label_selector,
+                    field_selector=field_selector,
+                )
+            else:
+                services = core_v1.list_service_for_all_namespaces(
+                    limit=limit,
+                    _continue=continue_token,
+                    label_selector=label_selector,
+                    field_selector=field_selector,
+                )
+
+            next_token = getattr(getattr(services, "metadata", None), "_continue", None)
+
+            items: List[Dict[str, Any]] = []
+            for service in services.items or []:
+                service_type = getattr(getattr(service, "spec", None), "type", None) or "ClusterIP"
+                cluster_ip = getattr(getattr(service, "spec", None), "cluster_ip", None)
+                external_ip = _get_service_external_ip(service)
+
+                ports: List[Dict[str, Any]] = []
+                for port in getattr(getattr(service, "spec", None), "ports", None) or []:
+                    port_info: Dict[str, Any] = {
+                        "name": port.name,
+                        "protocol": port.protocol,
+                        "port": port.port,
+                        "target_port": port.target_port,
+                    }
+                    if getattr(port, "node_port", None):
+                        port_info["node_port"] = port.node_port
+                    ports.append(port_info)
+
+                age = calculate_age(getattr(getattr(service, "metadata", None), "creation_timestamp", None))
+
+                items.append(
+                    {
+                        "name": service.metadata.name,
+                        "namespace": service.metadata.namespace,
+                        "type": service_type,
+                        "cluster_ip": cluster_ip,
+                        "external_ip": external_ip,
+                        "ports": ports,
+                        "age": age,
+                        "labels": dict(service.metadata.labels) if service.metadata.labels else {},
+                        "selector": dict(service.spec.selector) if service.spec and service.spec.selector else {},
+                        "cluster_name": cluster.name,
+                        "cluster_id": cluster.id,
+                    }
+                )
+
+            return {"items": items, "continue_token": next_token}
+
+        except ApiException as e:
+            logger.warning(
+                "分页获取服务失败: cluster=%s ns=%s error=%s",
+                cluster.name,
+                namespace or "_all",
+                e,
+            )
+            return {"items": [], "continue_token": None}
+        except Exception as e:
+            logger.exception(
+                "分页获取服务失败: cluster=%s ns=%s error=%s",
+                cluster.name,
+                namespace or "_all",
+                e,
+            )
+            return {"items": [], "continue_token": None}
+
+
 def get_service_details(cluster: Cluster, namespace: str, service_name: str) -> Optional[Dict[str, Any]]:
     """获取服务详情"""
     with KubernetesClientContext(cluster) as client_instance:
@@ -453,4 +543,3 @@ def update_service_yaml(cluster: Cluster, namespace: str, service_name: str, yam
                 e,
             )
             return {"success": False, "message": f"更新Service失败: {str(e)}"}
-

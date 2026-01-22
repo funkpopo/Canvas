@@ -42,9 +42,10 @@ function transformPod(pod: Pod): PodInfo {
 async function fetchPodsPage(
   clusterId: number,
   namespace: string | undefined,
-  continueToken: string | null
+  continueToken: string | null,
+  limit: number
 ): Promise<ApiResponse<{ items: PodInfo[]; continue_token: string | null }>> {
-  const result = await podApi.getPods(clusterId, namespace, 200, continueToken);
+  const result = await podApi.getPods(clusterId, namespace, limit, continueToken);
   if (result.data) {
     return {
       data: {
@@ -243,7 +244,6 @@ function PodsPageContent() {
       columns={columns}
       actions={actions}
       fetchPageFn={fetchPodsPage}
-      pageSize={200}
       deleteFn={(clusterId, namespace, name) => podApi.deletePod(clusterId, namespace, name)}
       batchDeleteFn={handleBatchDelete}
       batchRestartFn={handleBatchRestart}

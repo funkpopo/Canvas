@@ -73,12 +73,21 @@ class BatchOperationResponse(BaseModel):
 @handle_k8s_operation("获取Pod信息")
 def get_pods(
     namespace: Optional[str] = None,
-    limit: int = Query(200, description="每页数量", ge=1, le=1000),
+    limit: int = Query(100, description="每页数量", ge=1, le=1000),
     continue_token: Optional[str] = Query(None, description="分页游标"),
+    label_selector: Optional[str] = Query(None, description="K8s label_selector（优先在 APIServer 侧过滤）"),
+    field_selector: Optional[str] = Query(None, description="K8s field_selector（优先在 APIServer 侧过滤）"),
     cluster: Cluster = Depends(get_active_cluster),
     current_user: User = Depends(require_cluster_access("read")),
 ):
-    page = get_pods_page(cluster, namespace=namespace, limit=limit, continue_token=continue_token)
+    page = get_pods_page(
+        cluster,
+        namespace=namespace,
+        limit=limit,
+        continue_token=continue_token,
+        label_selector=label_selector,
+        field_selector=field_selector,
+    )
     items = [
         PodInfo(**{**pod, "cluster_id": cluster.id, "cluster_name": cluster.name})
         for pod in page.get("items", [])

@@ -83,6 +83,7 @@ from .pod_operations import (
 # ========== Deployment操作 ==========
 from .deployment_ops import (
     get_namespace_deployments,
+    get_deployments_page,
     get_deployment_details,
     get_deployment_pods,
     scale_deployment,
@@ -97,6 +98,7 @@ from .deployment_ops import (
 # ========== Service操作 ==========
 from .service_operations import (
     get_namespace_services,
+    get_services_page,
     get_service_details,
     create_service,
     update_service,
@@ -109,6 +111,7 @@ from .service_operations import (
 from .config_operations import (
     # ConfigMap
     get_namespace_configmaps,
+    get_configmaps_page,
     get_configmap_details,
     create_configmap,
     update_configmap,
@@ -118,6 +121,7 @@ from .config_operations import (
     update_configmap_yaml,
     # Secret
     get_namespace_secrets,
+    get_secrets_page,
     get_secret_details,
     create_secret,
     update_secret,
@@ -306,6 +310,7 @@ __all__ = [
 
     # Deployment操作
     'get_namespace_deployments',
+    'get_deployments_page',
     'get_deployment_details',
     'get_deployment_pods',
     'scale_deployment',
@@ -318,6 +323,7 @@ __all__ = [
 
     # Service操作
     'get_namespace_services',
+    'get_services_page',
     'get_service_details',
     'create_service',
     'update_service',
@@ -327,6 +333,7 @@ __all__ = [
 
     # ConfigMap操作
     'get_namespace_configmaps',
+    'get_configmaps_page',
     'get_configmap_details',
     'create_configmap',
     'update_configmap',
@@ -337,6 +344,7 @@ __all__ = [
 
     # Secret操作
     'get_namespace_secrets',
+    'get_secrets_page',
     'get_secret_details',
     'create_secret',
     'update_secret',

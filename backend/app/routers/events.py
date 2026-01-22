@@ -40,8 +40,10 @@ class EventPageResponse(BaseModel):
 def get_events(
     namespace: Optional[str] = None,
     cluster_id: int = Query(..., description="集群ID"),
-    limit: int = Query(200, description="每页数量", ge=1, le=1000),
+    limit: int = Query(100, description="每页数量", ge=1, le=1000),
     continue_token: Optional[str] = Query(None, description="分页游标"),
+    label_selector: Optional[str] = Query(None, description="K8s label_selector（优先在 APIServer 侧过滤）"),
+    field_selector: Optional[str] = Query(None, description="K8s field_selector（优先在 APIServer 侧过滤）"),
     db: Session = Depends(get_db),
     current_user=Depends(require_cluster_access("read")),
 ):
@@ -54,7 +56,14 @@ def get_events(
         if not cluster:
             raise HTTPException(status_code=404, detail="集群不存在或未激活")
 
-        page = get_cluster_events(cluster, namespace=namespace, limit=limit, continue_token=continue_token)
+        page = get_cluster_events(
+            cluster,
+            namespace=namespace,
+            limit=limit,
+            continue_token=continue_token,
+            label_selector=label_selector,
+            field_selector=field_selector,
+        )
         items = []
         for event in page.get("items", []):
             event["cluster_id"] = cluster.id

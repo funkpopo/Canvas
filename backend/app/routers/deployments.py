@@ -8,7 +8,7 @@ from ..models import Cluster, User
 from ..auth import get_current_user, require_resource_management
 from ..services.k8s import (
     get_deployment_details, get_deployment_pods, scale_deployment, restart_deployment, delete_deployment,
-    get_namespace_deployments, update_deployment, get_deployment_yaml, update_deployment_yaml,
+    get_namespace_deployments, get_deployments_page, update_deployment, get_deployment_yaml, update_deployment_yaml,
     get_deployment_services, get_service_details, update_service, get_service_yaml, update_service_yaml
 )
 from ..core.logging import get_logger
@@ -31,6 +31,12 @@ class DeploymentInfo(BaseModel):
     status: str
     cluster_id: int
     cluster_name: str
+
+
+class DeploymentPageResponse(BaseModel):
+    items: List[DeploymentInfo]
+    continue_token: Optional[str] = None
+    limit: int
 
 
 class DeploymentDetails(BaseModel):
@@ -144,6 +150,33 @@ def get_deployments(
         except Exception as e:
             logger.warning("获取集群部署信息失败: cluster=%s error=%s", cluster.name, e)
     return all_deployments
+
+
+@router.get("/page", response_model=DeploymentPageResponse)
+@handle_k8s_operation("获取部署信息")
+def get_deployments_page_endpoint(
+    namespace: Optional[str] = None,
+    limit: int = Query(100, description="每页数量", ge=1, le=1000),
+    continue_token: Optional[str] = Query(None, description="分页游标"),
+    label_selector: Optional[str] = Query(None, description="K8s label_selector（优先在 APIServer 侧过滤）"),
+    field_selector: Optional[str] = Query(None, description="K8s field_selector（优先在 APIServer 侧过滤）"),
+    cluster: Cluster = Depends(get_active_cluster_with_read_access),
+    current_user: dict = Depends(get_current_user),
+):
+    """分页获取部署列表（limit/_continue）"""
+    page = get_deployments_page(
+        cluster,
+        namespace=namespace,
+        limit=limit,
+        continue_token=continue_token,
+        label_selector=label_selector,
+        field_selector=field_selector,
+    )
+    items = [
+        DeploymentInfo(**{**deployment, "cluster_id": cluster.id, "cluster_name": cluster.name})
+        for deployment in page.get("items", [])
+    ]
+    return DeploymentPageResponse(items=items, continue_token=page.get("continue_token"), limit=limit)
 
 
 @router.get("/{namespace}/{deployment_name}", response_model=DeploymentDetails)

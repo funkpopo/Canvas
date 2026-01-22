@@ -25,6 +25,7 @@ import {
   BaseResource,
   NameColumn,
   AgeColumn,
+  ApiResponse,
 } from "@/components/ResourceList";
 import { serviceApi, Service as ApiService } from "@/lib/api";
 import { canManageResources } from "@/lib/utils";
@@ -56,6 +57,26 @@ export default function ServicesPage() {
 
   // 刷新回调
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // 分页 fetch（用于 ResourceList 无限加载）
+  const fetchServicesPage = async (
+    clusterId: number,
+    namespace: string | undefined,
+    continueToken: string | null,
+    limit: number
+  ): Promise<ApiResponse<{ items: Service[]; continue_token: string | null }>> => {
+    if (namespace) setSelectedNamespace(namespace);
+    const result = await serviceApi.getServicesPage(clusterId, namespace, limit, continueToken);
+    if (result.data) {
+      return {
+        data: {
+          items: result.data.items as unknown as Service[],
+          continue_token: result.data.continue_token ?? null,
+        },
+      };
+    }
+    return { error: result.error };
+  };
 
   // 查看 YAML
   const handleViewYaml = async (service: Service) => {
@@ -268,14 +289,7 @@ spec:
         icon={Settings}
         columns={columns}
         actions={actions.filter((a) => a.key !== "delete")}
-        fetchFn={async (clusterId, namespace) => {
-          if (namespace) setSelectedNamespace(namespace);
-          const result = await serviceApi.getServices(clusterId, namespace!);
-          return {
-            data: result.data as unknown as Service[],
-            error: result.error,
-          };
-        }}
+        fetchPageFn={fetchServicesPage}
         deleteFn={async (clusterId, namespace, name) => {
           return await serviceApi.deleteService(clusterId, namespace, name);
         }}

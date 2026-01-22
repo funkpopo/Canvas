@@ -7,7 +7,7 @@ from ..database import get_db
 from ..models import Cluster, AuditLog, User
 from ..auth import require_configmap_management, require_read_only
 from ..services.k8s import (
-    get_namespace_configmaps, get_configmap_details, create_configmap, update_configmap, delete_configmap,
+    get_namespace_configmaps, get_configmaps_page, get_configmap_details, create_configmap, update_configmap, delete_configmap,
     get_configmap_yaml, update_configmap_yaml
 )
 from .deps import get_active_cluster, get_active_cluster_with_read_access, get_clusters_for_user, handle_k8s_operation
@@ -44,6 +44,12 @@ class YamlRequest(BaseModel):
     yaml_content: str
 
 
+class ConfigMapPageResponse(BaseModel):
+    items: List[ConfigMapInfo]
+    continue_token: Optional[str] = None
+    limit: int
+
+
 @router.get("/", response_model=List[ConfigMapInfo])
 @handle_k8s_operation("获取ConfigMap列表")
 def get_configmaps(
@@ -60,6 +66,30 @@ def get_configmaps(
         cluster_configmaps = get_namespace_configmaps(cluster, namespace)
         configmaps.extend(cluster_configmaps)
     return configmaps
+
+
+@router.get("/page", response_model=ConfigMapPageResponse)
+@handle_k8s_operation("获取ConfigMap列表")
+def get_configmaps_page_endpoint(
+    namespace: Optional[str] = Query(None, description="命名空间名称，不传则获取全部命名空间"),
+    limit: int = Query(100, description="每页数量", ge=1, le=1000),
+    continue_token: Optional[str] = Query(None, description="分页游标"),
+    label_selector: Optional[str] = Query(None, description="K8s label_selector（优先在 APIServer 侧过滤）"),
+    field_selector: Optional[str] = Query(None, description="K8s field_selector（优先在 APIServer 侧过滤）"),
+    cluster: Cluster = Depends(get_active_cluster_with_read_access),
+    current_user: User = Depends(require_read_only),
+):
+    """分页获取 ConfigMap 列表（limit/_continue）"""
+    page = get_configmaps_page(
+        cluster,
+        namespace=namespace,
+        limit=limit,
+        continue_token=continue_token,
+        label_selector=label_selector,
+        field_selector=field_selector,
+    )
+    items = [ConfigMapInfo(**cm) for cm in page.get("items", [])]
+    return ConfigMapPageResponse(items=items, continue_token=page.get("continue_token"), limit=limit)
 
 
 @router.get("/{namespace}/{configmap_name}", response_model=ConfigMapInfo)

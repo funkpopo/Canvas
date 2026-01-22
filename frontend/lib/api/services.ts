@@ -34,6 +34,21 @@ export const serviceApi = {
     return apiClient.get<Service[]>(`/services/${query}`);
   },
 
+  async getServicesPage(
+    clusterId: number,
+    namespace: string | undefined,
+    limit: number,
+    continueToken: string | null
+  ): Promise<ApiResponse<{ items: Service[]; continue_token: string | null }>> {
+    const params = new URLSearchParams();
+    params.append("cluster_id", clusterId.toString());
+    if (namespace) params.append("namespace", namespace);
+    params.append("limit", limit.toString());
+    if (continueToken) params.append("continue_token", continueToken);
+    const query = params.toString() ? `?${params.toString()}` : "";
+    return apiClient.get<{ items: Service[]; continue_token: string | null }>(`/services/page${query}`);
+  },
+
   async getService(clusterId: number, namespace: string, serviceName: string): Promise<ApiResponse<Service>> {
     return apiClient.get<Service>(`/services/${namespace}/${serviceName}?cluster_id=${clusterId}`);
   },

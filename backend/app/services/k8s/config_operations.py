@@ -95,6 +95,70 @@ def get_namespace_configmaps(cluster: Cluster, namespace: str) -> List[Dict[str,
             return []
 
 
+def get_configmaps_page(
+    cluster: Cluster,
+    namespace: Optional[str] = None,
+    limit: int = 100,
+    continue_token: Optional[str] = None,
+    label_selector: Optional[str] = None,
+    field_selector: Optional[str] = None,
+) -> Dict[str, Any]:
+    """分页获取 ConfigMap 列表（使用 K8s API limit/_continue）。"""
+    with KubernetesClientContext(cluster) as client_instance:
+        if not client_instance:
+            return {"items": [], "continue_token": None}
+
+        try:
+            core_v1 = client.CoreV1Api(client_instance)
+
+            if namespace:
+                configmaps = core_v1.list_namespaced_config_map(
+                    namespace,
+                    limit=limit,
+                    _continue=continue_token,
+                    label_selector=label_selector,
+                    field_selector=field_selector,
+                )
+            else:
+                configmaps = core_v1.list_config_map_for_all_namespaces(
+                    limit=limit,
+                    _continue=continue_token,
+                    label_selector=label_selector,
+                    field_selector=field_selector,
+                )
+
+            next_token = getattr(getattr(configmaps, "metadata", None), "_continue", None)
+
+            items: List[Dict[str, Any]] = []
+            for cm in configmaps.items or []:
+                age = calculate_age(getattr(getattr(cm, "metadata", None), "creation_timestamp", None))
+                items.append(
+                    {
+                        "name": cm.metadata.name,
+                        "namespace": cm.metadata.namespace,
+                        "data": dict(cm.data) if cm.data else {},
+                        "labels": dict(cm.metadata.labels) if cm.metadata.labels else {},
+                        "annotations": dict(cm.metadata.annotations) if cm.metadata.annotations else {},
+                        "age": age,
+                        "cluster_name": cluster.name,
+                        "cluster_id": cluster.id,
+                    }
+                )
+
+            return {"items": items, "continue_token": next_token}
+
+        except ApiException as e:
+            logger.warning(
+                "分页获取ConfigMaps失败: cluster=%s ns=%s error=%s", cluster.name, namespace or "_all", e
+            )
+            return {"items": [], "continue_token": None}
+        except Exception as e:
+            logger.exception(
+                "分页获取ConfigMaps失败: cluster=%s ns=%s error=%s", cluster.name, namespace or "_all", e
+            )
+            return {"items": [], "continue_token": None}
+
+
 def get_configmap_details(cluster: Cluster, namespace: str, configmap_name: str) -> Optional[Dict[str, Any]]:
     """获取 ConfigMap 详情"""
     with KubernetesClientContext(cluster) as client_instance:
@@ -378,6 +442,71 @@ def get_namespace_secrets(cluster: Cluster, namespace: str) -> List[Dict[str, An
             return []
 
 
+def get_secrets_page(
+    cluster: Cluster,
+    namespace: Optional[str] = None,
+    limit: int = 100,
+    continue_token: Optional[str] = None,
+    label_selector: Optional[str] = None,
+    field_selector: Optional[str] = None,
+) -> Dict[str, Any]:
+    """分页获取 Secret 列表（使用 K8s API limit/_continue）。"""
+    with KubernetesClientContext(cluster) as client_instance:
+        if not client_instance:
+            return {"items": [], "continue_token": None}
+
+        try:
+            core_v1 = client.CoreV1Api(client_instance)
+
+            if namespace:
+                secrets = core_v1.list_namespaced_secret(
+                    namespace,
+                    limit=limit,
+                    _continue=continue_token,
+                    label_selector=label_selector,
+                    field_selector=field_selector,
+                )
+            else:
+                secrets = core_v1.list_secret_for_all_namespaces(
+                    limit=limit,
+                    _continue=continue_token,
+                    label_selector=label_selector,
+                    field_selector=field_selector,
+                )
+
+            next_token = getattr(getattr(secrets, "metadata", None), "_continue", None)
+
+            items: List[Dict[str, Any]] = []
+            for secret in secrets.items or []:
+                age = calculate_age(getattr(getattr(secret, "metadata", None), "creation_timestamp", None))
+                items.append(
+                    {
+                        "name": secret.metadata.name,
+                        "namespace": secret.metadata.namespace,
+                        "type": secret.type,
+                        "data_keys": list((secret.data or {}).keys()),
+                        "labels": dict(secret.metadata.labels) if secret.metadata.labels else {},
+                        "annotations": dict(secret.metadata.annotations) if secret.metadata.annotations else {},
+                        "age": age,
+                        "cluster_name": cluster.name,
+                        "cluster_id": cluster.id,
+                    }
+                )
+
+            return {"items": items, "continue_token": next_token}
+
+        except ApiException as e:
+            logger.warning(
+                "分页获取Secrets失败: cluster=%s ns=%s error=%s", cluster.name, namespace or "_all", e
+            )
+            return {"items": [], "continue_token": None}
+        except Exception as e:
+            logger.exception(
+                "分页获取Secrets失败: cluster=%s ns=%s error=%s", cluster.name, namespace or "_all", e
+            )
+            return {"items": [], "continue_token": None}
+
+
 def get_secret_details(cluster: Cluster, namespace: str, secret_name: str) -> Optional[Dict[str, Any]]:
     """获取 Secret 详情（data 自动 base64 解码为明文字符串；非 UTF-8 显示为占位符）"""
     with KubernetesClientContext(cluster) as client_instance:
@@ -630,4 +759,3 @@ def update_secret_yaml(cluster: Cluster, namespace: str, secret_name: str, yaml_
         except Exception as e:
             logger.exception("通过YAML更新Secret失败: cluster=%s ns=%s secret=%s error=%s", cluster.name, namespace, secret_name, e)
             return {"success": False, "message": f"更新Secret失败: {str(e)}"}
-

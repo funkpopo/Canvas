@@ -26,6 +26,7 @@ import {
   BaseResource,
   NameColumn,
   AgeColumn,
+  ApiResponse,
 } from "@/components/ResourceList";
 import { configmapApi, ConfigMap as ApiConfigMap } from "@/lib/api";
 import { canManageConfigMaps } from "@/lib/utils";
@@ -56,6 +57,27 @@ export default function ConfigMapsPage() {
   // YAML 预览对话框状态
   const [isYamlOpen, setIsYamlOpen] = useState(false);
   const [yamlPreview, setYamlPreview] = useState("");
+
+  // 分页 fetch（用于 ResourceList 无限加载）
+  const fetchConfigMapsPage = async (
+    clusterId: number,
+    namespace: string | undefined,
+    continueToken: string | null,
+    limit: number
+  ): Promise<ApiResponse<{ items: ConfigMap[]; continue_token: string | null }>> => {
+    if (namespace) setSelectedNamespace(namespace);
+    setSelectedClusterId(clusterId);
+    const result = await configmapApi.getConfigMapsPage(clusterId, namespace, limit, continueToken);
+    if (result.data) {
+      return {
+        data: {
+          items: result.data.items as unknown as ConfigMap[],
+          continue_token: result.data.continue_token ?? null,
+        },
+      };
+    }
+    return { error: result.error };
+  };
 
   // 查看 ConfigMap 详情
   const handleViewConfigMap = async (cm: ConfigMap) => {
@@ -245,15 +267,7 @@ data:
         icon={FileText}
         columns={columns}
         actions={actions}
-        fetchFn={async (clusterId, namespace) => {
-          if (namespace) setSelectedNamespace(namespace);
-          setSelectedClusterId(clusterId);
-          const result = await configmapApi.getConfigMaps(clusterId, namespace!);
-          return {
-            data: result.data as unknown as ConfigMap[],
-            error: result.error,
-          };
-        }}
+        fetchPageFn={fetchConfigMapsPage}
         deleteFn={async (clusterId, namespace, name) => {
           return await configmapApi.deleteConfigMap(clusterId, namespace, name);
         }}

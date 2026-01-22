@@ -6,10 +6,12 @@ from ..models import Cluster, AuditLog, User
 from ..auth import get_current_user, require_resource_management
 from ..services.k8s import (
     get_namespace_services, create_service, delete_service,
-    get_service_details, update_service, get_service_yaml, update_service_yaml
+    get_service_details, update_service, get_service_yaml, update_service_yaml,
+    get_services_page,
 )
 from ..audit import log_action
 from pydantic import BaseModel
+from .deps import get_active_cluster, handle_k8s_operation
 
 router = APIRouter()
 
@@ -53,6 +55,11 @@ class ServiceUpdate(BaseModel):
     session_affinity: Optional[str] = None
     session_affinity_config: Optional[dict] = None
 
+class ServicePageResponse(BaseModel):
+    items: List[ServiceInfo]
+    continue_token: Optional[str] = None
+    limit: int
+
 
 # ========== 服务管理 ==========
 
@@ -91,6 +98,30 @@ def get_services(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取服务列表失败: {str(e)}")
+
+
+@router.get("/page", response_model=ServicePageResponse)
+@handle_k8s_operation("获取服务列表")
+def get_services_page_endpoint(
+    namespace: Optional[str] = Query(None, description="命名空间名称，不传则获取全部命名空间"),
+    limit: int = Query(100, description="每页数量", ge=1, le=1000),
+    continue_token: Optional[str] = Query(None, description="分页游标"),
+    label_selector: Optional[str] = Query(None, description="K8s label_selector（优先在 APIServer 侧过滤）"),
+    field_selector: Optional[str] = Query(None, description="K8s field_selector（优先在 APIServer 侧过滤）"),
+    cluster: Cluster = Depends(get_active_cluster),
+    current_user: User = Depends(require_resource_management),
+):
+    """分页获取服务列表（limit/_continue）"""
+    page = get_services_page(
+        cluster,
+        namespace=namespace,
+        limit=limit,
+        continue_token=continue_token,
+        label_selector=label_selector,
+        field_selector=field_selector,
+    )
+    items = [ServiceInfo(**svc) for svc in page.get("items", [])]
+    return ServicePageResponse(items=items, continue_token=page.get("continue_token"), limit=limit)
 
 
 @router.get("/{namespace}/{service_name}", response_model=ServiceInfo)

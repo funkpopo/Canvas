@@ -23,6 +23,21 @@ export const configmapApi = {
     return apiClient.get<ConfigMap[]>(`/configmaps/${query}`);
   },
 
+  async getConfigMapsPage(
+    clusterId: number,
+    namespace: string | undefined,
+    limit: number,
+    continueToken: string | null
+  ): Promise<ApiResponse<{ items: ConfigMap[]; continue_token: string | null }>> {
+    const params = new URLSearchParams();
+    params.append("cluster_id", clusterId.toString());
+    if (namespace) params.append("namespace", namespace);
+    params.append("limit", limit.toString());
+    if (continueToken) params.append("continue_token", continueToken);
+    const query = params.toString() ? `?${params.toString()}` : "";
+    return apiClient.get<{ items: ConfigMap[]; continue_token: string | null }>(`/configmaps/page${query}`);
+  },
+
   async getConfigMap(clusterId: number, namespace: string, configmapName: string): Promise<ApiResponse<ConfigMap>> {
     return apiClient.get<ConfigMap>(`/configmaps/${namespace}/${configmapName}?cluster_id=${clusterId}`);
   },

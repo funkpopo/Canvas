@@ -50,9 +50,10 @@ function toEventRow(e: import("@/lib/api").Event): EventRow {
 async function fetchEventsPage(
   clusterId: number,
   namespace: string | undefined,
-  continueToken: string | null
+  continueToken: string | null,
+  limit: number
 ): Promise<ApiResponse<{ items: EventRow[]; continue_token: string | null }>> {
-  const result = await eventApi.getEvents(clusterId, namespace, 200, continueToken);
+  const result = await eventApi.getEvents(clusterId, namespace, limit, continueToken);
   if (result.data) {
     return {
       data: {
@@ -134,7 +135,6 @@ function EventsPageContent() {
       icon={Info}
       columns={columns}
       fetchPageFn={fetchEventsPage}
-      pageSize={200}
       requireNamespace={false}
       namespaceSource="data"
       showNamespaceInHeader={true}

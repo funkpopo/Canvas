@@ -9,7 +9,7 @@ from ..database import get_db
 from ..models import Cluster, AuditLog, User
 from ..auth import require_read_only, require_resource_management
 from ..services.k8s import (
-    get_namespace_secrets, get_secret_details, create_secret, update_secret, delete_secret,
+    get_namespace_secrets, get_secrets_page, get_secret_details, create_secret, update_secret, delete_secret,
     get_secret_yaml, create_secret_yaml, update_secret_yaml
 )
 from .deps import get_active_cluster, get_active_cluster_with_read_access, get_clusters_for_user, handle_k8s_operation
@@ -61,6 +61,12 @@ class YamlRequest(BaseModel):
     yaml_content: str
 
 
+class SecretPageResponse(BaseModel):
+    items: List[SecretInfo]
+    continue_token: Optional[str] = None
+    limit: int
+
+
 @router.get("/", response_model=List[SecretInfo])
 @handle_k8s_operation("获取Secret列表")
 def get_secrets(
@@ -76,6 +82,30 @@ def get_secrets(
     for cluster in clusters:
         secrets.extend(get_namespace_secrets(cluster, namespace))
     return secrets
+
+
+@router.get("/page", response_model=SecretPageResponse)
+@handle_k8s_operation("获取Secret列表")
+def get_secrets_page_endpoint(
+    namespace: Optional[str] = Query(None, description="命名空间名称，不传则获取全部命名空间"),
+    limit: int = Query(100, description="每页数量", ge=1, le=1000),
+    continue_token: Optional[str] = Query(None, description="分页游标"),
+    label_selector: Optional[str] = Query(None, description="K8s label_selector（优先在 APIServer 侧过滤）"),
+    field_selector: Optional[str] = Query(None, description="K8s field_selector（优先在 APIServer 侧过滤）"),
+    cluster: Cluster = Depends(get_active_cluster_with_read_access),
+    current_user: User = Depends(require_read_only),
+):
+    """分页获取 Secret 列表（limit/_continue）"""
+    page = get_secrets_page(
+        cluster,
+        namespace=namespace,
+        limit=limit,
+        continue_token=continue_token,
+        label_selector=label_selector,
+        field_selector=field_selector,
+    )
+    items = [SecretInfo(**s) for s in page.get("items", [])]
+    return SecretPageResponse(items=items, continue_token=page.get("continue_token"), limit=limit)
 
 
 @router.get("/{namespace}/{secret_name}", response_model=SecretDetails)

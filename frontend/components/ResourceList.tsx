@@ -45,7 +45,7 @@ export function ResourceList<T extends BaseResource>({
   actions = [],
   fetchFn,
   fetchPageFn,
-  pageSize = 200,
+  pageSize = 100,
   deleteFn,
   batchDeleteFn,
   batchRestartFn,
@@ -171,7 +171,7 @@ export function ResourceList<T extends BaseResource>({
     initialPageParam: null as string | null,
     queryFn: async ({ pageParam }) => {
       if (!fetchPageFn) return { items: [], continue_token: null };
-      const resp = await fetchPageFn(selectedClusterId as number, namespaceParam, pageParam);
+      const resp = await fetchPageFn(selectedClusterId as number, namespaceParam, pageParam, pageSize);
       if (resp.error) throw new Error(resp.error);
       const data = resp.data ?? { items: [], continue_token: null };
       return {
@@ -239,32 +239,38 @@ export function ResourceList<T extends BaseResource>({
 
   // ============ 过滤逻辑 ============
 
-  const filteredItems = items.filter((item) => {
-    // 命名空间过滤 (当从数据中提取命名空间时)
-    if (namespaceSource === "data" && selectedNamespace && item.namespace !== selectedNamespace) {
-      return false;
-    }
+  const filteredItems = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    const statusLower = selectedStatus.toLowerCase();
 
-    // 搜索过滤
-    const matchesSearch = searchFields.some((field) => {
-      const value = item[field];
-      if (typeof value === "string") {
-        return value.toLowerCase().includes(searchTerm.toLowerCase());
+    return items.filter((item) => {
+      // 命名空间过滤 (当从数据中提取命名空间时)
+      if (namespaceSource === "data" && selectedNamespace && item.namespace !== selectedNamespace) {
+        return false;
       }
-      return false;
+
+      // 搜索过滤
+      const matchesSearch = searchFields.some((field) => {
+        const value = item[field];
+        if (typeof value === "string") {
+          // term 为空时认为匹配，避免每行多一次 includes("") 的开销
+          return term === "" ? true : value.toLowerCase().includes(term);
+        }
+        return false;
+      });
+
+      // 状态过滤
+      let matchesStatus = true;
+      if (statusFilter && statusLower !== "all") {
+        const statusValue = item[statusFilter.field];
+        if (typeof statusValue === "string") {
+          matchesStatus = statusValue.toLowerCase() === statusLower;
+        }
+      }
+
+      return matchesSearch && matchesStatus;
     });
-
-    // 状态过滤
-    let matchesStatus = true;
-    if (statusFilter && selectedStatus !== "all") {
-      const statusValue = item[statusFilter.field];
-      if (typeof statusValue === "string") {
-        matchesStatus = statusValue.toLowerCase() === selectedStatus.toLowerCase();
-      }
-    }
-
-    return matchesSearch && matchesStatus;
-  });
+  }, [items, namespaceSource, selectedNamespace, searchFields, searchTerm, statusFilter, selectedStatus]);
 
   const batchOpsEnabled = !!(batchOperations.delete || batchOperations.restart || batchOperations.label);
 

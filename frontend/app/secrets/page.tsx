@@ -24,6 +24,7 @@ import {
   BaseResource,
   NameColumn,
   AgeColumn,
+  ApiResponse,
 } from "@/components/ResourceList";
 import { secretApi } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
@@ -53,6 +54,27 @@ export default function SecretsPage() {
   const [isYamlOpen, setIsYamlOpen] = useState(false);
   const [yamlPreview, setYamlPreview] = useState("");
   const [selectedSecret, setSelectedSecret] = useState<Secret | null>(null);
+
+  // 分页 fetch（用于 ResourceList 无限加载）
+  const fetchSecretsPage = async (
+    clusterId: number,
+    namespace: string | undefined,
+    continueToken: string | null,
+    limit: number
+  ): Promise<ApiResponse<{ items: Secret[]; continue_token: string | null }>> => {
+    if (namespace) setSelectedNamespace(namespace);
+    setSelectedClusterId(clusterId);
+    const result = await secretApi.getSecretsPage(clusterId, namespace, limit, continueToken);
+    if (result.data) {
+      return {
+        data: {
+          items: result.data.items as unknown as Secret[],
+          continue_token: result.data.continue_token ?? null,
+        },
+      };
+    }
+    return { error: result.error };
+  };
 
   // 查看 YAML
   const handleViewYaml = async (secret: Secret) => {
@@ -210,15 +232,7 @@ stringData:
         icon={Lock}
         columns={columns}
         actions={actions}
-        fetchFn={async (clusterId, namespace) => {
-          if (namespace) setSelectedNamespace(namespace);
-          setSelectedClusterId(clusterId);
-          const result = await secretApi.getSecrets(clusterId, namespace!);
-          return {
-            data: result.data as unknown as Secret[],
-            error: result.error,
-          };
-        }}
+        fetchPageFn={fetchSecretsPage}
         deleteFn={async (clusterId, namespace, name) => {
           return await secretApi.deleteSecret(clusterId, namespace, name);
         }}

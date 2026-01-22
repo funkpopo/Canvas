@@ -310,8 +310,10 @@ def get_node_details(cluster: Cluster, node_name: str) -> Optional[Dict[str, Any
 def get_cluster_events(
     cluster: Cluster,
     namespace: Optional[str] = None,
-    limit: int = 200,
+    limit: int = 100,
     continue_token: Optional[str] = None,
+    label_selector: Optional[str] = None,
+    field_selector: Optional[str] = None,
 ) -> Dict[str, Any]:
     """分页获取集群或命名空间的事件（使用K8s API limit/_continue）"""
     with KubernetesClientContext(cluster) as client_instance:
@@ -322,9 +324,20 @@ def get_cluster_events(
             core_v1 = client.CoreV1Api(client_instance)
 
             if namespace:
-                event_list = core_v1.list_namespaced_event(namespace, limit=limit, _continue=continue_token)
+                event_list = core_v1.list_namespaced_event(
+                    namespace,
+                    limit=limit,
+                    _continue=continue_token,
+                    label_selector=label_selector,
+                    field_selector=field_selector,
+                )
             else:
-                event_list = core_v1.list_event_for_all_namespaces(limit=limit, _continue=continue_token)
+                event_list = core_v1.list_event_for_all_namespaces(
+                    limit=limit,
+                    _continue=continue_token,
+                    label_selector=label_selector,
+                    field_selector=field_selector,
+                )
 
             next_token = getattr(getattr(event_list, "metadata", None), "_continue", None)
 

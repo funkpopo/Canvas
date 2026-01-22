@@ -22,6 +22,7 @@ import {
   NamespaceColumn,
   ClusterColumn,
   AgeColumn,
+  ApiResponse,
 } from "@/components/ResourceList";
 import { deploymentApi } from "@/lib/api";
 import { canManageResources } from "@/lib/utils";
@@ -64,6 +65,25 @@ function getStatusBadgeClass(status: string): string {
     default:
       return "bg-gray-500";
   }
+}
+
+// 分页 fetch（用于 ResourceList 无限加载）
+async function fetchDeploymentsPage(
+  clusterId: number,
+  namespace: string | undefined,
+  continueToken: string | null,
+  limit: number
+): Promise<ApiResponse<{ items: Deployment[]; continue_token: string | null }>> {
+  const result = await deploymentApi.getDeploymentsPage(clusterId, namespace, limit, continueToken);
+  if (result.data) {
+    return {
+      data: {
+        items: result.data.items as unknown as Deployment[],
+        continue_token: result.data.continue_token ?? null,
+      },
+    };
+  }
+  return { error: result.error };
 }
 
 // ============ 页面组件 ============
@@ -169,13 +189,7 @@ export default function DeploymentsPage() {
         icon={Activity}
         columns={columns}
         actions={actions}
-        fetchFn={async (clusterId, namespace) => {
-          const result = await deploymentApi.getDeployments(clusterId, namespace);
-          return {
-            data: result.data as unknown as Deployment[],
-            error: result.error,
-          };
-        }}
+        fetchPageFn={fetchDeploymentsPage}
         deleteFn={async (clusterId, namespace, name) => {
           return await deploymentApi.deleteDeployment(clusterId, namespace, name);
         }}

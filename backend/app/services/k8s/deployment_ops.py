@@ -34,6 +34,47 @@ def _invalidate_deployment_related_caches(cluster: Cluster, namespace: str) -> N
     invalidate_cache(f"k8s:nodes:cluster:{cluster.id}:ns:_all*")
 
 
+def _deployment_to_info(deployment: client.V1Deployment) -> Dict[str, Any]:
+    """把 K8s Deployment 对象转换成前端列表需要的精简结构。"""
+    # 获取部署状态
+    replicas = deployment.spec.replicas or 0
+    ready_replicas = deployment.status.ready_replicas or 0
+    available_replicas = deployment.status.available_replicas or 0
+    updated_replicas = deployment.status.updated_replicas or 0
+
+    # 计算部署状态
+    status = "Unknown"
+    if deployment.status.conditions:
+        for condition in deployment.status.conditions:
+            if condition.type == "Available":
+                status = "Available" if condition.status == "True" else "Unavailable"
+                break
+            if condition.type == "Progressing":
+                status = "Progressing" if condition.status == "True" else "Failed"
+
+    # 获取镜像列表
+    images: List[str] = []
+    if deployment.spec.template.spec.containers:
+        for container in deployment.spec.template.spec.containers:
+            images.append(container.image)
+
+    # 计算部署年龄
+    age = calculate_age(deployment.metadata.creation_timestamp)
+
+    return {
+        "name": deployment.metadata.name,
+        "namespace": deployment.metadata.namespace,
+        "replicas": replicas,
+        "ready_replicas": ready_replicas,
+        "available_replicas": available_replicas,
+        "updated_replicas": updated_replicas,
+        "age": age,
+        "images": images,
+        "labels": dict(deployment.metadata.labels) if deployment.metadata.labels else {},
+        "status": status,
+    }
+
+
 def get_namespace_deployments(cluster: Cluster, namespace_name: str) -> List[Dict[str, Any]]:
     """获取命名空间中的部署"""
     with KubernetesClientContext(cluster) as client_instance:
@@ -44,52 +85,52 @@ def get_namespace_deployments(cluster: Cluster, namespace_name: str) -> List[Dic
             apps_v1 = client.AppsV1Api(client_instance)
             deployments = apps_v1.list_namespaced_deployment(namespace_name)
 
-            deployment_list = []
-            for deployment in deployments.items:
-                # 获取部署状态
-                replicas = deployment.spec.replicas or 0
-                ready_replicas = deployment.status.ready_replicas or 0
-                available_replicas = deployment.status.available_replicas or 0
-                updated_replicas = deployment.status.updated_replicas or 0
-
-                # 计算部署状态
-                status = "Unknown"
-                if deployment.status.conditions:
-                    for condition in deployment.status.conditions:
-                        if condition.type == "Available":
-                            status = "Available" if condition.status == "True" else "Unavailable"
-                            break
-                        if condition.type == "Progressing":
-                            status = "Progressing" if condition.status == "True" else "Failed"
-
-                # 获取镜像列表
-                images = []
-                if deployment.spec.template.spec.containers:
-                    for container in deployment.spec.template.spec.containers:
-                        images.append(container.image)
-
-                # 计算部署年龄
-                age = calculate_age(deployment.metadata.creation_timestamp)
-
-                deployment_info = {
-                    "name": deployment.metadata.name,
-                    "namespace": deployment.metadata.namespace,
-                    "replicas": replicas,
-                    "ready_replicas": ready_replicas,
-                    "available_replicas": available_replicas,
-                    "updated_replicas": updated_replicas,
-                    "age": age,
-                    "images": images,
-                    "labels": dict(deployment.metadata.labels) if deployment.metadata.labels else {},
-                    "status": status,
-                }
-                deployment_list.append(deployment_info)
-
-            return deployment_list
+            return [_deployment_to_info(dep) for dep in deployments.items or []]
 
         except Exception as e:
             logger.exception("获取命名空间部署失败: %s", e)
             return []
+
+
+def get_deployments_page(
+    cluster: Cluster,
+    namespace: Optional[str] = None,
+    limit: int = 100,
+    continue_token: Optional[str] = None,
+    label_selector: Optional[str] = None,
+    field_selector: Optional[str] = None,
+) -> Dict[str, Any]:
+    """分页获取 Deployment 列表（使用 K8s API limit/_continue）。"""
+    with KubernetesClientContext(cluster) as client_instance:
+        if not client_instance:
+            return {"items": [], "continue_token": None}
+
+        try:
+            apps_v1 = client.AppsV1Api(client_instance)
+
+            if namespace:
+                deployments = apps_v1.list_namespaced_deployment(
+                    namespace,
+                    limit=limit,
+                    _continue=continue_token,
+                    label_selector=label_selector,
+                    field_selector=field_selector,
+                )
+            else:
+                deployments = apps_v1.list_deployment_for_all_namespaces(
+                    limit=limit,
+                    _continue=continue_token,
+                    label_selector=label_selector,
+                    field_selector=field_selector,
+                )
+
+            next_token = getattr(getattr(deployments, "metadata", None), "_continue", None)
+            items = [_deployment_to_info(dep) for dep in deployments.items or []]
+            return {"items": items, "continue_token": next_token}
+
+        except Exception as e:
+            logger.exception("分页获取部署失败: %s", e)
+            return {"items": [], "continue_token": None}
 
 
 def get_deployment_details(cluster: Cluster, namespace: str, deployment_name: str) -> Optional[Dict[str, Any]]:

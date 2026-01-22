@@ -27,6 +27,21 @@ export const secretApi = {
     return apiClient.get<Secret[]>(`/secrets/${query}`);
   },
 
+  async getSecretsPage(
+    clusterId: number,
+    namespace: string | undefined,
+    limit: number,
+    continueToken: string | null
+  ): Promise<ApiResponse<{ items: Secret[]; continue_token: string | null }>> {
+    const params = new URLSearchParams();
+    params.append("cluster_id", clusterId.toString());
+    if (namespace) params.append("namespace", namespace);
+    params.append("limit", limit.toString());
+    if (continueToken) params.append("continue_token", continueToken);
+    const query = params.toString() ? `?${params.toString()}` : "";
+    return apiClient.get<{ items: Secret[]; continue_token: string | null }>(`/secrets/page${query}`);
+  },
+
   async getSecret(clusterId: number, namespace: string, secretName: string): Promise<ApiResponse<SecretDetails>> {
     return apiClient.get<SecretDetails>(`/secrets/${namespace}/${secretName}?cluster_id=${clusterId}`);
   },

@@ -93,13 +93,21 @@ def get_pods_info(cluster: Cluster, namespace: Optional[str] = None) -> List[Dic
 def get_pods_page(
     cluster: Cluster,
     namespace: Optional[str] = None,
-    limit: int = 200,
+    limit: int = 100,
     continue_token: Optional[str] = None,
+    label_selector: Optional[str] = None,
+    field_selector: Optional[str] = None,
 ) -> Dict[str, Any]:
     """分页获取Pod信息（使用K8s API limit/_continue）"""
     ns_key = namespace or "_all"
     cont_key = continue_token or "none"
-    cache_key = f"k8s:pods:cluster:{cluster.id}:ns:{ns_key}:limit:{limit}:continue:{cont_key}"
+    # selector 也纳入缓存 key，避免不同筛选条件互相污染
+    label_key = label_selector or "none"
+    field_key = field_selector or "none"
+    cache_key = (
+        f"k8s:pods:cluster:{cluster.id}:ns:{ns_key}:"
+        f"limit:{limit}:continue:{cont_key}:label:{label_key}:field:{field_key}"
+    )
     cached = cache_manager.get(cache_key)
     if cached is not None:
         return cached
@@ -112,9 +120,20 @@ def get_pods_page(
             core_v1 = client.CoreV1Api(client_instance)
 
             if namespace:
-                pods = core_v1.list_namespaced_pod(namespace, limit=limit, _continue=continue_token)
+                pods = core_v1.list_namespaced_pod(
+                    namespace,
+                    limit=limit,
+                    _continue=continue_token,
+                    label_selector=label_selector,
+                    field_selector=field_selector,
+                )
             else:
-                pods = core_v1.list_pod_for_all_namespaces(limit=limit, _continue=continue_token)
+                pods = core_v1.list_pod_for_all_namespaces(
+                    limit=limit,
+                    _continue=continue_token,
+                    label_selector=label_selector,
+                    field_selector=field_selector,
+                )
 
             next_token = getattr(getattr(pods, "metadata", None), "_continue", None)
 

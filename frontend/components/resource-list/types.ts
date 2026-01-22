@@ -106,7 +106,8 @@ export interface ResourceListProps<T extends BaseResource> {
   fetchPageFn?: (
     clusterId: number,
     namespace: string | undefined,
-    continueToken: string | null
+    continueToken: string | null,
+    limit: number
   ) => Promise<ApiResponse<{ items: T[]; continue_token: string | null }>>;
   /** 分页大小（仅在 fetchPageFn 存在时生效） */
   pageSize?: number;
