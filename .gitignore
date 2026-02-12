@@ -21,8 +21,6 @@ backend/*.out
 backend/*.test
 backend/bin/
 backend/.coverprofile
-go.mod
-go.sum
 
 # Node.js / Frontend
 frontend/node_modules/
