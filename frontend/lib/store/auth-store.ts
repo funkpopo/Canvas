@@ -3,6 +3,7 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { authApi } from "@/lib/api";
+import { useClusterStore } from "@/lib/store/cluster-store";
 
 export interface UserInfo {
   id: number;
@@ -23,11 +24,12 @@ interface AuthState {
 interface AuthActions {
   verify: () => Promise<void>;
   login: (token: string, refreshToken?: string | null) => Promise<void>;
-  logout: () => void;
+  logout: (opts?: { revokeServerSession?: boolean }) => Promise<void>;
   setToken: (token: string | null) => void;
   setRefreshToken: (refreshToken: string | null) => void;
   refreshAccessToken: () => Promise<string | null>;
   getValidAccessToken: (opts?: { skewSeconds?: number }) => Promise<string | null>;
+  _clearClientSession: () => void;
 }
 
 function decodeJwtPayload(token: string): any | null {
@@ -78,6 +80,26 @@ export const useAuthStore = create<AuthState & AuthActions>()(
         set({ refreshToken });
       },
 
+      _clearClientSession: () => {
+        localStorage.removeItem("token");
+        localStorage.removeItem("refresh_token");
+        localStorage.removeItem("canvas_auth");
+        localStorage.removeItem("canvas_cluster");
+
+        useClusterStore.setState({
+          clusters: [],
+          activeClusterId: null,
+          isLoading: false,
+          wsConnected: false,
+          wsConnecting: false,
+          wsPolling: false,
+          wsError: null,
+          resourceUpdates: [],
+        });
+
+        set({ token: null, refreshToken: null, user: null, isAuthenticated: false, isLoading: false });
+      },
+
       refreshAccessToken: async () => {
         const refreshToken = get().refreshToken ?? localStorage.getItem("refresh_token");
         if (!refreshToken) return null;
@@ -88,7 +110,7 @@ export const useAuthStore = create<AuthState & AuthActions>()(
           return resp.data.access_token;
         }
         // refresh 失败：清理本地态，要求重新登录
-        get().logout();
+        void get().logout({ revokeServerSession: false });
         return null;
       },
 
@@ -98,7 +120,7 @@ export const useAuthStore = create<AuthState & AuthActions>()(
         if (!token) return null;
         if (!isJwtExpired(token, skewSeconds)) return token;
         const refreshed = await get().refreshAccessToken();
-        if (!refreshed) get().logout();
+        if (!refreshed) void get().logout({ revokeServerSession: false });
         return refreshed;
       },
 
@@ -121,7 +143,7 @@ export const useAuthStore = create<AuthState & AuthActions>()(
           if (refreshToken && isJwtExpired(token, 30)) {
             const refreshed = await get().refreshAccessToken();
             if (!refreshed) {
-              set({ token: null, refreshToken: null, user: null, isAuthenticated: false });
+              get()._clearClientSession();
               return;
             }
           }
@@ -148,14 +170,10 @@ export const useAuthStore = create<AuthState & AuthActions>()(
               },
             });
           } else {
-            localStorage.removeItem("token");
-            localStorage.removeItem("refresh_token");
-            set({ token: null, refreshToken: null, user: null, isAuthenticated: false });
+            get()._clearClientSession();
           }
         } catch {
-          localStorage.removeItem("token");
-          localStorage.removeItem("refresh_token");
-          set({ token: null, refreshToken: null, user: null, isAuthenticated: false });
+          get()._clearClientSession();
         } finally {
           set({ isLoading: false });
         }
@@ -167,10 +185,20 @@ export const useAuthStore = create<AuthState & AuthActions>()(
         await get().verify();
       },
 
-      logout: () => {
-        localStorage.removeItem("token");
-        localStorage.removeItem("refresh_token");
-        set({ token: null, refreshToken: null, user: null, isAuthenticated: false, isLoading: false });
+      logout: async (opts) => {
+        const shouldRevoke = opts?.revokeServerSession ?? true;
+        const token = get().token ?? localStorage.getItem("token");
+        const refreshToken = get().refreshToken ?? localStorage.getItem("refresh_token");
+
+        if (shouldRevoke && token && refreshToken) {
+          try {
+            await authApi.logout(refreshToken);
+          } catch {
+            // 服务端撤销失败不应阻塞本地退出
+          }
+        }
+
+        get()._clearClientSession();
       },
     }),
     {
@@ -180,5 +208,3 @@ export const useAuthStore = create<AuthState & AuthActions>()(
     }
   )
 );
-
-

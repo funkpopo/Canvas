@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"canvas/backend/internal/models"
 	"github.com/go-chi/chi/v5"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -101,6 +103,93 @@ func (h *PodHandler) Get(w http.ResponseWriter, r *http.Request) {
 	events, _ := clientset.CoreV1().Events(namespace).List(ctx, metav1.ListOptions{FieldSelector: "involvedObject.name=" + podName})
 
 	response.Success(w, r, http.StatusOK, mapPodDetails(*pod, events, cluster.ID, cluster.Name))
+}
+
+func (h *PodHandler) Logs(w http.ResponseWriter, r *http.Request) {
+	namespace := strings.TrimSpace(chi.URLParam(r, "namespace"))
+	podName := strings.TrimSpace(chi.URLParam(r, "podName"))
+	if namespace == "" || podName == "" {
+		response.Error(w, r, http.StatusBadRequest, "namespace and pod name are required")
+		return
+	}
+
+	_, _, clientset, err := h.Resolver.ResolveClient(r)
+	if err != nil {
+		response.Error(w, r, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	containerName := strings.TrimSpace(r.URL.Query().Get("container"))
+	tailLinesRaw := strings.TrimSpace(r.URL.Query().Get("tail_lines"))
+	previousRaw := strings.TrimSpace(r.URL.Query().Get("previous"))
+
+	var tailLines *int64
+	if tailLinesRaw != "" {
+		parsed, err := strconv.ParseInt(tailLinesRaw, 10, 64)
+		if err != nil || parsed <= 0 {
+			response.Error(w, r, http.StatusBadRequest, "tail_lines must be a positive integer")
+			return
+		}
+		tailLines = &parsed
+	}
+
+	var previous bool
+	if previousRaw != "" {
+		parsed, err := strconv.ParseBool(previousRaw)
+		if err != nil {
+			response.Error(w, r, http.StatusBadRequest, "previous must be true or false")
+			return
+		}
+		previous = parsed
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
+	defer cancel()
+
+	// 未显式指定容器时，默认选择第一个容器，避免多容器 Pod 返回 400。
+	if containerName == "" {
+		pod, err := clientset.CoreV1().Pods(namespace).Get(ctx, podName, metav1.GetOptions{})
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				response.Error(w, r, http.StatusNotFound, "pod not found")
+				return
+			}
+			response.Error(w, r, http.StatusBadGateway, err.Error())
+			return
+		}
+		if len(pod.Spec.Containers) > 0 {
+			containerName = pod.Spec.Containers[0].Name
+		}
+	}
+
+	req := clientset.CoreV1().Pods(namespace).GetLogs(podName, &corev1.PodLogOptions{
+		Container: containerName,
+		TailLines: tailLines,
+		Previous:  previous,
+	})
+	stream, err := req.Stream(ctx)
+	if err != nil {
+		switch {
+		case apierrors.IsNotFound(err):
+			response.Error(w, r, http.StatusNotFound, "pod logs not found")
+		case apierrors.IsForbidden(err):
+			response.Error(w, r, http.StatusForbidden, "permission denied to read pod logs")
+		default:
+			response.Error(w, r, http.StatusBadGateway, err.Error())
+		}
+		return
+	}
+	defer stream.Close()
+
+	content, err := io.ReadAll(stream)
+	if err != nil {
+		response.Error(w, r, http.StatusBadGateway, "failed to read log stream")
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(content)
 }
 
 func (h *PodHandler) Delete(w http.ResponseWriter, r *http.Request) {

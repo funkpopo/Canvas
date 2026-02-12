@@ -25,14 +25,14 @@ export default function LoginPage() {
   const [regPassword, setRegPassword] = useState("");
   const [regPassword2, setRegPassword2] = useState("");
   const router = useRouter();
-  const { login, isAuthenticated } = useAuth();
+  const { login, isAuthenticated, isLoading: authLoading } = useAuth();
 
   // 如果已认证，重定向到首页
   useEffect(() => {
-    if (isAuthenticated) {
+    if (!authLoading && isAuthenticated) {
       router.push("/");
     }
-  }, [isAuthenticated, router]);
+  }, [authLoading, isAuthenticated, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,7 +43,7 @@ export default function LoginPage() {
       const result = await loginApi.login(username, password);
 
       if (result.data) {
-        login(result.data.access_token, result.data.refresh_token ?? null);
+        await login(result.data.access_token, result.data.refresh_token ?? null);
         router.push("/");
       } else {
         setError(result.error || "登录失败");

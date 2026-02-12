@@ -27,8 +27,9 @@ export const namespaceApi = {
     return apiClient.get<Namespace[]>(`/namespaces${params}`);
   },
 
-  async getNamespace(clusterId: number, namespace: string): Promise<ApiResponse<Namespace>> {
-    return apiClient.get<Namespace>(`/namespaces/${namespace}?cluster_id=${clusterId}`);
+  async getNamespace(clusterId: number | undefined, namespace: string): Promise<ApiResponse<Namespace>> {
+    const params = clusterId ? `?cluster_id=${clusterId}` : "";
+    return apiClient.get<Namespace>(`/namespaces/${namespace}${params}`);
   },
 
   async createNamespace(
@@ -42,20 +43,24 @@ export const namespaceApi = {
     return apiClient.delete<null>(`/namespaces/${namespace}?cluster_id=${clusterId}`);
   },
 
-  async getNamespaceResources(clusterId: number, namespace: string): Promise<ApiResponse<NamespaceResources>> {
-    return apiClient.get<NamespaceResources>(`/namespaces/${namespace}/resources?cluster_id=${clusterId}`);
+  async getNamespaceResources(clusterId: number | undefined, namespace: string): Promise<ApiResponse<NamespaceResources>> {
+    const params = clusterId ? `?cluster_id=${clusterId}` : "";
+    return apiClient.get<NamespaceResources>(`/namespaces/${namespace}/resources${params}`);
   },
 
-  async getNamespaceDeployments(clusterId: number, namespace: string): Promise<ApiResponse<any[]>> {
-    return apiClient.get<any[]>(`/namespaces/${namespace}/deployments?cluster_id=${clusterId}`);
+  async getNamespaceDeployments(clusterId: number | undefined, namespace: string): Promise<ApiResponse<any[]>> {
+    const params = clusterId ? `?cluster_id=${clusterId}` : "";
+    return apiClient.get<any[]>(`/namespaces/${namespace}/deployments${params}`);
   },
 
-  async getNamespaceServices(clusterId: number, namespace: string): Promise<ApiResponse<any[]>> {
-    return apiClient.get<any[]>(`/namespaces/${namespace}/services?cluster_id=${clusterId}`);
+  async getNamespaceServices(clusterId: number | undefined, namespace: string): Promise<ApiResponse<any[]>> {
+    const params = clusterId ? `?cluster_id=${clusterId}` : "";
+    return apiClient.get<any[]>(`/namespaces/${namespace}/services${params}`);
   },
 
-  async getNamespaceCrds(clusterId: number, namespace: string): Promise<ApiResponse<any[]>> {
-    return apiClient.get<any[]>(`/namespaces/${namespace}/crds?cluster_id=${clusterId}`);
+  async getNamespaceCrds(clusterId: number | undefined, namespace: string): Promise<ApiResponse<any[]>> {
+    const params = clusterId ? `?cluster_id=${clusterId}` : "";
+    return apiClient.get<any[]>(`/namespaces/${namespace}/crds${params}`);
   },
 };
 

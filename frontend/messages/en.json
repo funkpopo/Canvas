@@ -257,8 +257,10 @@
     "logout": "Logout",
     "connected": "Connected",
     "connecting": "Connecting",
+    "polling": "Polling (degraded)",
     "connectionError": "Connection Error",
     "disconnected": "Disconnected",
+    "reconnectNow": "Reconnect now",
     "manageResources": "Manage Kubernetes cluster resources"
   },
   "auth": {

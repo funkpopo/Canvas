@@ -56,7 +56,7 @@ export default function Home() {
   const [isLoadingMetrics, setIsLoadingMetrics] = useState(false);
   const router = useRouter();
   const { isAuthenticated, isLoading, logout } = useAuth();
-  const { wsConnected, wsConnecting, wsError, activeCluster } = useCluster();
+  const { wsConnected, wsConnecting, wsPolling, wsError, reconnectWebSocket, activeCluster } = useCluster();
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -160,15 +160,30 @@ export default function Home() {
                   <Wifi className="h-4 w-4 text-green-500" />
                 ) : wsConnecting ? (
                   <Loader2 className="h-4 w-4 animate-spin text-yellow-500" />
+                ) : wsPolling ? (
+                  <WifiOff className="h-4 w-4 text-amber-500" />
                 ) : wsError ? (
                   <AlertTriangle className="h-4 w-4 text-red-500" />
                 ) : (
                   <WifiOff className="h-4 w-4 text-gray-500" />
                 )}
                 <span className="text-sm text-muted-foreground">
-                  {wsConnected ? t("connected") : wsConnecting ? t("connecting") : wsError ? t("connectionError") : t("disconnected")}
+                  {wsConnected
+                    ? t("connected")
+                    : wsConnecting
+                    ? t("connecting")
+                    : wsPolling
+                    ? t("polling")
+                    : wsError
+                    ? t("connectionError")
+                    : t("disconnected")}
                 </span>
               </div>
+              {(wsPolling || wsError) && !wsConnecting && (
+                <Button variant="outline" size="sm" onClick={reconnectWebSocket}>
+                  {t("reconnectNow")}
+                </Button>
+              )}
               <LanguageToggle />
               <ThemeToggle />
               <Button variant="outline" asChild>

@@ -257,8 +257,10 @@
     "logout": "登出",
     "connected": "已连接",
     "connecting": "连接中",
+    "polling": "轮询模式（降级）",
     "connectionError": "连接错误",
     "disconnected": "未连接",
+    "reconnectNow": "立即重连",
     "manageResources": "管理Kubernetes集群资源"
   },
   "auth": {

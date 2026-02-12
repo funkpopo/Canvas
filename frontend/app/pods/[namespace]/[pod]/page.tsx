@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { useEffect, useMemo, useState, use } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import dynamic from "next/dynamic";
@@ -13,6 +13,8 @@ import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { LanguageToggle } from "@/components/ui/language-toggle";
 import ClusterSelector from "@/components/ClusterSelector";
 import { useAuth } from "@/lib/auth-context";
+import { useCluster } from "@/lib/cluster-context";
+import { resolveClusterContext } from "@/lib/cluster-context-resolver";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { podApi } from "@/lib/api";
@@ -89,7 +91,16 @@ export default function PodDetailsPage({ params }: { params: Promise<{ namespace
   });
   const router = useRouter();
   const searchParams = useSearchParams();
-  const clusterId = searchParams.get('cluster_id');
+  const { activeCluster } = useCluster();
+  const clusterContext = useMemo(
+    () =>
+      resolveClusterContext({
+        clusterIdFromUrl: searchParams.get("cluster_id"),
+        activeClusterId: activeCluster?.id ?? null,
+      }),
+    [searchParams, activeCluster?.id]
+  );
+  const effectiveClusterId = clusterContext.clusterId;
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -99,52 +110,16 @@ export default function PodDetailsPage({ params }: { params: Promise<{ namespace
   }, [isAuthenticated, authLoading, router]);
 
   useEffect(() => {
-    if (isAuthenticated && clusterId) {
+    if (isAuthenticated) {
       fetchPodDetails();
       fetchMetrics();
     }
-  }, [isAuthenticated, clusterId, timeRange, resolvedParams.namespace, resolvedParams.pod]);
-
-  // 如果没有clusterId，显示错误信息
-  if (!clusterId) {
-    return (
-      <div className="min-h-screen bg-background">
-        <header className="bg-card shadow-sm border-b">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center h-16">
-              <div className="flex items-center">
-                <Link href="/pods" className="flex items-center">
-                  <ArrowLeft className="h-5 w-5 mr-2" />
-                  <span className="text-gray-600 dark:text-gray-400">返回Pod列表</span>
-                </Link>
-              </div>
-            </div>
-          </div>
-        </header>
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <Card>
-            <CardContent className="flex flex-col items-center justify-center py-12">
-              <AlertCircle className="h-12 w-12 text-red-400 mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                缺少集群信息
-              </h3>
-              <p className="text-gray-600 dark:text-gray-400 mb-4">
-                无法获取Pod详情：缺少集群ID参数
-              </p>
-              <Link href="/pods">
-                <Button>返回Pod列表</Button>
-              </Link>
-            </CardContent>
-          </Card>
-        </main>
-      </div>
-    );
-  }
+  }, [isAuthenticated, effectiveClusterId, timeRange, resolvedParams.namespace, resolvedParams.pod]);
 
   const fetchPodDetails = async () => {
     try {
       const result = await podApi.getPod(
-        parseInt(clusterId!),
+        effectiveClusterId ?? undefined,
         resolvedParams.namespace,
         resolvedParams.pod
       );
@@ -208,11 +183,12 @@ export default function PodDetailsPage({ params }: { params: Promise<{ namespace
   };
 
   const performDeletePod = async () => {
-    if (!podDetails || !clusterId) return;
+    if (!podDetails) return;
+    const clusterForRequest = effectiveClusterId ?? podDetails.cluster_id;
 
     try {
       const result = await podApi.deletePod(
-        parseInt(clusterId),
+        clusterForRequest,
         podDetails.namespace,
         podDetails.name
       );

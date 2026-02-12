@@ -6,7 +6,6 @@ import { Activity, FileText, Square, Wifi, WifiOff } from "lucide-react";
 import { useCluster } from "@/lib/cluster-context";
 import AuthGuard from "@/components/AuthGuard";
 import { toast } from "sonner";
-import { useResourceUpdates } from "@/hooks/useWebSocket";
 import { useTranslations } from "@/hooks/use-translations";
 import { podApi, Pod } from "@/lib/api";
 import {
@@ -59,17 +58,17 @@ async function fetchPodsPage(
 
 function PodsPageContent() {
   const t = useTranslations("pods");
-  const { wsConnected, activeCluster } = useCluster();
+  const { wsConnected, activeCluster, resourceUpdates: podUpdates } = useCluster();
   const [refreshKey, setRefreshKey] = useState(0);
-
-  // WebSocket实时更新
-  const { updates: podUpdates } = useResourceUpdates("pods");
 
   // 监听WebSocket Pod更新
   useEffect(() => {
     if (podUpdates.length > 0) {
       const latestUpdate = podUpdates[podUpdates.length - 1];
       const updateData = latestUpdate.data;
+      if (updateData?.resource_type && updateData.resource_type !== "pods") {
+        return;
+      }
 
       // 检查更新是否属于当前集群
       if (activeCluster && updateData.cluster_id === activeCluster.id) {
@@ -128,10 +127,11 @@ function PodsPageContent() {
     {
       key: "logs",
       icon: FileText,
-      tooltip: "查看日志",
+      tooltip: "查看日志（新窗口）",
       onClick: (item) => {
         const logsUrl = `/pods/${item.namespace}/${item.name}/logs?cluster_id=${item.cluster_id}`;
         window.open(logsUrl, "_blank", "width=800,height=600");
+        toast.info("已在新窗口打开 Pod 日志");
       },
     },
     {

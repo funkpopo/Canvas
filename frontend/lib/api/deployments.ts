@@ -2,6 +2,9 @@ import { apiClient, type ApiResponse } from "./client";
 import type { Pod } from "./pods";
 import type { Service } from "./services";
 
+const clusterQuery = (clusterId: number | undefined | null): string =>
+  clusterId ? `?cluster_id=${clusterId}` : "";
+
 // ===== Deployment 相关类型定义 =====
 export interface Deployment {
   name: string;
@@ -64,86 +67,86 @@ export const deploymentApi = {
     return apiClient.get<{ items: Deployment[]; continue_token: string | null }>(`/deployments/page${query}`);
   },
 
-  async getDeployment(clusterId: number, namespace: string, deploymentName: string): Promise<ApiResponse<DeploymentDetails>> {
-    return apiClient.get<DeploymentDetails>(`/deployments/${namespace}/${deploymentName}?cluster_id=${clusterId}`);
+  async getDeployment(clusterId: number | undefined, namespace: string, deploymentName: string): Promise<ApiResponse<DeploymentDetails>> {
+    return apiClient.get<DeploymentDetails>(`/deployments/${namespace}/${deploymentName}${clusterQuery(clusterId)}`);
   },
 
-  async getDeploymentPods(clusterId: number, namespace: string, deploymentName: string): Promise<ApiResponse<Pod[]>> {
-    return apiClient.get<Pod[]>(`/deployments/${namespace}/${deploymentName}/pods?cluster_id=${clusterId}`);
+  async getDeploymentPods(clusterId: number | undefined, namespace: string, deploymentName: string): Promise<ApiResponse<Pod[]>> {
+    return apiClient.get<Pod[]>(`/deployments/${namespace}/${deploymentName}/pods${clusterQuery(clusterId)}`);
   },
 
-  async scaleDeployment(clusterId: number, namespace: string, deploymentName: string, replicas: number): Promise<ApiResponse<any>> {
-    return apiClient.post<any>(`/deployments/${namespace}/${deploymentName}/scale?cluster_id=${clusterId}`, { replicas });
+  async scaleDeployment(clusterId: number | undefined, namespace: string, deploymentName: string, replicas: number): Promise<ApiResponse<any>> {
+    return apiClient.post<any>(`/deployments/${namespace}/${deploymentName}/scale${clusterQuery(clusterId)}`, { replicas });
   },
 
-  async restartDeployment(clusterId: number, namespace: string, deploymentName: string): Promise<ApiResponse<any>> {
-    return apiClient.post<any>(`/deployments/${namespace}/${deploymentName}/restart?cluster_id=${clusterId}`, {});
+  async restartDeployment(clusterId: number | undefined, namespace: string, deploymentName: string): Promise<ApiResponse<any>> {
+    return apiClient.post<any>(`/deployments/${namespace}/${deploymentName}/restart${clusterQuery(clusterId)}`, {});
   },
 
-  async deleteDeployment(clusterId: number, namespace: string, deploymentName: string): Promise<ApiResponse<null>> {
-    return apiClient.delete<null>(`/deployments/${namespace}/${deploymentName}?cluster_id=${clusterId}`);
+  async deleteDeployment(clusterId: number | undefined, namespace: string, deploymentName: string): Promise<ApiResponse<null>> {
+    return apiClient.delete<null>(`/deployments/${namespace}/${deploymentName}${clusterQuery(clusterId)}`);
   },
 
   async getDeploymentYaml(
-    clusterId: number,
+    clusterId: number | undefined,
     namespace: string,
     deploymentName: string
   ): Promise<ApiResponse<{ yaml: string }>> {
-    return apiClient.get<{ yaml: string }>(`/deployments/${namespace}/${deploymentName}/yaml?cluster_id=${clusterId}`);
+    return apiClient.get<{ yaml: string }>(`/deployments/${namespace}/${deploymentName}/yaml${clusterQuery(clusterId)}`);
   },
 
   async updateDeploymentYaml(
-    clusterId: number,
+    clusterId: number | undefined,
     namespace: string,
     deploymentName: string,
     yaml: string
   ): Promise<ApiResponse<any>> {
-    return apiClient.put<any>(`/deployments/${namespace}/${deploymentName}/yaml?cluster_id=${clusterId}`, { yaml_content: yaml });
+    return apiClient.put<any>(`/deployments/${namespace}/${deploymentName}/yaml${clusterQuery(clusterId)}`, { yaml_content: yaml });
   },
 
   async updateDeployment(
-    clusterId: number,
+    clusterId: number | undefined,
     namespace: string,
     deploymentName: string,
     updates: Record<string, any>
   ): Promise<ApiResponse<any>> {
-    return apiClient.put<any>(`/deployments/${namespace}/${deploymentName}?cluster_id=${clusterId}`, updates);
+    return apiClient.put<any>(`/deployments/${namespace}/${deploymentName}${clusterQuery(clusterId)}`, updates);
   },
 
-  async getDeploymentServices(clusterId: number, namespace: string, deploymentName: string): Promise<ApiResponse<Service[]>> {
-    return apiClient.get<Service[]>(`/deployments/${namespace}/${deploymentName}/services?cluster_id=${clusterId}`);
+  async getDeploymentServices(clusterId: number | undefined, namespace: string, deploymentName: string): Promise<ApiResponse<Service[]>> {
+    return apiClient.get<Service[]>(`/deployments/${namespace}/${deploymentName}/services${clusterQuery(clusterId)}`);
   },
 
   async getDeploymentServiceYaml(
-    clusterId: number,
+    clusterId: number | undefined,
     namespace: string,
     deploymentName: string,
     serviceName: string
   ): Promise<ApiResponse<{ yaml: string }>> {
     return apiClient.get<{ yaml: string }>(
-      `/deployments/${namespace}/${deploymentName}/services/${serviceName}/yaml?cluster_id=${clusterId}`
+      `/deployments/${namespace}/${deploymentName}/services/${serviceName}/yaml${clusterQuery(clusterId)}`
     );
   },
 
   async updateDeploymentServiceYaml(
-    clusterId: number,
+    clusterId: number | undefined,
     namespace: string,
     deploymentName: string,
     serviceName: string,
     yaml: string
   ): Promise<ApiResponse<any>> {
-    return apiClient.put<any>(`/deployments/${namespace}/${deploymentName}/services/${serviceName}/yaml?cluster_id=${clusterId}`, {
+    return apiClient.put<any>(`/deployments/${namespace}/${deploymentName}/services/${serviceName}/yaml${clusterQuery(clusterId)}`, {
       yaml,
     });
   },
 
   async deleteDeploymentService(
-    clusterId: number,
+    clusterId: number | undefined,
     namespace: string,
     deploymentName: string,
     serviceName: string
   ): Promise<ApiResponse<null>> {
-    return apiClient.delete<null>(`/deployments/${namespace}/${deploymentName}/services/${serviceName}?cluster_id=${clusterId}`);
+    return apiClient.delete<null>(`/deployments/${namespace}/${deploymentName}/services/${serviceName}${clusterQuery(clusterId)}`);
   },
 };
 

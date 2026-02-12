@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,8 @@ import { LanguageToggle } from "@/components/ui/language-toggle";
 import ClusterSelector from "@/components/ClusterSelector";
 import { useAuth } from "@/lib/auth-context";
 import { useCluster } from "@/lib/cluster-context";
+import { resolveClusterContext, withClusterId } from "@/lib/cluster-context-resolver";
+import { podApi } from "@/lib/api";
 
 export default function PodLogsPage() {
   const params = useParams();
@@ -19,8 +21,16 @@ export default function PodLogsPage() {
   const router = useRouter();
   const namespace = params.namespace as string;
   const podName = params.pod as string;
-  const clusterId = searchParams.get('cluster_id');
   const { activeCluster } = useCluster();
+  const clusterContext = useMemo(
+    () =>
+      resolveClusterContext({
+        clusterIdFromUrl: searchParams.get("cluster_id"),
+        activeClusterId: activeCluster?.id ?? null,
+      }),
+    [searchParams, activeCluster?.id]
+  );
+  const effectiveClusterId = clusterContext.clusterId;
   const { isAuthenticated, isLoading: authLoading, logout } = useAuth();
 
   const [logs, setLogs] = useState("");
@@ -37,40 +47,32 @@ export default function PodLogsPage() {
   }, [isAuthenticated, authLoading, router]);
 
   useEffect(() => {
-    // 若URL缺少 cluster_id，回退到当前激活集群
-    const effectiveClusterId = clusterId || activeCluster?.id?.toString();
-    if (isAuthenticated && namespace && podName && effectiveClusterId) {
+    if (isAuthenticated && namespace && podName) {
       fetchPodDetails();
     }
-  }, [isAuthenticated, namespace, podName, clusterId, activeCluster]);
+  }, [isAuthenticated, namespace, podName, effectiveClusterId]);
 
   useEffect(() => {
-    const effectiveClusterId = clusterId || activeCluster?.id?.toString();
-    if (isAuthenticated && namespace && podName && effectiveClusterId) {
+    if (isAuthenticated && namespace && podName) {
       fetchLogs();
     }
-  }, [isAuthenticated, namespace, podName, clusterId, activeCluster, selectedContainer, tailLines]);
+  }, [isAuthenticated, namespace, podName, effectiveClusterId, selectedContainer, tailLines]);
 
   const fetchPodDetails = async () => {
     try {
-      const token = localStorage.getItem("token");
-      const effectiveClusterId = clusterId || activeCluster?.id?.toString();
-      const response = await fetch(
-        `http://localhost:8000/api/pods/${namespace}/${podName}?cluster_id=${effectiveClusterId}`,
-        {
-          headers: {
-            "Authorization": `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (response.ok) {
-        const podDetails = await response.json();
-        const containers = (podDetails.containers as Array<{name: string}>)?.map((c) => c.name) || [];
+      const response = await podApi.getPod(effectiveClusterId ?? undefined, namespace, podName);
+      if (response.data) {
+        const containers =
+          (response.data.containers as Array<{ name: string }>)?.map((container) => container.name) || [];
         setAvailableContainers(containers);
         if (containers.length > 0 && !selectedContainer) {
           setSelectedContainer(containers[0]);
         }
+        return;
+      }
+
+      if (response.error) {
+        console.error("获取Pod详情失败:", response.error);
       }
     } catch (error) {
       console.error("获取Pod详情失败:", error);
@@ -80,39 +82,29 @@ export default function PodLogsPage() {
   const fetchLogs = async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem("token");
-      const url = new URL(`http://localhost:8000/api/pods/${namespace}/${podName}/logs`);
-      const effectiveClusterId = clusterId || activeCluster?.id?.toString();
-      if (effectiveClusterId) {
-        url.searchParams.set('cluster_id', effectiveClusterId);
-      }
-      if (selectedContainer && selectedContainer.trim()) {
-        url.searchParams.set('container', selectedContainer.trim());
-      }
-      url.searchParams.set('tail_lines', tailLines.toString());
-
-      const response = await fetch(url.toString(), {
-        headers: {
-          "Authorization": `Bearer ${token}`,
-        },
+      const response = await podApi.getPodLogs({
+        clusterId: effectiveClusterId,
+        namespace,
+        podName,
+        container: selectedContainer || undefined,
+        tailLines,
       });
 
-      if (response.ok) {
-        const logsText = await response.text();
-        setLogs(logsText || "暂无日志内容");
-      } else {
-        let errorMessage = `获取日志失败 (${response.status}): ${response.statusText}`;
-        try {
-          const errorData = await response.json();
-          if (errorData.detail) {
-            errorMessage += ` - ${errorData.detail}`;
-          }
-        } catch {
-          // 忽略JSON解析错误
-        }
-        setLogs(errorMessage);
-        console.error("日志API响应错误:", response.status, response.statusText);
+      if (response.data !== undefined) {
+        setLogs(response.data || "暂无日志内容");
+        return;
       }
+
+      const message = response.error || "未知错误";
+      let hint = "";
+      if (message.includes("not found")) {
+        hint = "。请确认 Pod 存在并且容器名称正确。";
+      } else if (message.includes("permission")) {
+        hint = "。当前账号可能缺少读取日志权限。";
+      } else if (message.includes("no active cluster")) {
+        hint = "。请先在页面顶部选择一个可用集群。";
+      }
+      setLogs(`获取日志失败: ${message}${hint}`);
     } catch (error) {
       console.error("获取日志出错:", error);
       setLogs("获取日志时发生网络错误，请检查网络连接");
@@ -193,7 +185,7 @@ export default function PodLogsPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
-              <Link href={`/pods/${namespace}/${podName}?cluster_id=${clusterId || activeCluster?.id}`} className="flex items-center">
+              <Link href={withClusterId(`/pods/${namespace}/${podName}`, effectiveClusterId)} className="flex items-center">
                 <ArrowLeft className="h-5 w-5 mr-2" />
                 <span className="text-gray-600 dark:text-gray-400">返回Pod详情</span>
               </Link>

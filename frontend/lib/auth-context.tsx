@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuthStore } from "@/lib/store/auth-store";
 
 /**
@@ -26,6 +27,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 export function useAuth() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const isLoading = useAuthStore((s) => s.isLoading);
   const user = useAuthStore((s) => s.user);
@@ -39,10 +41,11 @@ export function useAuth() {
     [loginAction]
   );
 
-  const logout = useCallback(() => {
-    logoutAction();
-    router.push("/login");
-  }, [logoutAction, router]);
+  const logout = useCallback(async () => {
+    await logoutAction();
+    queryClient.clear();
+    router.replace("/login");
+  }, [logoutAction, queryClient, router]);
 
   return useMemo(
     () => ({

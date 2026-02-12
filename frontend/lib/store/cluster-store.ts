@@ -20,6 +20,7 @@ interface ClusterState {
   // WebSocket 相关
   wsConnected: boolean;
   wsConnecting: boolean;
+  wsPolling: boolean;
   wsError: string | null;
   resourceUpdates: any[];
   reconnectWebSocket: () => void;
@@ -31,7 +32,7 @@ interface ClusterActions {
   toggleClusterActive: (clusterId: number) => Promise<boolean>;
 
   // WebSocket bridge setters
-  _setWebSocketState: (s: { connected: boolean; connecting: boolean; error: string | null }) => void;
+  _setWebSocketState: (s: { connected: boolean; connecting: boolean; polling?: boolean; error: string | null }) => void;
   _setResourceUpdates: (updates: any[]) => void;
   _setReconnectWebSocket: (fn: () => void) => void;
 }
@@ -45,6 +46,7 @@ export const useClusterStore = create<ClusterState & ClusterActions>()(
 
       wsConnected: false,
       wsConnecting: false,
+      wsPolling: false,
       wsError: null,
       resourceUpdates: [],
       reconnectWebSocket: () => {},
@@ -109,8 +111,8 @@ export const useClusterStore = create<ClusterState & ClusterActions>()(
         }
       },
 
-      _setWebSocketState: ({ connected, connecting, error }) =>
-        set({ wsConnected: connected, wsConnecting: connecting, wsError: error }),
+      _setWebSocketState: ({ connected, connecting, polling, error }) =>
+        set({ wsConnected: connected, wsConnecting: connecting, wsPolling: !!polling, wsError: error }),
       _setResourceUpdates: (updates) => set({ resourceUpdates: updates }),
       _setReconnectWebSocket: (fn) => set({ reconnectWebSocket: fn }),
     }),

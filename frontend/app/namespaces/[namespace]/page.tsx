@@ -1,17 +1,19 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { useEffect, useMemo, useState, use } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Activity, Loader2, RefreshCw, Users, Settings, FileText, Database, Cpu, MemoryStick, AlertCircle, HardDrive, ExternalLink, Briefcase, Server, LogOut } from "lucide-react";
+import { ArrowLeft, Activity, Loader2, RefreshCw, Users, Settings, FileText, Database, Cpu, MemoryStick, HardDrive, ExternalLink, Briefcase, Server, LogOut } from "lucide-react";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { LanguageToggle } from "@/components/ui/language-toggle";
 import ClusterSelector from "@/components/ClusterSelector";
 import { useAuth } from "@/lib/auth-context";
+import { useCluster } from "@/lib/cluster-context";
+import { resolveClusterContext, withClusterId } from "@/lib/cluster-context-resolver";
 import { toast } from "sonner";
 import { jobApi, Job, namespaceApi, storageApi } from "@/lib/api";
 
@@ -90,7 +92,16 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
   const [activeTab, setActiveTab] = useState("overview");
   const router = useRouter();
   const searchParams = useSearchParams();
-  const clusterId = searchParams.get('cluster_id');
+  const { activeCluster } = useCluster();
+  const clusterContext = useMemo(
+    () =>
+      resolveClusterContext({
+        clusterIdFromUrl: searchParams.get("cluster_id"),
+        activeClusterId: activeCluster?.id ?? null,
+      }),
+    [searchParams, activeCluster?.id]
+  );
+  const effectiveClusterId = clusterContext.clusterId;
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -100,71 +111,10 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
   }, [isAuthenticated, authLoading, router]);
 
   useEffect(() => {
-    if (isAuthenticated && clusterId) {
+    if (isAuthenticated) {
       fetchNamespaceData();
     }
-  }, [isAuthenticated, clusterId, resolvedParams.namespace, activeTab]);
-
-  // 如果没有clusterId，显示错误信息
-  if (!clusterId) {
-    return (
-      <div className="min-h-screen bg-background">
-        {/* Main Header */}
-        <header className="bg-card shadow-sm border-b">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center h-16">
-              <div className="flex items-center">
-                <Server className="h-8 w-8 text-zinc-600" />
-                <h1 className="ml-2 text-xl font-semibold text-gray-900 dark:text-white">
-                  Canvas
-                </h1>
-              </div>
-              <div className="flex items-center space-x-4">
-                <ClusterSelector />
-                <LanguageToggle />
-                <ThemeToggle />
-                <Button variant="outline" onClick={logout}>
-                  <LogOut className="h-4 w-4 mr-2" />
-                  退出登录
-                </Button>
-              </div>
-            </div>
-          </div>
-        </header>
-
-        {/* Sub-header */}
-        <header className="bg-card shadow-sm border-b">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center h-16">
-              <div className="flex items-center">
-                <Link href="/namespaces" className="flex items-center">
-                  <ArrowLeft className="h-5 w-5 mr-2" />
-                  <span className="text-gray-600 dark:text-gray-400">返回命名空间列表</span>
-                </Link>
-              </div>
-            </div>
-          </div>
-        </header>
-
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <Card>
-            <CardContent className="flex flex-col items-center justify-center py-12">
-              <AlertCircle className="h-12 w-12 text-red-400 mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                缺少集群信息
-              </h3>
-              <p className="text-gray-600 dark:text-gray-400 mb-4">
-                无法获取命名空间详情：缺少集群ID参数
-              </p>
-              <Link href="/namespaces">
-                <Button>返回命名空间列表</Button>
-              </Link>
-            </CardContent>
-          </Card>
-        </main>
-      </div>
-    );
-  }
+  }, [isAuthenticated, effectiveClusterId, resolvedParams.namespace, activeTab]);
 
   const fetchNamespaceData = async () => {
     setIsLoading(true);
@@ -172,7 +122,7 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
       if (activeTab === "overview") {
         // 获取资源使用情况
         const result = await namespaceApi.getNamespaceResources(
-          parseInt(clusterId!),
+          effectiveClusterId ?? undefined,
           resolvedParams.namespace
         );
 
@@ -182,7 +132,7 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
       } else if (activeTab === "deployments") {
         // 获取部署
         const result = await namespaceApi.getNamespaceDeployments(
-          parseInt(clusterId!),
+          effectiveClusterId ?? undefined,
           resolvedParams.namespace
         );
 
@@ -192,7 +142,7 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
       } else if (activeTab === "services") {
         // 获取服务
         const result = await namespaceApi.getNamespaceServices(
-          parseInt(clusterId!),
+          effectiveClusterId ?? undefined,
           resolvedParams.namespace
         );
 
@@ -202,7 +152,7 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
       } else if (activeTab === "pvcs") {
         // 获取PVC
         const result = await storageApi.getPersistentVolumeClaims(
-          parseInt(clusterId!),
+          effectiveClusterId ?? undefined,
           resolvedParams.namespace
         );
 
@@ -212,7 +162,7 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
       } else if (activeTab === "crds") {
         // 获取CRD
         const result = await namespaceApi.getNamespaceCrds(
-          parseInt(clusterId!),
+          effectiveClusterId ?? undefined,
           resolvedParams.namespace
         );
 
@@ -221,7 +171,12 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
         }
       } else if (activeTab === "jobs") {
         // 获取Jobs
-        const jobsResponse = await jobApi.getJobs(parseInt(clusterId!), resolvedParams.namespace);
+        if (!effectiveClusterId) {
+          toast.error("未找到可用集群，请先在页面顶部选择集群");
+          setJobs([]);
+          return;
+        }
+        const jobsResponse = await jobApi.getJobs(effectiveClusterId, resolvedParams.namespace);
         if (jobsResponse.data) {
           setJobs(jobsResponse.data);
         } else if (jobsResponse.error) {
@@ -469,7 +424,13 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
             ) : (
               <div className="grid grid-cols-1 gap-4">
                 {deployments.map((deployment) => (
-                  <Link key={deployment.name} href={`/deployments/${resolvedParams.namespace}/${deployment.name}?cluster_id=${clusterId}`}>
+                  <Link
+                    key={deployment.name}
+                    href={withClusterId(
+                      `/deployments/${resolvedParams.namespace}/${deployment.name}`,
+                      effectiveClusterId
+                    )}
+                  >
                     <Card className="cursor-pointer hover:shadow-md transition-shadow">
                       <CardHeader>
                         <div className="flex items-center justify-between">
@@ -761,7 +722,10 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
             ) : (
               <div className="grid grid-cols-1 gap-4">
                 {jobs.map((job) => (
-                  <Link key={job.name} href={`/jobs/${resolvedParams.namespace}/${job.name}?cluster_id=${clusterId}`}>
+                  <Link
+                    key={job.name}
+                    href={withClusterId(`/jobs/${resolvedParams.namespace}/${job.name}`, effectiveClusterId)}
+                  >
                     <Card className="cursor-pointer hover:shadow-md transition-shadow">
                       <CardHeader>
                         <div className="flex items-center justify-between">

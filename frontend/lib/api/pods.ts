@@ -1,4 +1,4 @@
-import { apiClient, type ApiResponse } from "./client";
+import { API_BASE_URL, apiClient, type ApiResponse } from "./client";
 
 // ===== Pod 相关类型定义 =====
 export interface Pod {
@@ -52,12 +52,22 @@ export const podApi = {
     return apiClient.get<{ items: Pod[]; continue_token: string | null }>(`/pods${query}`);
   },
 
-  async getPod(clusterId: number, namespace: string, podName: string): Promise<ApiResponse<PodDetails>> {
-    return apiClient.get<PodDetails>(`/pods/${namespace}/${podName}?cluster_id=${clusterId}`);
+  async getPod(clusterId: number | undefined, namespace: string, podName: string): Promise<ApiResponse<PodDetails>> {
+    const params = new URLSearchParams();
+    if (clusterId) {
+      params.set("cluster_id", String(clusterId));
+    }
+    const query = params.toString() ? `?${params.toString()}` : "";
+    return apiClient.get<PodDetails>(`/pods/${namespace}/${podName}${query}`);
   },
 
-  async deletePod(clusterId: number, namespace: string, podName: string): Promise<ApiResponse<null>> {
-    return apiClient.delete<null>(`/pods/${namespace}/${podName}?cluster_id=${clusterId}`);
+  async deletePod(clusterId: number | undefined, namespace: string, podName: string): Promise<ApiResponse<null>> {
+    const params = new URLSearchParams();
+    if (clusterId) {
+      params.set("cluster_id", String(clusterId));
+    }
+    const query = params.toString() ? `?${params.toString()}` : "";
+    return apiClient.delete<null>(`/pods/${namespace}/${podName}${query}`);
   },
 
   async batchDeletePods(clusterId: number, pods: Array<{ namespace: string; name: string }>): Promise<ApiResponse<any>> {
@@ -66,6 +76,52 @@ export const podApi = {
 
   async batchRestartPods(clusterId: number, pods: Array<{ namespace: string; name: string }>): Promise<ApiResponse<any>> {
     return apiClient.post<any>("/pods/batch-restart", { cluster_id: clusterId, pods });
+  },
+
+  async getPodLogs(options: {
+    clusterId?: number | null;
+    namespace: string;
+    podName: string;
+    container?: string;
+    tailLines?: number;
+    previous?: boolean;
+  }): Promise<ApiResponse<string>> {
+    try {
+      const params = new URLSearchParams();
+      if (options.clusterId) params.set("cluster_id", String(options.clusterId));
+      if (options.container) params.set("container", options.container);
+      if (options.tailLines) params.set("tail_lines", String(options.tailLines));
+      if (options.previous) params.set("previous", "true");
+
+      const token = localStorage.getItem("token");
+      const query = params.toString() ? `?${params.toString()}` : "";
+      const response = await fetch(
+        `${API_BASE_URL.replace(/\/$/, "")}/pods/${options.namespace}/${options.podName}/logs${query}`,
+        {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        }
+      );
+
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => null);
+        const message =
+          (errorBody &&
+            typeof errorBody === "object" &&
+            "error" in errorBody &&
+            typeof errorBody.error === "object" &&
+            errorBody.error &&
+            "message" in errorBody.error &&
+            typeof (errorBody.error as { message?: unknown }).message === "string" &&
+            (errorBody.error as { message: string }).message) ||
+          `HTTP ${response.status}: ${response.statusText}`;
+        return { error: message };
+      }
+
+      const text = await response.text();
+      return { data: text };
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : "Network error" };
+    }
   },
 };
 

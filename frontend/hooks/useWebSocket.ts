@@ -16,6 +16,7 @@ export interface SubscriptionOptions {
 export interface WebSocketHookReturn {
   isConnected: boolean;
   isConnecting: boolean;
+  isPolling: boolean;
   error: string | null;
   subscribe: (options: SubscriptionOptions) => void;
   unsubscribe: (options: SubscriptionOptions) => void;
@@ -51,14 +52,18 @@ const getWebSocketBaseUrl = (): string => {
 export function useWebSocket(): WebSocketHookReturn {
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [isPolling, setIsPolling] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const connectingRef = useRef(false);
   const reconnectAttempts = useRef(0);
   const maxReconnectAttempts = 5;
-  const reconnectDelay = 3000; // 3秒
+  const reconnectDelay = 1000;
+  const maxReconnectDelay = 15000;
+  const pollingIntervalMs = 15000;
 
   const getValidAccessToken = useAuthStore((s) => s.getValidAccessToken);
 
@@ -73,6 +78,34 @@ export function useWebSocket(): WebSocketHookReturn {
   // 移除消息处理器
   const removeMessageHandler = useCallback((type: string) => {
     messageHandlers.current.delete(type);
+  }, []);
+
+  const stopPolling = useCallback(() => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+    setIsPolling(false);
+  }, []);
+
+  const startPolling = useCallback(() => {
+    if (pollingIntervalRef.current) return;
+
+    setIsPolling(true);
+    setIsConnecting(false);
+    connectingRef.current = false;
+
+    // 通过轮询 tick 通知上层执行降级刷新策略。
+    pollingIntervalRef.current = setInterval(() => {
+      const handler = messageHandlers.current.get("polling_tick");
+      if (handler) {
+        handler({
+          type: "polling_tick",
+          data: { timestamp: new Date().toISOString() },
+          timestamp: new Date().toISOString(),
+        });
+      }
+    }, pollingIntervalMs);
   }, []);
 
   // 连接WebSocket
@@ -103,6 +136,7 @@ export function useWebSocket(): WebSocketHookReturn {
         setIsConnecting(false);
         connectingRef.current = false;
         setError(null);
+        stopPolling();
         reconnectAttempts.current = 0;
       };
 
@@ -166,7 +200,7 @@ export function useWebSocket(): WebSocketHookReturn {
       connectingRef.current = false;
       scheduleReconnect();
     }
-  }, [getValidAccessToken]);
+  }, [getValidAccessToken, stopPolling]);
 
   // 断开连接
   const disconnect = useCallback(() => {
@@ -182,34 +216,38 @@ export function useWebSocket(): WebSocketHookReturn {
 
     setIsConnected(false);
     setIsConnecting(false);
+    stopPolling();
     connectingRef.current = false;
     reconnectAttempts.current = 0;
-  }, []);
+  }, [stopPolling]);
 
   // 计划重连
   const scheduleReconnect = useCallback(() => {
     if (reconnectAttempts.current >= maxReconnectAttempts) {
-      setError('Max reconnection attempts reached');
+      setError("WebSocket unavailable, switched to polling mode");
+      startPolling();
       return;
     }
 
     reconnectAttempts.current += 1;
-    const delay = reconnectDelay * Math.pow(2, reconnectAttempts.current - 1); // 指数退避
+    const delay = Math.min(reconnectDelay * Math.pow(2, reconnectAttempts.current - 1), maxReconnectDelay);
 
     console.log(`Scheduling reconnect attempt ${reconnectAttempts.current} in ${delay}ms`);
 
     reconnectTimeoutRef.current = setTimeout(() => {
       void connect();
     }, delay);
-  }, [connect]);
+  }, [connect, startPolling]);
 
   // 手动重连
   const reconnect = useCallback(() => {
     console.log("Manual reconnect requested");
+    stopPolling();
+    setError(null);
     disconnect();
     reconnectAttempts.current = 0;
     setTimeout(() => void connect(), 100);
-  }, [disconnect, connect]);
+  }, [stopPolling, disconnect, connect]);
 
   // 发送消息
   const sendMessage = useCallback((message: any) => {
@@ -252,24 +290,28 @@ export function useWebSocket(): WebSocketHookReturn {
   // 监听认证状态变化
   useEffect(() => {
     const hasToken = storeToken ?? (typeof window !== "undefined" ? localStorage.getItem("token") : null);
-    if (hasToken && !isConnected && !isConnecting) {
+    if (hasToken && !isConnected && !isConnecting && !isPolling) {
       void connect();
     } else if (!hasToken && isConnected) {
       disconnect();
+    } else if (!hasToken && isPolling) {
+      stopPolling();
     }
-  }, [storeToken, isConnected, isConnecting, connect, disconnect]);
+  }, [storeToken, isConnected, isConnecting, isPolling, connect, disconnect, stopPolling]);
 
 
   // 清理副作用
   useEffect(() => {
     return () => {
       disconnect();
+      stopPolling();
     };
-  }, [disconnect]);
+  }, [disconnect, stopPolling]);
 
   return {
     isConnected,
     isConnecting,
+    isPolling,
     error,
     subscribe,
     unsubscribe,

@@ -1,4 +1,4 @@
-import { API_BASE_URL, apiClient, type ApiResponse } from "./client";
+import { apiClient, type ApiResponse } from "./client";
 
 // Token验证相关函数
 export const authApi = {
@@ -59,6 +59,10 @@ export const authApi = {
   > {
     return apiClient.post("auth/refresh", { refresh_token });
   },
+
+  async logout(refresh_token: string): Promise<ApiResponse<{ message: string }>> {
+    return apiClient.post<{ message: string }>("auth/logout", { refresh_token });
+  },
 };
 
 // ===== Login API =====
@@ -78,5 +82,3 @@ export const loginApi = {
     return apiClient.post("auth/login", { username, password });
   },
 };
-
-

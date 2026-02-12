@@ -20,7 +20,7 @@ type Auth struct {
 
 func (a Auth) RequireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		token := bearerToken(r.Header.Get("Authorization"))
+		token := tokenFromRequest(r)
 		if token == "" {
 			response.Error(w, r, http.StatusUnauthorized, "authentication required")
 			return
@@ -89,4 +89,26 @@ func bearerToken(raw string) string {
 		return ""
 	}
 	return strings.TrimSpace(parts[1])
+}
+
+func tokenFromRequest(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+
+	if token := bearerToken(r.Header.Get("Authorization")); token != "" {
+		return token
+	}
+
+	if token := strings.TrimSpace(r.URL.Query().Get("token")); token != "" {
+		return token
+	}
+
+	if c, err := r.Cookie("access_token"); err == nil {
+		if token := strings.TrimSpace(c.Value); token != "" {
+			return token
+		}
+	}
+
+	return ""
 }

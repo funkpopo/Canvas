@@ -1,9 +1,9 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { useWebSocket, useResourceUpdates } from "@/hooks/useWebSocket";
+import { useWebSocket, type WebSocketMessage } from "@/hooks/useWebSocket";
 import { type Cluster, useClusterStore } from "@/lib/store/cluster-store";
 
 /**
@@ -21,8 +21,8 @@ export function ClusterProvider({ children }: { children: ReactNode }) {
   const setUpdates = useClusterStore((s) => s._setResourceUpdates);
   const setReconnect = useClusterStore((s) => s._setReconnectWebSocket);
 
-  const { isConnected, isConnecting, error, reconnect, subscribe } = useWebSocket();
-  const { updates } = useResourceUpdates();
+  const [updates, setUpdatesState] = useState<WebSocketMessage[]>([]);
+  const { isConnected, isConnecting, isPolling, error, reconnect, subscribe, addMessageHandler, removeMessageHandler } = useWebSocket();
 
   const currentCluster = useMemo(() => {
     if (!clusters.length) return null;
@@ -34,17 +34,37 @@ export function ClusterProvider({ children }: { children: ReactNode }) {
     if (isAuthenticated) {
       void refreshClusters();
     } else {
-      useClusterStore.setState({ clusters: [], activeClusterId: null, isLoading: false });
+      useClusterStore.setState({
+        clusters: [],
+        activeClusterId: null,
+        isLoading: false,
+        wsConnected: false,
+        wsConnecting: false,
+        wsPolling: false,
+        wsError: null,
+        resourceUpdates: [],
+      });
     }
   }, [authLoading, isAuthenticated, refreshClusters]);
 
   useEffect(() => {
-    setWs({ connected: isConnected, connecting: isConnecting, error: error ?? null });
-  }, [isConnected, isConnecting, error, setWs]);
+    setWs({ connected: isConnected, connecting: isConnecting, polling: isPolling, error: error ?? null });
+  }, [isConnected, isConnecting, isPolling, error, setWs]);
 
   useEffect(() => {
     setUpdates(updates);
   }, [updates, setUpdates]);
+
+  useEffect(() => {
+    const handler = (message: WebSocketMessage) => {
+      setUpdatesState((prev) => [...prev.slice(-49), message]);
+    };
+
+    addMessageHandler("resource_update", handler);
+    return () => {
+      removeMessageHandler("resource_update");
+    };
+  }, [addMessageHandler, removeMessageHandler]);
 
   useEffect(() => {
     setReconnect(() => reconnect);
@@ -54,6 +74,14 @@ export function ClusterProvider({ children }: { children: ReactNode }) {
     if (!isConnected || !currentCluster || !subscribe) return;
     subscribe({ cluster_id: currentCluster.id });
   }, [isConnected, currentCluster, subscribe]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !isPolling) return;
+    const timer = setInterval(() => {
+      void refreshClusters();
+    }, 15000);
+    return () => clearInterval(timer);
+  }, [isAuthenticated, isPolling, refreshClusters]);
 
   return children;
 }
@@ -71,6 +99,7 @@ export function useCluster() {
 
   const wsConnected = useClusterStore((s) => s.wsConnected);
   const wsConnecting = useClusterStore((s) => s.wsConnecting);
+  const wsPolling = useClusterStore((s) => s.wsPolling);
   const wsError = useClusterStore((s) => s.wsError);
   const resourceUpdates = useClusterStore((s) => s.resourceUpdates);
   const reconnectWebSocket = useClusterStore((s) => s.reconnectWebSocket);
@@ -93,6 +122,7 @@ export function useCluster() {
     isLoading,
     wsConnected,
     wsConnecting,
+    wsPolling,
     wsError,
     resourceUpdates,
     reconnectWebSocket,

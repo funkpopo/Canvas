@@ -161,6 +161,7 @@ func New(db *gorm.DB, cfg config.Settings) http.Handler {
 			pods.Use(authMiddleware.RequireAuth)
 			pods.Get("/", podHandler.List)
 			pods.Get("/{namespace}/{podName}", podHandler.Get)
+			pods.Get("/{namespace}/{podName}/logs", podHandler.Logs)
 			pods.With(appmw.RequireAdmin).Delete("/{namespace}/{podName}", podHandler.Delete)
 			pods.With(appmw.RequireAdmin).Post("/batch-delete", podHandler.BatchDelete)
 			pods.With(appmw.RequireAdmin).Post("/batch-restart", podHandler.BatchRestart)
@@ -355,6 +356,7 @@ func New(db *gorm.DB, cfg config.Settings) http.Handler {
 
 		api.Route("/ws", func(ws chi.Router) {
 			ws.Use(authMiddleware.RequireAuth)
+			ws.Get("/", websocketHandler.Connect)
 			ws.Get("/stats", websocketHandler.Stats)
 		})
 	})

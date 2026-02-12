@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { useEffect, useMemo, useState, use } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -10,11 +10,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { ArrowLeft, Activity, Loader2, RefreshCw, AlertCircle, RotateCcw, Trash2, Settings, Server, LogOut } from "lucide-react";
+import { ArrowLeft, Activity, Loader2, RefreshCw, RotateCcw, Trash2, Settings, Server, LogOut } from "lucide-react";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { LanguageToggle } from "@/components/ui/language-toggle";
 import ClusterSelector from "@/components/ClusterSelector";
 import { useAuth } from "@/lib/auth-context";
+import { useCluster } from "@/lib/cluster-context";
+import { resolveClusterContext, withClusterId } from "@/lib/cluster-context-resolver";
 import DeploymentConfigTab from "@/components/DeploymentConfigTab";
 import DeploymentYamlTab from "@/components/DeploymentYamlTab";
 import DeploymentServicesTab from "@/components/DeploymentServicesTab";
@@ -86,7 +88,16 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
   });
   const router = useRouter();
   const searchParams = useSearchParams();
-  const clusterId = searchParams.get('cluster_id');
+  const { activeCluster } = useCluster();
+  const clusterContext = useMemo(
+    () =>
+      resolveClusterContext({
+        clusterIdFromUrl: searchParams.get("cluster_id"),
+        activeClusterId: activeCluster?.id ?? null,
+      }),
+    [searchParams, activeCluster?.id]
+  );
+  const effectiveClusterId = clusterContext.clusterId;
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -96,10 +107,10 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
   }, [isAuthenticated, authLoading, router]);
 
   useEffect(() => {
-    if (isAuthenticated && clusterId) {
+    if (isAuthenticated) {
       fetchDeploymentData();
     }
-  }, [isAuthenticated, clusterId, resolvedParams.namespace, resolvedParams.deployment, activeTab]);
+  }, [isAuthenticated, effectiveClusterId, resolvedParams.namespace, resolvedParams.deployment, activeTab]);
 
   const fetchDeploymentData = async () => {
     setIsLoading(true);
@@ -107,7 +118,7 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
       if (activeTab === "overview") {
         // 获取部署详情
         const result = await deploymentApi.getDeployment(
-          parseInt(clusterId!),
+          effectiveClusterId ?? undefined,
           resolvedParams.namespace,
           resolvedParams.deployment
         );
@@ -119,7 +130,7 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
       } else if (activeTab === "pods") {
         // 获取部署管理的Pods
         const result = await deploymentApi.getDeploymentPods(
-          parseInt(clusterId!),
+          effectiveClusterId ?? undefined,
           resolvedParams.namespace,
           resolvedParams.deployment
         );
@@ -141,7 +152,7 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
     setIsOperationLoading(true);
     try {
       const result = await deploymentApi.scaleDeployment(
-        parseInt(clusterId!),
+        effectiveClusterId ?? deploymentDetails.cluster_id,
         resolvedParams.namespace,
         resolvedParams.deployment,
         newReplicas
@@ -166,7 +177,7 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
     setIsOperationLoading(true);
     try {
       const result = await deploymentApi.restartDeployment(
-        parseInt(clusterId!),
+        effectiveClusterId ?? deploymentDetails.cluster_id,
         resolvedParams.namespace,
         resolvedParams.deployment
       );
@@ -198,14 +209,14 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
     setIsOperationLoading(true);
     try {
       const result = await deploymentApi.deleteDeployment(
-        parseInt(clusterId!),
+        effectiveClusterId ?? deploymentDetails?.cluster_id,
         resolvedParams.namespace,
         resolvedParams.deployment
       );
 
       if (!result.error) {
         toast.success("部署删除成功");
-        router.push(`/namespaces/${resolvedParams.namespace}?cluster_id=${clusterId}`);
+        router.push(withClusterId(`/namespaces/${resolvedParams.namespace}`, effectiveClusterId));
       } else {
         console.error("删除失败");
         toast.error("删除部署失败");
@@ -217,50 +228,6 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
       setIsOperationLoading(false);
     }
   };
-
-  if (!clusterId) {
-    return (
-      <div className="min-h-screen bg-background">
-        <header className="bg-card shadow-sm border-b">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center h-16">
-              <div className="flex items-center">
-                <Server className="h-8 w-8 text-zinc-600" />
-                <h1 className="ml-2 text-xl font-semibold text-gray-900 dark:text-white">
-                  Canvas
-                </h1>
-              </div>
-              <div className="flex items-center space-x-4">
-                <ClusterSelector />
-                <LanguageToggle />
-                <ThemeToggle />
-                <Button variant="outline" onClick={logout}>
-                  <LogOut className="h-4 w-4 mr-2" />
-                  退出登录
-                </Button>
-              </div>
-            </div>
-          </div>
-        </header>
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <Card>
-            <CardContent className="flex flex-col items-center justify-center py-12">
-              <AlertCircle className="h-12 w-12 text-red-400 mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                缺少集群信息
-              </h3>
-              <p className="text-gray-600 dark:text-gray-400 mb-4">
-                无法获取部署详情：缺少集群ID参数
-              </p>
-              <Link href={`/namespaces/${resolvedParams.namespace}`}>
-                <Button>返回命名空间详情</Button>
-              </Link>
-            </CardContent>
-          </Card>
-        </main>
-      </div>
-    );
-  }
 
   if (authLoading) {
     return (
@@ -304,7 +271,7 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
-              <Link href={`/namespaces/${resolvedParams.namespace}?cluster_id=${clusterId}`} className="flex items-center">
+              <Link href={withClusterId(`/namespaces/${resolvedParams.namespace}`, effectiveClusterId)} className="flex items-center">
                 <ArrowLeft className="h-5 w-5 mr-2" />
                 <span className="text-gray-600 dark:text-gray-400">返回命名空间详情</span>
               </Link>
@@ -553,7 +520,7 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
           <TabsContent value="config" className="space-y-6">
             <DeploymentConfigTab
               deploymentDetails={deploymentDetails}
-              clusterId={clusterId}
+              clusterId={effectiveClusterId ? String(effectiveClusterId) : null}
               onUpdate={fetchDeploymentData}
             />
           </TabsContent>
@@ -563,7 +530,7 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
             <DeploymentYamlTab
               namespace={resolvedParams.namespace}
               deployment={resolvedParams.deployment}
-              clusterId={clusterId}
+              clusterId={effectiveClusterId ? String(effectiveClusterId) : null}
             />
           </TabsContent>
 
@@ -572,7 +539,7 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
             <DeploymentServicesTab
               namespace={resolvedParams.namespace}
               deployment={resolvedParams.deployment}
-              clusterId={clusterId}
+              clusterId={effectiveClusterId ? String(effectiveClusterId) : null}
             />
           </TabsContent>
 
@@ -612,7 +579,7 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
                             {pod.status}
                           </Badge>
                         </div>
-                        <Link href={`/pods/${pod.namespace}/${pod.name}?cluster_id=${clusterId}`}>
+                        <Link href={withClusterId(`/pods/${pod.namespace}/${pod.name}`, effectiveClusterId)}>
                           <Button variant="outline" size="sm">
                             查看详情
                           </Button>
@@ -635,7 +602,7 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
           <TabsContent value="scaling" className="space-y-6">
             <DeploymentScalingTab
               deploymentDetails={deploymentDetails}
-              clusterId={clusterId}
+              clusterId={effectiveClusterId ? String(effectiveClusterId) : null}
               onScale={fetchDeploymentData}
             />
           </TabsContent>
