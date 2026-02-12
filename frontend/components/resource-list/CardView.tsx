@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ItemCheckbox } from "@/components/BatchOperations";
+import { useTranslations } from "@/hooks/use-translations";
 import type { ActionDef, BaseResource, CardRenderConfig } from "./types";
 
 export interface ResourceListCardViewProps<T extends BaseResource> {
@@ -27,6 +28,8 @@ export function ResourceListCardView<T extends BaseResource>({
   onCardClick,
   virtualizeThreshold = 100,
 }: ResourceListCardViewProps<T>) {
+  const t = useTranslations("resourceList");
+
   // ============ 虚拟滚动 ============
   const containerRef = useRef<HTMLDivElement | null>(null);
   const scrollRafRef = useRef<number | null>(null);
@@ -124,6 +127,7 @@ export function ResourceListCardView<T extends BaseResource>({
                     disabled={disabled}
                     className={action.danger ? "text-red-600 hover:text-red-700" : ""}
                     title={action.tooltip}
+                    aria-label={action.tooltip || t("actionFallback", { action: action.key })}
                   >
                     <ActionIcon className="w-4 h-4" />
                   </Button>

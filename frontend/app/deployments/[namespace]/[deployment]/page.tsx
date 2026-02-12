@@ -17,11 +17,11 @@ import ClusterSelector from "@/components/ClusterSelector";
 import { useAuth } from "@/lib/auth-context";
 import { useCluster } from "@/lib/cluster-context";
 import { resolveClusterContext, withClusterId } from "@/lib/cluster-context-resolver";
+import { useAsyncActionFeedback } from "@/hooks/use-async-action-feedback";
 import DeploymentConfigTab from "@/components/DeploymentConfigTab";
 import DeploymentYamlTab from "@/components/DeploymentYamlTab";
 import DeploymentServicesTab from "@/components/DeploymentServicesTab";
 import DeploymentScalingTab from "@/components/DeploymentScalingTab";
-import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { deploymentApi } from "@/lib/api";
 
@@ -73,6 +73,7 @@ interface DeploymentPod {
 export default function DeploymentDetailsPage({ params }: { params: Promise<{ namespace: string; deployment: string }> }) {
   const resolvedParams = use(params);
   const { isAuthenticated, isLoading: authLoading, logout } = useAuth();
+  const { runWithFeedback } = useAsyncActionFeedback();
   const [deploymentDetails, setDeploymentDetails] = useState<DeploymentDetails | null>(null);
   const [deploymentPods, setDeploymentPods] = useState<DeploymentPod[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -151,19 +152,26 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
 
     setIsOperationLoading(true);
     try {
-      const result = await deploymentApi.scaleDeployment(
-        effectiveClusterId ?? deploymentDetails.cluster_id,
-        resolvedParams.namespace,
-        resolvedParams.deployment,
-        newReplicas
+      await runWithFeedback(
+        async () => {
+          const result = await deploymentApi.scaleDeployment(
+            effectiveClusterId ?? deploymentDetails.cluster_id,
+            resolvedParams.namespace,
+            resolvedParams.deployment,
+            newReplicas
+          );
+          if (!result.data) {
+            throw new Error(result.error || "扩容失败");
+          }
+          setIsScaleDialogOpen(false);
+          await fetchDeploymentData();
+        },
+        {
+          loading: "正在调整副本数...",
+          success: "副本数调整成功",
+          error: "调整副本数失败",
+        }
       );
-
-      if (result.data) {
-        setIsScaleDialogOpen(false);
-        await fetchDeploymentData(); // 刷新数据
-      } else {
-        console.error("扩容失败");
-      }
     } catch (error) {
       console.error("扩容出错:", error);
     } finally {
@@ -176,17 +184,24 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
 
     setIsOperationLoading(true);
     try {
-      const result = await deploymentApi.restartDeployment(
-        effectiveClusterId ?? deploymentDetails.cluster_id,
-        resolvedParams.namespace,
-        resolvedParams.deployment
+      await runWithFeedback(
+        async () => {
+          const result = await deploymentApi.restartDeployment(
+            effectiveClusterId ?? deploymentDetails.cluster_id,
+            resolvedParams.namespace,
+            resolvedParams.deployment
+          );
+          if (!result.data) {
+            throw new Error(result.error || "重启失败");
+          }
+          await fetchDeploymentData();
+        },
+        {
+          loading: "正在重启部署...",
+          success: "部署重启成功",
+          error: "重启部署失败",
+        }
       );
-
-      if (result.data) {
-        await fetchDeploymentData(); // 刷新数据
-      } else {
-        console.error("重启失败");
-      }
     } catch (error) {
       console.error("重启出错:", error);
     } finally {
@@ -208,22 +223,26 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
   const performDelete = async () => {
     setIsOperationLoading(true);
     try {
-      const result = await deploymentApi.deleteDeployment(
-        effectiveClusterId ?? deploymentDetails?.cluster_id,
-        resolvedParams.namespace,
-        resolvedParams.deployment
+      await runWithFeedback(
+        async () => {
+          const result = await deploymentApi.deleteDeployment(
+            effectiveClusterId ?? deploymentDetails?.cluster_id,
+            resolvedParams.namespace,
+            resolvedParams.deployment
+          );
+          if (result.error) {
+            throw new Error(result.error);
+          }
+          router.push(withClusterId(`/namespaces/${resolvedParams.namespace}`, effectiveClusterId));
+        },
+        {
+          loading: "正在删除部署...",
+          success: "部署删除成功",
+          error: "删除部署失败",
+        }
       );
-
-      if (!result.error) {
-        toast.success("部署删除成功");
-        router.push(withClusterId(`/namespaces/${resolvedParams.namespace}`, effectiveClusterId));
-      } else {
-        console.error("删除失败");
-        toast.error("删除部署失败");
-      }
     } catch (error) {
       console.error("删除出错:", error);
-      toast.error("删除部署时发生错误");
     } finally {
       setIsOperationLoading(false);
     }

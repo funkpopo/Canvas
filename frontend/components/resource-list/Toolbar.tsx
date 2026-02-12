@@ -3,9 +3,11 @@
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Search, Plus, LayoutGrid, List } from "lucide-react";
 import type { ViewMode } from "./types";
+import { useTranslations } from "@/hooks/use-translations";
 
 export interface ResourceListToolbarProps {
   resourceType: string;
@@ -18,6 +20,8 @@ export interface ResourceListToolbarProps {
   };
   selectedStatus: string;
   onStatusChange: (value: string) => void;
+  activeFilterTags: string[];
+  onResetFilters: () => void;
   headerActions?: ReactNode;
   createButton?: {
     label: string;
@@ -38,19 +42,25 @@ export function ResourceListToolbar({
   statusFilter,
   selectedStatus,
   onStatusChange,
+  activeFilterTags,
+  onResetFilters,
   headerActions,
   createButton,
   viewMode,
   onViewModeChange,
   showViewToggle,
 }: ResourceListToolbarProps) {
+  const t = useTranslations("resourceList");
+  const hasActiveFilters = activeFilterTags.length > 0;
+
   return (
-    <div className="flex items-center justify-between gap-4 mb-4">
+    <div className="flex flex-col gap-3 mb-4">
+      <div className="flex items-center justify-between gap-4">
       <div className="flex items-center gap-4 flex-1">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder={searchPlaceholder || `搜索${resourceType}...`}
+            placeholder={searchPlaceholder || t("searchPlaceholder", { resourceType })}
             value={searchTerm}
             onChange={(e) => onSearchChange(e.target.value)}
             className="pl-8"
@@ -59,10 +69,10 @@ export function ResourceListToolbar({
         {statusFilter && (
           <Select value={selectedStatus} onValueChange={onStatusChange}>
             <SelectTrigger className="w-[150px]">
-              <SelectValue placeholder="状态筛选" />
+              <SelectValue placeholder={t("statusFilter")} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">全部状态</SelectItem>
+              <SelectItem value="all">{t("allStatuses")}</SelectItem>
               {statusFilter.options.map((option) => (
                 <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
               ))}
@@ -85,6 +95,8 @@ export function ResourceListToolbar({
               size="sm"
               onClick={() => onViewModeChange("card")}
               className="rounded-r-none"
+              aria-label={t("switchToCardView")}
+              title={t("switchToCardView")}
             >
               <LayoutGrid className="h-4 w-4" />
             </Button>
@@ -93,12 +105,28 @@ export function ResourceListToolbar({
               size="sm"
               onClick={() => onViewModeChange("table")}
               className="rounded-l-none"
+              aria-label={t("switchToTableView")}
+              title={t("switchToTableView")}
             >
               <List className="h-4 w-4" />
             </Button>
           </div>
         )}
       </div>
+      </div>
+      {hasActiveFilters && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-muted-foreground">{t("appliedFilters")}:</span>
+          {activeFilterTags.map((tag) => (
+            <Badge key={tag} variant="secondary" className="text-xs">
+              {tag}
+            </Badge>
+          ))}
+          <Button variant="ghost" size="sm" onClick={onResetFilters}>
+            {t("resetFilters")}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

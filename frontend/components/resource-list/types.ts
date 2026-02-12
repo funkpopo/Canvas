@@ -128,6 +128,8 @@ export interface ResourceListProps<T extends BaseResource> {
   };
   /** 是否需要命名空间选择器 */
   requireNamespace?: boolean;
+  /** 是否允许选择“全部命名空间” */
+  allowAllNamespaces?: boolean;
   /** 默认命名空间 */
   defaultNamespace?: string;
   /** 创建按钮配置 */

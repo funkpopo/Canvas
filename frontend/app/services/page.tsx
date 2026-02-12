@@ -300,6 +300,8 @@ spec:
         }}
         searchFields={["name"]}
         requireNamespace={true}
+        allowAllNamespaces={true}
+        defaultNamespace=""
         searchPlaceholder={`搜索 Service...`}
         headerActions={createButton}
         deleteConfirm={{

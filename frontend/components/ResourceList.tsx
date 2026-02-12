@@ -10,6 +10,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useAuth } from "@/lib/auth-context";
 import { useCluster } from "@/lib/cluster-context";
 import { namespaceApi } from "@/lib/api";
+import { useTranslations } from "@/hooks/use-translations";
 import { toast } from "sonner";
 import { type InfiniteData, useInfiniteQuery, useQuery } from "@tanstack/react-query";
 
@@ -53,7 +54,8 @@ export function ResourceList<T extends BaseResource>({
   searchFields = ["name" as keyof T],
   statusFilter,
   requireNamespace = true,
-  defaultNamespace = "default",
+  allowAllNamespaces = true,
+  defaultNamespace = "",
   createButton,
   detailLink,
   deleteConfirm,
@@ -69,6 +71,9 @@ export function ResourceList<T extends BaseResource>({
   namespaceSource = "api",
   showNamespaceInHeader = false,
 }: ResourceListProps<T>) {
+  const tCommon = useTranslations("common");
+  const tResource = useTranslations("resourceList");
+
   // ============ 状态 ============
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
@@ -120,12 +125,12 @@ export function ResourceList<T extends BaseResource>({
 
   useEffect(() => {
     if (!namespacesQuery.error) return;
-    toast.error(`获取命名空间失败: ${namespacesQuery.error.message}`);
-  }, [namespacesQuery.errorUpdatedAt]);
+    toast.error(tResource("loadNamespacesFailed", { message: namespacesQuery.error.message }));
+  }, [namespacesQuery.errorUpdatedAt, tResource]);
 
   const itemsQueryEnabled =
     !!selectedClusterId &&
-    (namespaceSource === "data" || !requireNamespace || (requireNamespace && !!selectedNamespace));
+    (namespaceSource === "data" || !requireNamespace || allowAllNamespaces || !!selectedNamespace);
 
   const itemsQueryKey = useMemo(
     () => [
@@ -135,14 +140,19 @@ export function ResourceList<T extends BaseResource>({
       namespaceSource,
       requireNamespace ? selectedNamespace : "",
       requireNamespace,
+      allowAllNamespaces,
     ],
-    [resourceType, selectedClusterId, namespaceSource, requireNamespace, selectedNamespace]
+    [resourceType, selectedClusterId, namespaceSource, requireNamespace, selectedNamespace, allowAllNamespaces]
   );
 
   type ItemWithId = T & { id: string };
 
   const namespaceParam =
-    namespaceSource === "data" ? undefined : requireNamespace ? selectedNamespace : undefined;
+    namespaceSource === "data"
+      ? undefined
+      : requireNamespace
+      ? selectedNamespace || undefined
+      : undefined;
 
   const isPaginated = !!fetchPageFn;
 
@@ -186,12 +196,13 @@ export function ResourceList<T extends BaseResource>({
   useEffect(() => {
     const err = isPaginated ? paginatedQuery.error : itemsQuery.error;
     if (!err) return;
-    toast.error(`获取${resourceType}列表失败: ${err.message}`);
+    toast.error(tResource("loadListFailed", { resourceType, message: err.message }));
   }, [
     resourceType,
     isPaginated,
     itemsQuery.errorUpdatedAt,
     paginatedQuery.errorUpdatedAt,
+    tResource,
   ]);
 
   const items = useMemo(() => {
@@ -225,7 +236,7 @@ export function ResourceList<T extends BaseResource>({
       if (namespacesQuery.data && namespacesQuery.data.length > 0) {
         setNamespaces(namespacesQuery.data);
       } else if (!namespacesQuery.isLoading && requireNamespace) {
-        setNamespaces(["default"]);
+        setNamespaces([]);
       }
       return;
     }
@@ -236,6 +247,26 @@ export function ResourceList<T extends BaseResource>({
     ) as string[];
     setNamespaces(uniqueNamespaces);
   }, [namespaceSource, namespacesQuery.data, namespacesQuery.isLoading, requireNamespace, items]);
+
+  useEffect(() => {
+    if (!requireNamespace) return;
+
+    const hasNamespace = (value: string) => value !== "" && namespaces.includes(value);
+    const preferredNamespace = hasNamespace(defaultNamespace)
+      ? defaultNamespace
+      : namespaces[0] ?? "";
+
+    if (allowAllNamespaces) {
+      if (selectedNamespace && !hasNamespace(selectedNamespace)) {
+        setSelectedNamespace("");
+      }
+      return;
+    }
+
+    if (!selectedNamespace || !hasNamespace(selectedNamespace)) {
+      setSelectedNamespace(preferredNamespace);
+    }
+  }, [requireNamespace, allowAllNamespaces, selectedNamespace, namespaces, defaultNamespace]);
 
   // ============ 过滤逻辑 ============
 
@@ -272,6 +303,37 @@ export function ResourceList<T extends BaseResource>({
     });
   }, [items, namespaceSource, selectedNamespace, searchFields, searchTerm, statusFilter, selectedStatus]);
 
+  const activeFilterTags = useMemo(() => {
+    const tags: string[] = [];
+
+    const term = searchTerm.trim();
+    if (term) {
+      tags.push(tResource("filterSearch", { value: term }));
+    }
+
+    if (selectedStatus !== "all" && statusFilter) {
+      const statusLabel =
+        statusFilter.options.find((option) => option.value === selectedStatus)?.label || selectedStatus;
+      tags.push(tResource("filterStatus", { value: statusLabel }));
+    }
+
+    if (selectedNamespace && allowAllNamespaces) {
+      tags.push(tResource("filterNamespace", { value: selectedNamespace }));
+    }
+
+    return tags;
+  }, [searchTerm, selectedStatus, statusFilter, selectedNamespace, allowAllNamespaces, tResource]);
+
+  const handleResetFilters = () => {
+    setSearchTerm("");
+    setSelectedStatus("all");
+    if (allowAllNamespaces) {
+      setSelectedNamespace("");
+    } else if (requireNamespace && namespaces.length > 0) {
+      setSelectedNamespace(defaultNamespace || namespaces[0]);
+    }
+  };
+
   const batchOpsEnabled = !!(batchOperations.delete || batchOperations.restart || batchOperations.label);
 
   // ============ 事件处理 ============
@@ -281,8 +343,10 @@ export function ResourceList<T extends BaseResource>({
     if (!deleteFn) return;
 
     const config = deleteConfirm || {
-      title: `删除${resourceType}`,
-      description: (i: BaseResource) => `确定要删除${resourceType} "${i.name}" 吗？此操作不可撤销。`,
+      title: tResource("deleteTitle", { resourceType }),
+      description: (i: BaseResource) =>
+        tResource("deleteDescription", { resourceType, name: i.name }),
+      showForceOption: false,
     };
 
     setConfirmDialog({
@@ -293,13 +357,13 @@ export function ResourceList<T extends BaseResource>({
         try {
           const result = await deleteFn(item.cluster_id, item.namespace, item.name);
           if (!result.error) {
-            toast.success(`${resourceType}删除成功`);
+            toast.success(tResource("deleteSuccess", { resourceType }));
             await refetchItems();
           } else {
-            toast.error(`删除${resourceType}失败: ${result.error}`);
+            toast.error(tResource("deleteFailed", { resourceType, message: result.error }));
           }
         } catch {
-          toast.error(`删除${resourceType}失败`);
+          toast.error(tResource("deleteFailedGeneric", { resourceType }));
         }
       },
       variant: "destructive",
@@ -318,10 +382,10 @@ export function ResourceList<T extends BaseResource>({
       for (const item of selectedItemsData) {
         const result = await deleteFn(item.cluster_id, item.namespace, item.name);
         if (result.error) {
-          throw new Error(`删除 ${item.namespace}/${item.name} 失败`);
+          throw new Error(tResource("deleteItemFailed", { item: `${item.namespace}/${item.name}` }));
         }
       }
-      toast.success(`批量删除成功，共删除 ${selectedItemsData.length} 个${resourceType}`);
+      toast.success(tResource("batchDeleteSuccess", { count: selectedItemsData.length, resourceType }));
       await refetchItems();
     }
   };
@@ -349,8 +413,8 @@ export function ResourceList<T extends BaseResource>({
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
-          <h2 className="text-2xl font-bold mb-4">请先登录</h2>
-          <Button onClick={() => router.push("/login")}>前往登录</Button>
+          <h2 className="text-2xl font-bold mb-4">{tResource("loginRequiredTitle")}</h2>
+          <Button onClick={() => router.push("/login")}>{tResource("goToLogin")}</Button>
         </div>
       </div>
     );
@@ -368,6 +432,7 @@ export function ResourceList<T extends BaseResource>({
         showNamespaceInHeader={showNamespaceInHeader}
         namespaceSource={namespaceSource}
         requireNamespace={requireNamespace}
+        allowAllNamespaces={allowAllNamespaces}
         isFetching={isFetching}
         onRefresh={() => refetchItems()}
       />
@@ -393,7 +458,7 @@ export function ResourceList<T extends BaseResource>({
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin mr-2" />
-            <span className="text-lg">加载中...</span>
+            <span className="text-lg">{tCommon("loading")}</span>
           </div>
         ) : filteredItems.length === 0 ? (
           /* 空状态 */
@@ -401,11 +466,20 @@ export function ResourceList<T extends BaseResource>({
             <CardContent className="flex flex-col items-center justify-center py-12">
               {Icon && <Icon className="h-12 w-12 text-gray-400 mb-4" />}
               <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                {searchTerm ? `未找到匹配的${resourceType}` : `暂无${resourceType}`}
+                {activeFilterTags.length > 0
+                  ? tResource("noMatchingItems", { resourceType })
+                  : tResource("noItems", { resourceType })}
               </h3>
               <p className="text-gray-600 dark:text-gray-400 mb-4">
-                {emptyText || `开始创建您的第一个${resourceType}`}
+                {activeFilterTags.length > 0
+                  ? tResource("emptyFilteredHint")
+                  : emptyText || tResource("createFirstItem", { resourceType })}
               </p>
+              {activeFilterTags.length > 0 && (
+                <Button variant="outline" onClick={handleResetFilters} className="mb-3">
+                  {tResource("resetFilters")}
+                </Button>
+              )}
               {createButton && createButton.canCreate !== false && (
                 <Button onClick={createButton.onClick}>
                   <Plus className="h-4 w-4 mr-2" />
@@ -439,10 +513,16 @@ export function ResourceList<T extends BaseResource>({
               statusFilter={statusFilter ? { field: String(statusFilter.field), options: statusFilter.options } : undefined}
               selectedStatus={selectedStatus}
               onStatusChange={setSelectedStatus}
+              activeFilterTags={activeFilterTags}
+              onResetFilters={handleResetFilters}
               headerActions={headerActions}
               createButton={createButton ? {
                 ...createButton,
-                disabled: namespaceSource === "api" && requireNamespace && !selectedNamespace,
+                disabled:
+                  namespaceSource === "api" &&
+                  requireNamespace &&
+                  !allowAllNamespaces &&
+                  !selectedNamespace,
               } : undefined}
               viewMode={viewMode}
               onViewModeChange={setViewMode}
@@ -486,12 +566,12 @@ export function ResourceList<T extends BaseResource>({
                   {isFetchingNextPage ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      加载中...
+                      {tCommon("loading")}
                     </>
                   ) : hasNextPage ? (
-                    "加载更多"
+                    tResource("loadMore")
                   ) : (
-                    "没有更多了"
+                    tResource("noMore")
                   )}
                 </Button>
               </div>

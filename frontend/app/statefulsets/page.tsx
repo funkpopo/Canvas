@@ -156,6 +156,8 @@ function StatefulSetsContent() {
         }}
         searchFields={["name"]}
         requireNamespace={true}
+        allowAllNamespaces={false}
+        defaultNamespace="default"
         searchPlaceholder="搜索 StatefulSet..."
         deleteConfirm={{
           title: "删除 StatefulSet",

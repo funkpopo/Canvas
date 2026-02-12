@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, RefreshCw } from "lucide-react";
 import ClusterSelector from "@/components/ClusterSelector";
+import { useTranslations } from "@/hooks/use-translations";
 
 export interface ResourceListHeaderProps {
   selectedClusterId: number | null;
@@ -15,6 +16,7 @@ export interface ResourceListHeaderProps {
   showNamespaceInHeader: boolean;
   namespaceSource: "api" | "data";
   requireNamespace: boolean;
+  allowAllNamespaces: boolean;
   isFetching: boolean;
   onRefresh: () => void;
 }
@@ -28,9 +30,12 @@ export function ResourceListHeader({
   showNamespaceInHeader,
   namespaceSource,
   requireNamespace,
+  allowAllNamespaces,
   isFetching,
   onRefresh,
 }: ResourceListHeaderProps) {
+  const t = useTranslations("resourceList");
+  const namespaceValue = allowAllNamespaces ? selectedNamespace || "all" : selectedNamespace;
   const showHeaderNamespace = (showNamespaceInHeader || namespaceSource === "data") && namespaces.length > 0;
   const showApiNamespace = !showNamespaceInHeader && namespaceSource === "api" && requireNamespace;
 
@@ -41,7 +46,7 @@ export function ResourceListHeader({
           <div className="flex items-center">
             <Link href="/" className="flex items-center">
               <ArrowLeft className="h-5 w-5 mr-2" />
-              <span className="text-gray-600 dark:text-gray-400">返回仪表板</span>
+              <span className="text-gray-600 dark:text-gray-400">{t("backToDashboard")}</span>
             </Link>
           </div>
           <div className="flex items-center space-x-4">
@@ -51,14 +56,14 @@ export function ResourceListHeader({
             />
             {showHeaderNamespace && (
               <Select
-                value={selectedNamespace || "all"}
+                value={namespaceValue || undefined}
                 onValueChange={(value) => onNamespaceChange(value === "all" ? "" : value)}
               >
                 <SelectTrigger className="w-48">
-                  <SelectValue placeholder="选择命名空间" />
+                  <SelectValue placeholder={t("selectNamespace")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">全部命名空间</SelectItem>
+                  {allowAllNamespaces && <SelectItem value="all">{t("allNamespaces")}</SelectItem>}
                   {namespaces.map((ns) => (
                     <SelectItem key={ns} value={ns}>{ns}</SelectItem>
                   ))}
@@ -66,11 +71,15 @@ export function ResourceListHeader({
               </Select>
             )}
             {showApiNamespace && (
-              <Select value={selectedNamespace} onValueChange={onNamespaceChange}>
+              <Select
+                value={namespaceValue || undefined}
+                onValueChange={(value) => onNamespaceChange(value === "all" ? "" : value)}
+              >
                 <SelectTrigger className="w-[200px]">
-                  <SelectValue placeholder="选择命名空间" />
+                  <SelectValue placeholder={t("selectNamespace")} />
                 </SelectTrigger>
                 <SelectContent>
+                  {allowAllNamespaces && <SelectItem value="all">{t("allNamespaces")}</SelectItem>}
                   {namespaces.map((ns) => (
                     <SelectItem key={ns} value={ns}>{ns}</SelectItem>
                   ))}
@@ -79,7 +88,7 @@ export function ResourceListHeader({
             )}
             <Button onClick={onRefresh} variant="outline" disabled={isFetching}>
               <RefreshCw className={`h-4 w-4 mr-2 ${isFetching ? "animate-spin" : ""}`} />
-              刷新
+              {t("refresh")}
             </Button>
           </div>
         </div>

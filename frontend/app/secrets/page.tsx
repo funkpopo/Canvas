@@ -243,6 +243,8 @@ stringData:
         }}
         searchFields={["name"]}
         requireNamespace={true}
+        allowAllNamespaces={true}
+        defaultNamespace=""
         searchPlaceholder="搜索 Secret..."
         headerActions={createButton}
         deleteConfirm={{

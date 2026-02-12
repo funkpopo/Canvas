@@ -103,6 +103,8 @@ function DaemonSetsContent() {
       }}
       searchFields={["name"]}
       requireNamespace={true}
+      allowAllNamespaces={false}
+      defaultNamespace="default"
       searchPlaceholder="搜索 DaemonSet..."
       deleteConfirm={{
         title: "删除 DaemonSet",

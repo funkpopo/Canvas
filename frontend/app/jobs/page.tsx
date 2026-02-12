@@ -239,6 +239,8 @@ function JobsContent() {
         ],
       }}
       requireNamespace={true}
+      allowAllNamespaces={false}
+      defaultNamespace="default"
       searchPlaceholder="搜索 Job..."
       headerActions={headerActions}
       detailLink={(item) =>

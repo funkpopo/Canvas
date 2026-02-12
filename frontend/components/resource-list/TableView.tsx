@@ -5,6 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ItemCheckbox } from "@/components/BatchOperations";
+import { useTranslations } from "@/hooks/use-translations";
 import type { ActionDef, BaseResource, ColumnDef } from "./types";
 
 export interface ResourceListTableViewProps<T extends BaseResource> {
@@ -32,6 +33,8 @@ export function ResourceListTableView<T extends BaseResource>({
   onRowClick,
   virtualizeThreshold = 200,
 }: ResourceListTableViewProps<T>) {
+  const t = useTranslations("resourceList");
+
   // ============ 表格虚拟滚动 (大数据量优化) ============
   const tableContainerRef = useRef<HTMLDivElement | null>(null);
   const scrollRafRef = useRef<number | null>(null);
@@ -99,10 +102,10 @@ export function ResourceListTableView<T extends BaseResource>({
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>
-            <CardTitle>{resourceType}列表</CardTitle>
+            <CardTitle>{t("listTitle", { resourceType })}</CardTitle>
             <CardDescription>
-              共 {items.length} 个{resourceType}
-              {selectedNamespace && ` · 命名空间: ${selectedNamespace}`}
+              {t("totalItems", { count: items.length, resourceType })}
+              {selectedNamespace && ` · ${t("namespace")}: ${selectedNamespace}`}
             </CardDescription>
           </div>
         </div>
@@ -126,7 +129,7 @@ export function ResourceListTableView<T extends BaseResource>({
                     {col.header}
                   </TableHead>
                 ))}
-                {actions.length > 0 && <TableHead>操作</TableHead>}
+                {actions.length > 0 && <TableHead>{t("actions")}</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -174,6 +177,7 @@ export function ResourceListTableView<T extends BaseResource>({
                               disabled={disabled}
                               className={action.danger ? "text-red-600 hover:text-red-700" : ""}
                               title={action.tooltip}
+                              aria-label={action.tooltip || t("actionFallback", { action: action.key })}
                             >
                               <ActionIcon className="w-4 h-4" />
                             </Button>

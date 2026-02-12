@@ -15,7 +15,7 @@ import ClusterSelector from "@/components/ClusterSelector";
 import { useAuth } from "@/lib/auth-context";
 import { useCluster } from "@/lib/cluster-context";
 import { resolveClusterContext } from "@/lib/cluster-context-resolver";
-import { toast } from "sonner";
+import { useAsyncActionFeedback } from "@/hooks/use-async-action-feedback";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { podApi } from "@/lib/api";
 
@@ -76,6 +76,7 @@ interface MetricsData {
 export default function PodDetailsPage({ params }: { params: Promise<{ namespace: string; pod: string }> }) {
   const resolvedParams = use(params);
   const { isAuthenticated, isLoading: authLoading, logout } = useAuth();
+  const { runWithFeedback } = useAsyncActionFeedback();
   const [podDetails, setPodDetails] = useState<PodDetails | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [metricsData, setMetricsData] = useState<MetricsData[]>([]);
@@ -187,23 +188,29 @@ export default function PodDetailsPage({ params }: { params: Promise<{ namespace
     const clusterForRequest = effectiveClusterId ?? podDetails.cluster_id;
 
     try {
-      const result = await podApi.deletePod(
-        clusterForRequest,
-        podDetails.namespace,
-        podDetails.name
-      );
+      const deleteType = confirmDialog.forceOption ? "强制" : "正常";
+      await runWithFeedback(
+        async () => {
+          const result = await podApi.deletePod(
+            clusterForRequest,
+            podDetails.namespace,
+            podDetails.name
+          );
 
-      if (!result.error) {
-        const deleteType = confirmDialog.forceOption ? "强制" : "正常";
-        toast.success(`Pod${deleteType}删除成功`);
-        // 删除成功后返回Pod列表页面
-        router.push('/pods');
-      } else {
-        toast.error("删除Pod失败");
-      }
+          if (result.error) {
+            throw new Error(result.error);
+          }
+
+          router.push("/pods");
+        },
+        {
+          loading: `正在${deleteType}删除 Pod...`,
+          success: `Pod${deleteType}删除成功`,
+          error: "删除Pod失败",
+        }
+      );
     } catch (error) {
       console.error("删除Pod出错:", error);
-      toast.error("删除Pod时发生错误");
     }
   };
 
