@@ -5,6 +5,8 @@
 
 # 任务管理文件
 todo.md
+new.md
+plan.md
 
 # 环境变量文件
 .env
