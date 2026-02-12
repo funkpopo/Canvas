@@ -1,36 +1,44 @@
 # Canvas — Kubernetes Management Console
 
-A monorepo for a lightweight Kubernetes management console with a FastAPI backend and a Next.js (App Router) frontend. It lets you add/manage multiple clusters, browse nodes/pods/namespaces/deployments/storage, and view dashboard stats. Authentication uses JWT with a seeded admin user for local development.
+A monorepo for a lightweight Kubernetes management console with a Go backend and a Next.js (App Router) frontend. It supports multi-cluster management, Kubernetes resource browsing, RBAC, jobs/storage operations, metrics, and alerts.
 
 ## Overview
 
-- Backend (`backend`): FastAPI + SQLAlchemy (SQLite) + Kubernetes Python client
+- Backend (`backend`): Go (chi + GORM + JWT + Kubernetes client)
 - Frontend (`frontend`): Next.js 15 + React 19 + TypeScript + Tailwind CSS 4 + Radix UI
-- Data: SQLite database (auto-created on first run); default admin seeded
+- Data: SQLite (default) or MySQL
 
 ## Getting Started
 
 ### Prerequisites
 
-- Python 3.12+
+- Go 1.26+
 - Node.js 20+ and npm (or yarn/pnpm)
 
 ### Backend (API)
 
 ```bash
 cd backend
-# optional: python -m venv .venv && source .venv/bin/activate (Linux/Mac)
-#           python -m venv .venv && .venv\Scripts\activate    (Windows)
-pip install -r requirements.txt
-python run.py
-# API at http://localhost:8000 , docs at http://localhost:8000/docs
+go mod tidy
+go run ./cmd/server
+# API at http://localhost:8000
 ```
 
 Notes:
-- Default admin user is created on first run: `admin` / `admin123`.
-- CORS allows `http://localhost:3000` by default (see `backend/app/main.py`).
-- The SQLite path is relative to the working directory. Run from `backend/` so the DB lives at `backend/canvas.db`.
-- Change `SECRET_KEY` in `backend/app/auth.py` for production use.
+- Default admin user is auto-created on first run: `admin` / `admin123`.
+- Default CORS includes `http://localhost:3000`.
+- SQLite is used by default; set `SQLITE_DB_PATH` if needed.
+
+Common environment variables:
+- `HOST`, `APP_PORT`, `BACKEND_PORT`
+- `DATABASE_TYPE` (`sqlite` or `mysql`)
+- `SQLITE_DB_PATH`
+- `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_NAME`, `DATABASE_USER`, `DATABASE_PASSWORD`
+- `JWT_SECRET_KEY` / `SECRET_KEY`
+- `ACCESS_TOKEN_EXPIRE_MINUTES`
+- `REFRESH_TOKEN_EXPIRE_DAYS`
+- `CORS_ORIGINS`
+- `DEFAULT_ADMIN_PASSWORD`
 
 ### Frontend (Web)
 
@@ -41,7 +49,11 @@ npm run dev
 # App at http://localhost:3000
 ```
 
+## Migration Notes
+
+- Python backend has been fully replaced by Go backend.
+- Migration execution log and completion checklist: `plan.md`.
+
 ---
 
 For a Chinese version of this document, see: `README_zh.md`.
-
