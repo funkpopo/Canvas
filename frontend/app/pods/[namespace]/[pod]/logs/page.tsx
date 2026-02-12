@@ -14,8 +14,12 @@ import { useAuth } from "@/lib/auth-context";
 import { useCluster } from "@/lib/cluster-context";
 import { resolveClusterContext, withClusterId } from "@/lib/cluster-context-resolver";
 import { podApi } from "@/lib/api";
+import { useTranslations } from "@/hooks/use-translations";
 
 export default function PodLogsPage() {
+  const t = useTranslations("podLogs");
+  const tAuth = useTranslations("auth");
+
   const params = useParams();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -91,23 +95,23 @@ export default function PodLogsPage() {
       });
 
       if (response.data !== undefined) {
-        setLogs(response.data || "暂无日志内容");
+        setLogs(response.data || t("emptyLogs"));
         return;
       }
 
-      const message = response.error || "未知错误";
+      const message = response.error || t("unknownError");
       let hint = "";
       if (message.includes("not found")) {
-        hint = "。请确认 Pod 存在并且容器名称正确。";
+        hint = t("hintNotFound");
       } else if (message.includes("permission")) {
-        hint = "。当前账号可能缺少读取日志权限。";
+        hint = t("hintPermission");
       } else if (message.includes("no active cluster")) {
-        hint = "。请先在页面顶部选择一个可用集群。";
+        hint = t("hintNoCluster");
       }
-      setLogs(`获取日志失败: ${message}${hint}`);
+      setLogs(t("loadLogsFailedWithMessage", { message, hint }));
     } catch (error) {
       console.error("获取日志出错:", error);
-      setLogs("获取日志时发生网络错误，请检查网络连接");
+      setLogs(t("loadLogsNetworkError"));
     } finally {
       setIsLoading(false);
     }
@@ -173,7 +177,7 @@ export default function PodLogsPage() {
               <ThemeToggle />
               <Button variant="outline" onClick={logout}>
                 <LogOut className="h-4 w-4 mr-2" />
-                退出登录
+                {tAuth("logout")}
               </Button>
             </div>
           </div>
@@ -187,7 +191,7 @@ export default function PodLogsPage() {
             <div className="flex items-center">
               <Link href={withClusterId(`/pods/${namespace}/${podName}`, effectiveClusterId)} className="flex items-center">
                 <ArrowLeft className="h-5 w-5 mr-2" />
-                <span className="text-gray-600 dark:text-gray-400">返回Pod详情</span>
+                <span className="text-gray-600 dark:text-gray-400">{t("backToPodDetails")}</span>
               </Link>
             </div>
           </div>
@@ -198,10 +202,10 @@ export default function PodLogsPage() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-6">
           <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-            Pod日志: {podName}
+            {t("title", { pod: podName })}
           </h2>
           <p className="text-gray-600 dark:text-gray-400">
-            命名空间: {namespace}
+            {t("namespaceLabel", { namespace })}
           </p>
         </div>
 
@@ -210,17 +214,17 @@ export default function PodLogsPage() {
           <CardHeader>
             <CardTitle className="flex items-center">
               <Terminal className="h-5 w-5 mr-2" />
-              日志查看器
+              {t("viewerTitle")}
             </CardTitle>
             <CardDescription>
-              查看Pod容器的实时日志输出
+              {t("viewerDescription")}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-4 items-center">
               {availableContainers.length > 1 && (
                 <div className="flex items-center space-x-2">
-                  <label className="text-sm font-medium">容器:</label>
+                  <label className="text-sm font-medium">{t("containerLabel")}</label>
                   <Select value={selectedContainer} onValueChange={setSelectedContainer}>
                     <SelectTrigger className="w-48">
                       <SelectValue />
@@ -237,17 +241,17 @@ export default function PodLogsPage() {
               )}
 
               <div className="flex items-center space-x-2">
-                <label className="text-sm font-medium">行数:</label>
+                <label className="text-sm font-medium">{t("tailLinesLabel")}</label>
                 <Select value={tailLines.toString()} onValueChange={(value) => setTailLines(parseInt(value))}>
                   <SelectTrigger className="w-32">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="50">50行</SelectItem>
-                    <SelectItem value="100">100行</SelectItem>
-                    <SelectItem value="200">200行</SelectItem>
-                    <SelectItem value="500">500行</SelectItem>
-                    <SelectItem value="1000">1000行</SelectItem>
+                    <SelectItem value="50">{t("lines50")}</SelectItem>
+                    <SelectItem value="100">{t("lines100")}</SelectItem>
+                    <SelectItem value="200">{t("lines200")}</SelectItem>
+                    <SelectItem value="500">{t("lines500")}</SelectItem>
+                    <SelectItem value="1000">{t("lines1000")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -258,12 +262,12 @@ export default function PodLogsPage() {
                 ) : (
                   <RefreshCw className="h-4 w-4 mr-2" />
                 )}
-                刷新
+                {t("refresh")}
               </Button>
 
               <Button variant="outline" onClick={downloadLogs} disabled={!logs}>
                 <Download className="h-4 w-4 mr-2" />
-                下载日志
+                {t("downloadLogs")}
               </Button>
             </div>
           </CardContent>
@@ -276,7 +280,7 @@ export default function PodLogsPage() {
               {isLoading ? (
                 <div className="flex items-center justify-center h-full">
                   <Loader2 className="h-8 w-8 animate-spin mr-2" />
-                  <span>加载日志中...</span>
+                  <span>{t("loadingLogs")}</span>
                 </div>
               ) : logs ? (
                 <div className="font-mono text-sm">
@@ -284,7 +288,7 @@ export default function PodLogsPage() {
                 </div>
               ) : (
                 <div className="flex items-center justify-center h-full text-gray-500">
-                  暂无日志内容
+                  {t("emptyLogs")}
                 </div>
               )}
             </div>

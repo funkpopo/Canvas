@@ -30,6 +30,7 @@ import {
 import { serviceApi, Service as ApiService } from "@/lib/api";
 import { canManageResources } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
+import { useAsyncActionFeedback } from "@/hooks/use-async-action-feedback";
 import { toast } from "sonner";
 import { useTranslations } from "@/hooks/use-translations";
 
@@ -42,6 +43,7 @@ type Service = ApiService;
 export default function ServicesPage() {
   const t = useTranslations("services");
   const tCommon = useTranslations("common");
+  const { runWithFeedback } = useAsyncActionFeedback();
   const { user } = useAuth();
 
   // 创建对话框状态
@@ -81,20 +83,29 @@ export default function ServicesPage() {
   // 查看 YAML
   const handleViewYaml = async (service: Service) => {
     try {
-      const response = await serviceApi.getServiceYaml(
-        service.cluster_id,
-        service.namespace,
-        service.name
+      await runWithFeedback(
+        async () => {
+          const response = await serviceApi.getServiceYaml(
+            service.cluster_id,
+            service.namespace,
+            service.name
+          );
+          if (!response.data) {
+            throw new Error(response.error || t("yamlLoadErrorUnknown"));
+          }
+
+          setYamlPreview(response.data.yaml);
+          setSelectedService(service);
+          setIsYamlOpen(true);
+        },
+        {
+          loading: t("yamlLoadLoading"),
+          success: t("yamlLoadSuccess"),
+          error: t("yamlLoadError"),
+        }
       );
-      if (response.data) {
-        setYamlPreview(response.data.yaml);
-        setSelectedService(service);
-        setIsYamlOpen(true);
-      } else {
-        toast.error(`获取YAML失败: ${response.error}`);
-      }
-    } catch {
-      toast.error("获取YAML失败");
+    } catch (error) {
+      console.error("load service yaml failed:", error);
     }
   };
 
@@ -118,29 +129,14 @@ spec:
   };
 
   // 创建服务
-  const handleCreateService = async () => {
-    if (!yamlContent.trim()) return;
-
-    try {
-      // 简单解析 YAML 获取 name 和 namespace
-      const lines = yamlContent.split("\n");
-      let name = "";
-      let namespace = selectedNamespace;
-
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (trimmed.startsWith("name:")) {
-          name = trimmed.split(":")[1].trim();
-        } else if (trimmed.startsWith("namespace:")) {
-          namespace = trimmed.split(":")[1].trim();
-        }
-      }
-
-      // TODO: 需要集群 ID，这里暂时用创建 YAML 的方式
-      toast.error("创建功能需要选择集群，请使用顶部的集群选择器");
-    } catch {
-      toast.error("创建服务失败");
+  const handleCreateService = () => {
+    if (!yamlContent.trim()) {
+      toast.error(t("yamlRequired"));
+      return;
     }
+
+    // TODO: 需要集群 ID，这里暂时只给出引导提示
+    toast.error(t("createClusterRequired"));
   };
 
   // YAML 模板
@@ -211,13 +207,13 @@ spec:
     {
       key: "yaml",
       icon: Code,
-      tooltip: "查看YAML",
+      tooltip: t("viewYaml"),
       onClick: handleViewYaml,
     },
     {
       key: "view",
       icon: Eye,
-      tooltip: "查看详情",
+      tooltip: t("viewDetails"),
       onClick: (item) => {
         // TODO: 跳转到详情页
       },
@@ -225,7 +221,7 @@ spec:
     {
       key: "delete",
       icon: Trash2,
-      tooltip: "删除",
+      tooltip: tCommon("delete"),
       danger: true,
       visible: () => canManageResources(user),
       onClick: () => {},
@@ -302,12 +298,12 @@ spec:
         requireNamespace={true}
         allowAllNamespaces={true}
         defaultNamespace=""
-        searchPlaceholder={`搜索 Service...`}
+        searchPlaceholder={t("searchPlaceholder")}
         headerActions={createButton}
         deleteConfirm={{
-          title: "删除 Service",
+          title: t("deleteTitle"),
           description: (item) =>
-            `确定要删除 Service "${item.namespace}/${item.name}" 吗？此操作不可撤销。`,
+            t("deleteDescription", { namespace: item.namespace, name: item.name }),
         }}
       />
 

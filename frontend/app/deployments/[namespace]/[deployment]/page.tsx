@@ -24,6 +24,7 @@ import DeploymentServicesTab from "@/components/DeploymentServicesTab";
 import DeploymentScalingTab from "@/components/DeploymentScalingTab";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { deploymentApi } from "@/lib/api";
+import { useTranslations } from "@/hooks/use-translations";
 
 interface DeploymentDetails {
   name: string;
@@ -71,6 +72,10 @@ interface DeploymentPod {
 }
 
 export default function DeploymentDetailsPage({ params }: { params: Promise<{ namespace: string; deployment: string }> }) {
+  const t = useTranslations("deploymentDetails");
+  const tCommon = useTranslations("common");
+  const tAuth = useTranslations("auth");
+
   const resolvedParams = use(params);
   const { isAuthenticated, isLoading: authLoading, logout } = useAuth();
   const { runWithFeedback } = useAsyncActionFeedback();
@@ -161,15 +166,15 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
             newReplicas
           );
           if (!result.data) {
-            throw new Error(result.error || "扩容失败");
+            throw new Error(result.error || t("scaleErrorUnknown"));
           }
           setIsScaleDialogOpen(false);
           await fetchDeploymentData();
         },
         {
-          loading: "正在调整副本数...",
-          success: "副本数调整成功",
-          error: "调整副本数失败",
+          loading: t("scaleLoading"),
+          success: t("scaleSuccess"),
+          error: t("scaleError"),
         }
       );
     } catch (error) {
@@ -192,14 +197,14 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
             resolvedParams.deployment
           );
           if (!result.data) {
-            throw new Error(result.error || "重启失败");
+            throw new Error(result.error || t("restartErrorUnknown"));
           }
           await fetchDeploymentData();
         },
         {
-          loading: "正在重启部署...",
-          success: "部署重启成功",
-          error: "重启部署失败",
+          loading: t("restartLoading"),
+          success: t("restartSuccess"),
+          error: t("restartError"),
         }
       );
     } catch (error) {
@@ -214,8 +219,8 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
 
     setConfirmDialog({
       open: true,
-      title: "删除部署",
-      description: `确定要删除部署 ${resolvedParams.deployment} 吗？此操作不可撤销。`,
+      title: t("deleteTitle"),
+      description: t("deleteDescription", { name: resolvedParams.deployment }),
       onConfirm: () => performDelete(),
     });
   };
@@ -236,9 +241,9 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
           router.push(withClusterId(`/namespaces/${resolvedParams.namespace}`, effectiveClusterId));
         },
         {
-          loading: "正在删除部署...",
-          success: "部署删除成功",
-          error: "删除部署失败",
+          loading: t("deleteLoading"),
+          success: t("deleteSuccess"),
+          error: t("deleteError"),
         }
       );
     } catch (error) {
@@ -278,7 +283,7 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
               <ThemeToggle />
               <Button variant="outline" onClick={logout}>
                 <LogOut className="h-4 w-4 mr-2" />
-                退出登录
+                {tAuth("logout")}
               </Button>
             </div>
           </div>
@@ -292,7 +297,7 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
             <div className="flex items-center">
               <Link href={withClusterId(`/namespaces/${resolvedParams.namespace}`, effectiveClusterId)} className="flex items-center">
                 <ArrowLeft className="h-5 w-5 mr-2" />
-                <span className="text-gray-600 dark:text-gray-400">返回命名空间详情</span>
+                <span className="text-gray-600 dark:text-gray-400">{t("backToNamespace")}</span>
               </Link>
             </div>
             <div className="flex items-center space-x-2">
@@ -300,20 +305,20 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
                 <DialogTrigger asChild>
                   <Button variant="outline" size="sm">
                     <Settings className="h-4 w-4 mr-2" />
-                    扩容
+                    {t("scaleAction")}
                   </Button>
                 </DialogTrigger>
                 <DialogContent>
                   <DialogHeader>
-                    <DialogTitle>调整副本数</DialogTitle>
+                    <DialogTitle>{t("scaleDialogTitle")}</DialogTitle>
                     <DialogDescription>
-                      修改部署 {resolvedParams.deployment} 的副本数量
+                      {t("scaleDialogDescription", { deployment: resolvedParams.deployment })}
                     </DialogDescription>
                   </DialogHeader>
                   <div className="grid gap-4 py-4">
                     <div className="grid grid-cols-4 items-center gap-4">
                       <Label htmlFor="replicas" className="text-right">
-                        副本数
+                        {t("replicasLabel")}
                       </Label>
                       <Input
                         id="replicas"
@@ -333,7 +338,7 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
                       {isOperationLoading ? (
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                       ) : null}
-                      确认调整
+                      {t("confirmScale")}
                     </Button>
                   </DialogFooter>
                 </DialogContent>
@@ -346,7 +351,7 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
                 disabled={isOperationLoading}
               >
                 <RotateCcw className="h-4 w-4 mr-2" />
-                重启
+                {t("restartAction")}
               </Button>
 
               <Button
@@ -356,7 +361,7 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
                 disabled={isOperationLoading}
               >
                 <Trash2 className="h-4 w-4 mr-2" />
-                删除
+                {tCommon("delete")}
               </Button>
 
               <Button variant="outline" onClick={fetchDeploymentData} disabled={isLoading}>
@@ -365,7 +370,7 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
                 ) : (
                   <RefreshCw className="h-4 w-4 mr-2" />
                 )}
-                刷新
+                {t("refresh")}
               </Button>
             </div>
           </div>
@@ -376,20 +381,20 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <h2 className="text-3xl font-bold text-gray-900 dark:text-white">
-            部署详情: {resolvedParams.deployment}
+            {t("title", { deployment: resolvedParams.deployment })}
           </h2>
           <p className="mt-2 text-gray-600 dark:text-gray-400">
-            命名空间: {resolvedParams.namespace} • 集群: {deploymentDetails?.cluster_name}
+            {t("meta", { namespace: resolvedParams.namespace, cluster: deploymentDetails?.cluster_name ?? "-" })}
           </p>
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="grid w-full grid-cols-6">
-            <TabsTrigger value="overview">概览</TabsTrigger>
-            <TabsTrigger value="config">配置</TabsTrigger>
+            <TabsTrigger value="overview">{t("tabOverview")}</TabsTrigger>
+            <TabsTrigger value="config">{t("tabConfig")}</TabsTrigger>
             <TabsTrigger value="yaml">YAML</TabsTrigger>
-            <TabsTrigger value="services">服务</TabsTrigger>
-            <TabsTrigger value="scaling">伸缩</TabsTrigger>
+            <TabsTrigger value="services">{t("tabServices")}</TabsTrigger>
+            <TabsTrigger value="scaling">{t("tabScaling")}</TabsTrigger>
             <TabsTrigger value="pods">Pods</TabsTrigger>
           </TabsList>
 
@@ -398,27 +403,27 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
             {isLoading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin mr-2" />
-                <span className="text-lg">加载中...</span>
+                <span className="text-lg">{tCommon("loading")}</span>
               </div>
             ) : deploymentDetails ? (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* 基本信息 */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>基本信息</CardTitle>
+                    <CardTitle>{t("basicInfoTitle")}</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <Label className="text-sm font-medium">状态</Label>
+                        <Label className="text-sm font-medium">{t("statusLabel")}</Label>
                         <div className="mt-1">
                           <Badge variant={deploymentDetails.ready_replicas === deploymentDetails.replicas ? "default" : "secondary"}>
-                            {deploymentDetails.ready_replicas === deploymentDetails.replicas ? "Running" : "Updating"}
+                            {deploymentDetails.ready_replicas === deploymentDetails.replicas ? t("statusRunning") : t("statusUpdating")}
                           </Badge>
                         </div>
                       </div>
                       <div>
-                        <Label className="text-sm font-medium">副本数</Label>
+                        <Label className="text-sm font-medium">{t("replicasLabel")}</Label>
                         <div className="mt-1 text-lg font-semibold">
                           {deploymentDetails.ready_replicas}/{deploymentDetails.replicas}
                         </div>
@@ -427,22 +432,22 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
 
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <Label className="text-sm font-medium">可用副本</Label>
+                        <Label className="text-sm font-medium">{t("availableReplicasLabel")}</Label>
                         <div className="mt-1">{deploymentDetails.available_replicas}</div>
                       </div>
                       <div>
-                        <Label className="text-sm font-medium">更新副本</Label>
+                        <Label className="text-sm font-medium">{t("updatedReplicasLabel")}</Label>
                         <div className="mt-1">{deploymentDetails.updated_replicas}</div>
                       </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <Label className="text-sm font-medium">年龄</Label>
+                        <Label className="text-sm font-medium">{t("ageLabel")}</Label>
                         <div className="mt-1">{deploymentDetails.age}</div>
                       </div>
                       <div>
-                        <Label className="text-sm font-medium">策略</Label>
+                        <Label className="text-sm font-medium">{t("strategyLabel")}</Label>
                         <div className="mt-1">{deploymentDetails.strategy?.type || 'RollingUpdate'}</div>
                       </div>
                     </div>
@@ -452,7 +457,7 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
                 {/* 容器信息 */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>容器信息</CardTitle>
+                    <CardTitle>{t("containersTitle")}</CardTitle>
                   </CardHeader>
                   <CardContent>
                     {deploymentDetails.spec?.template?.spec?.containers ? (
@@ -465,17 +470,17 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
                           {container.resources && (
                             <div className="text-sm text-gray-600 dark:text-gray-400">
                               {container.resources.requests && (
-                                <div>请求: CPU {container.resources.requests.cpu || '未设置'}, 内存 {container.resources.requests.memory || '未设置'}</div>
+                                <div>{t("requestsSummary", { cpu: container.resources.requests.cpu || t("notSet"), memory: container.resources.requests.memory || t("notSet") })}</div>
                               )}
                               {container.resources.limits && (
-                                <div>限制: CPU {container.resources.limits.cpu || '未设置'}, 内存 {container.resources.limits.memory || '未设置'}</div>
+                                <div>{t("limitsSummary", { cpu: container.resources.limits.cpu || t("notSet"), memory: container.resources.limits.memory || t("notSet") })}</div>
                               )}
                             </div>
                           )}
                         </div>
                       ))
                     ) : (
-                      <p className="text-gray-500">无法获取容器信息</p>
+                      <p className="text-gray-500">{t("containerInfoUnavailable")}</p>
                     )}
                   </CardContent>
                 </Card>
@@ -483,7 +488,7 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
                 {/* 标签和选择器 */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>标签</CardTitle>
+                    <CardTitle>{t("labelsTitle")}</CardTitle>
                   </CardHeader>
                   <CardContent>
                     {Object.keys(deploymentDetails.labels).length > 0 ? (
@@ -495,14 +500,14 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
                         ))}
                       </div>
                     ) : (
-                      <p className="text-gray-500">无标签</p>
+                      <p className="text-gray-500">{t("noLabels")}</p>
                     )}
                   </CardContent>
                 </Card>
 
                 <Card>
                   <CardHeader>
-                    <CardTitle>选择器</CardTitle>
+                    <CardTitle>{t("selectorsTitle")}</CardTitle>
                   </CardHeader>
                   <CardContent>
                     {Object.keys(deploymentDetails.selector).length > 0 ? (
@@ -514,7 +519,7 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
                         ))}
                       </div>
                     ) : (
-                      <p className="text-gray-500">无选择器</p>
+                      <p className="text-gray-500">{t("noSelectors")}</p>
                     )}
                   </CardContent>
                 </Card>
@@ -524,10 +529,10 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
                 <CardContent className="flex flex-col items-center justify-center py-12">
                   <Activity className="h-12 w-12 text-gray-400 mb-4" />
                   <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                    无法获取部署信息
+                    {t("loadDetailsFailedTitle")}
                   </h3>
                   <p className="text-gray-600 dark:text-gray-400">
-                    无法获取部署的详细信息
+                    {t("loadDetailsFailedDescription")}
                   </p>
                 </CardContent>
               </Card>
@@ -567,17 +572,17 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
             {isLoading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin mr-2" />
-                <span className="text-lg">加载中...</span>
+                <span className="text-lg">{tCommon("loading")}</span>
               </div>
             ) : deploymentPods.length === 0 ? (
               <Card>
                 <CardContent className="flex flex-col items-center justify-center py-12">
                   <Activity className="h-12 w-12 text-gray-400 mb-4" />
                   <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                    暂无Pods
+                    {t("noPodsTitle")}
                   </h3>
                   <p className="text-gray-600 dark:text-gray-400">
-                    该部署当前没有运行中的Pods
+                    {t("noPodsDescription")}
                   </p>
                 </CardContent>
               </Card>
@@ -600,15 +605,17 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
                         </div>
                         <Link href={withClusterId(`/pods/${pod.namespace}/${pod.name}`, effectiveClusterId)}>
                           <Button variant="outline" size="sm">
-                            查看详情
+                            {t("viewDetails")}
                           </Button>
                         </Link>
                       </div>
                       <CardDescription>
-                        节点: {pod.node_name || '未调度'} •
-                        容器: {pod.ready_containers} •
-                        重启: {pod.restarts} •
-                        年龄: {pod.age}
+                        {t("podMeta", {
+                          node: pod.node_name || t("notScheduled"),
+                          containers: pod.ready_containers,
+                          restarts: pod.restarts,
+                          age: pod.age,
+                        })}
                       </CardDescription>
                     </CardHeader>
                   </Card>

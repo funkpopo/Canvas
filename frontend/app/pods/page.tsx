@@ -85,39 +85,39 @@ function PodsPageContent() {
   const columns: ColumnDef<PodInfo>[] = [
     {
       key: "name",
-      header: "名称",
+      header: t("nameLabel"),
       render: (item) => <span className="font-medium">{item.name}</span>,
     },
     {
       key: "namespace",
-      header: "命名空间",
+      header: t("namespace"),
       render: (item) => item.namespace,
     },
     {
       key: "status",
-      header: "状态",
+      header: t("status"),
       render: (item) => (
         <Badge variant={getStatusBadgeVariant(item.status)}>{item.status}</Badge>
       ),
     },
     {
       key: "node",
-      header: "节点",
-      render: (item) => item.node_name || "未调度",
+      header: t("nodeLabel"),
+      render: (item) => item.node_name || t("notScheduled"),
     },
     {
       key: "containers",
-      header: "容器",
+      header: t("containersLabel"),
       render: (item) => item.ready_containers,
     },
     {
       key: "restarts",
-      header: "重启次数",
+      header: t("restarts"),
       render: (item) => item.restarts,
     },
     {
       key: "age",
-      header: "年龄",
+      header: t("age"),
       render: (item) => item.age,
     },
   ];
@@ -127,17 +127,17 @@ function PodsPageContent() {
     {
       key: "logs",
       icon: FileText,
-      tooltip: "查看日志（新窗口）",
+      tooltip: t("viewLogsInNewWindow"),
       onClick: (item) => {
         const logsUrl = `/pods/${item.namespace}/${item.name}/logs?cluster_id=${item.cluster_id}`;
         window.open(logsUrl, "_blank", "width=800,height=600");
-        toast.info("已在新窗口打开 Pod 日志");
+        toast.info(t("openedLogsInNewWindow"));
       },
     },
     {
       key: "delete",
       icon: Square,
-      tooltip: "删除Pod",
+      tooltip: t("delete"),
       variant: "destructive",
       danger: true,
       onClick: () => {
@@ -156,15 +156,15 @@ function PodsPageContent() {
     content: (item) => (
       <div className="space-y-2 text-sm">
         <div className="flex justify-between">
-          <span className="text-gray-600 dark:text-gray-400">节点:</span>
-          <span>{item.node_name || "未调度"}</span>
+          <span className="text-gray-600 dark:text-gray-400">{t("nodeLabelWithColon")}</span>
+          <span>{item.node_name || t("notScheduled")}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-gray-600 dark:text-gray-400">容器:</span>
+          <span className="text-gray-600 dark:text-gray-400">{t("containersLabelWithColon")}</span>
           <span>{item.ready_containers}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-gray-600 dark:text-gray-400">重启次数:</span>
+          <span className="text-gray-600 dark:text-gray-400">{t("restartsLabelWithColon")}</span>
           <span>{item.restarts}</span>
         </div>
       </div>
@@ -195,16 +195,16 @@ function PodsPageContent() {
       if (result.data) {
         const data = result.data as { success_count: number; failure_count: number };
         if (data.failure_count > 0) {
-          toast.error(`批量删除完成，成功: ${data.success_count}, 失败: ${data.failure_count}`);
+          toast.error(t("batchDeletePartial", { success: data.success_count, failed: data.failure_count }));
         } else {
-          toast.success(`批量删除成功，共删除 ${data.success_count} 个Pod`);
+          toast.success(t("batchDeleteSuccess", { count: data.success_count }));
         }
       } else {
-        toast.error("批量删除Pod失败");
+        toast.error(t("batchDeleteFailed"));
       }
     } catch (error) {
       console.error("批量删除Pod出错:", error);
-      toast.error("批量删除Pod时发生错误");
+      toast.error(t("batchDeleteError"));
       throw error;
     }
   };
@@ -220,16 +220,16 @@ function PodsPageContent() {
       if (result.data) {
         const data = result.data as { success_count: number; failure_count: number };
         if (data.failure_count > 0) {
-          toast.error(`批量重启完成，成功: ${data.success_count}, 失败: ${data.failure_count}`);
+          toast.error(t("batchRestartPartial", { success: data.success_count, failed: data.failure_count }));
         } else {
-          toast.success(`批量重启成功，共重启 ${data.success_count} 个Pod`);
+          toast.success(t("batchRestartSuccess", { count: data.success_count }));
         }
       } else {
-        toast.error("批量重启Pod失败");
+        toast.error(t("batchRestartFailed"));
       }
     } catch (error) {
       console.error("批量重启Pod出错:", error);
-      toast.error("批量重启Pod时发生错误");
+      toast.error(t("batchRestartError"));
       throw error;
     }
   };
@@ -272,8 +272,8 @@ function PodsPageContent() {
       statusBadge={statusBadge}
       detailLink={(item) => `/pods/${item.namespace}/${item.name}?cluster_id=${item.cluster_id}`}
       deleteConfirm={{
-        title: "删除Pod",
-        description: (item) => `确定要删除Pod "${item.name}" 吗？此操作不可撤销。`,
+        title: t("deleteTitle"),
+        description: (item) => t("deleteDescription", { name: item.name }),
         showForceOption: true,
       }}
       emptyText={t("noPodsDescription")}

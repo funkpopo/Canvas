@@ -14,6 +14,8 @@ import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useCluster } from "@/lib/cluster-context";
 import { cronjobApi, namespaceApi } from "@/lib/api";
+import { useTranslations } from "@/hooks/use-translations";
+import { useAsyncActionFeedback } from "@/hooks/use-async-action-feedback";
 
 interface CronJob {
   name: string;
@@ -34,6 +36,9 @@ interface Namespace {
 }
 
 function CronJobsContent() {
+  const t = useTranslations("cronjobs");
+  const tCommon = useTranslations("common");
+  const { runWithFeedback } = useAsyncActionFeedback();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [cronjobs, setCronJobs] = useState<CronJob[]>([]);
   const [namespaces, setNamespaces] = useState<Namespace[]>([]);
@@ -51,11 +56,11 @@ function CronJobsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { selectedCluster, clusters } = useCluster();
-  const clusterIdFromUrl = searchParams.get('cluster_id');
+  const clusterIdFromUrl = searchParams.get("cluster_id");
   const clusterId = clusterIdFromUrl || (selectedCluster ? String(selectedCluster) : null);
+  const clusterIdNum = clusterId ? parseInt(clusterId, 10) : null;
 
-  // 获取集群信息
-  const currentCluster = clusters.find(c => c.id === parseInt(clusterId || '0'));
+  const currentCluster = clusterIdNum ? clusters.find((c) => c.id === clusterIdNum) : null;
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -67,97 +72,105 @@ function CronJobsContent() {
   }, [router]);
 
   useEffect(() => {
-    if (isAuthenticated && clusterId) {
+    if (isAuthenticated && clusterIdNum) {
       fetchNamespaces();
     }
-  }, [isAuthenticated, clusterId]);
+  }, [isAuthenticated, clusterIdNum]);
 
   useEffect(() => {
-    if (isAuthenticated && clusterId && selectedNamespace) {
+    if (isAuthenticated && clusterIdNum && selectedNamespace) {
       fetchCronJobs();
     }
-  }, [isAuthenticated, clusterId, selectedNamespace]);
+  }, [isAuthenticated, clusterIdNum, selectedNamespace]);
 
   const fetchNamespaces = async () => {
+    if (!clusterIdNum) return;
+
     try {
-      const response = await namespaceApi.getNamespaces(parseInt(clusterId!));
+      const response = await namespaceApi.getNamespaces(clusterIdNum);
       if (response.data) {
         setNamespaces(response.data);
         if (response.data.length > 0 && !selectedNamespace) {
           setSelectedNamespace(response.data[0].name);
         }
       } else if (response.error) {
-        toast.error('获取命名空间失败: ' + response.error);
+        toast.error(t("namespacesLoadErrorWithMessage", { message: response.error }));
       }
     } catch (error) {
-      console.error('获取命名空间失败:', error);
-      toast.error('获取命名空间失败');
+      console.error("load namespaces failed:", error);
+      toast.error(t("namespacesLoadError"));
     }
   };
 
   const fetchCronJobs = async () => {
-    if (!selectedNamespace) return;
+    if (!selectedNamespace || !clusterIdNum) return;
 
     setIsLoading(true);
     try {
-      const response = await cronjobApi.getCronJobs(parseInt(clusterId!), selectedNamespace);
+      const response = await cronjobApi.getCronJobs(clusterIdNum, selectedNamespace);
       if (response.data) {
         setCronJobs(response.data);
       } else if (response.error) {
-        toast.error('获取CronJobs失败: ' + response.error);
+        toast.error(t("listLoadErrorWithMessage", { message: response.error }));
       }
     } catch (error) {
-      console.error('获取CronJobs失败:', error);
-      toast.error('获取CronJobs失败');
+      console.error("load cronjobs failed:", error);
+      toast.error(t("listLoadError"));
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleDelete = async (name: string) => {
+    if (!clusterIdNum) return;
+
     setIsOperationLoading(true);
     try {
-      const response = await cronjobApi.deleteCronJob(parseInt(clusterId!), selectedNamespace, name);
-      if (response.data !== undefined) {
-        toast.success('CronJob删除成功');
-        fetchCronJobs();
-      } else if (response.error) {
-        toast.error('删除失败: ' + response.error);
-      }
+      await runWithFeedback(
+        async () => {
+          const response = await cronjobApi.deleteCronJob(clusterIdNum, selectedNamespace, name);
+          if (response.error) {
+            throw new Error(response.error || t("deleteErrorUnknown"));
+          }
+          await fetchCronJobs();
+        },
+        {
+          loading: t("deleteLoading"),
+          success: t("deleteSuccess"),
+          error: t("deleteError"),
+        }
+      );
     } catch (error) {
-      console.error('删除失败:', error);
-      toast.error('删除失败');
+      console.error("delete cronjob failed:", error);
     } finally {
       setIsOperationLoading(false);
     }
   };
 
-  const filteredCronJobs = cronjobs.filter(cj =>
+  const filteredCronJobs = cronjobs.filter((cj) =>
     cj.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   if (!isAuthenticated) {
-    return <div>验证中...</div>;
+    return <div>{t("authVerifying")}</div>;
   }
 
-  if (!clusterId) {
+  if (!clusterIdNum) {
     return (
       <div className="container mx-auto p-6">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center text-yellow-600">
               <AlertCircle className="h-5 w-5 mr-2" />
-              未选择集群
+              {t("clusterRequiredTitle")}
             </CardTitle>
-            <CardDescription>
-              请先从首页选择一个集群，或者确保 URL 中包含 cluster_id 参数
-            </CardDescription>
+            <CardDescription>{t("clusterRequiredDescription")}</CardDescription>
           </CardHeader>
           <CardContent>
             <Link href="/">
               <Button>
                 <ArrowLeft className="h-4 w-4 mr-2" />
-                返回首页选择集群
+                {t("clusterRequiredAction")}
               </Button>
             </Link>
           </CardContent>
@@ -173,31 +186,31 @@ function CronJobsContent() {
           <Link href="/">
             <Button variant="outline" size="sm">
               <ArrowLeft className="h-4 w-4 mr-2" />
-              返回
+              {t("back")}
             </Button>
           </Link>
           <div>
-            <h1 className="text-3xl font-bold">CronJobs管理</h1>
+            <h1 className="text-3xl font-bold">{t("title")}</h1>
             <p className="text-muted-foreground">
-              管理定时任务工作负载
+              {t("description")}
               {currentCluster && (
                 <span className="ml-2">
-                  • 集群: <span className="font-semibold text-foreground">{currentCluster.name}</span>
+                  • {t("clusterLabel")}: <span className="font-semibold text-foreground">{currentCluster.name}</span>
                 </span>
               )}
             </p>
           </div>
         </div>
         <Button onClick={fetchCronJobs} disabled={isLoading}>
-          <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-          刷新
+          <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
+          {t("refresh")}
         </Button>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>CronJob列表</CardTitle>
-          <CardDescription>选择命名空间查看其中的CronJobs</CardDescription>
+          <CardTitle>{t("listTitle")}</CardTitle>
+          <CardDescription>{t("listDescription")}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex flex-col space-y-4">
@@ -205,7 +218,7 @@ function CronJobsContent() {
               <div className="flex-1 min-w-[200px]">
                 <Select value={selectedNamespace} onValueChange={setSelectedNamespace}>
                   <SelectTrigger>
-                    <SelectValue placeholder="选择命名空间" />
+                    <SelectValue placeholder={t("namespacePlaceholder")} />
                   </SelectTrigger>
                   <SelectContent>
                     {namespaces.map((ns) => (
@@ -220,7 +233,7 @@ function CronJobsContent() {
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                   <Input
-                    placeholder="搜索CronJob名称..."
+                    placeholder={t("searchPlaceholder")}
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="pl-10"
@@ -232,27 +245,27 @@ function CronJobsContent() {
             {isLoading ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="h-8 w-8 animate-spin" />
-                <span className="ml-2">加载中...</span>
+                <span className="ml-2">{tCommon("loading")}</span>
               </div>
             ) : (
               <div className="border rounded-lg">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>名称</TableHead>
-                      <TableHead>调度时间</TableHead>
-                      <TableHead>状态</TableHead>
-                      <TableHead>活跃任务</TableHead>
-                      <TableHead>上次调度时间</TableHead>
-                      <TableHead>年龄</TableHead>
-                      <TableHead>操作</TableHead>
+                      <TableHead>{t("nameLabel")}</TableHead>
+                      <TableHead>{t("scheduleLabel")}</TableHead>
+                      <TableHead>{t("statusLabel")}</TableHead>
+                      <TableHead>{t("activeJobsLabel")}</TableHead>
+                      <TableHead>{t("lastScheduleLabel")}</TableHead>
+                      <TableHead>{t("ageLabel")}</TableHead>
+                      <TableHead>{tCommon("actions")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredCronJobs.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                          {selectedNamespace ? '该命名空间中没有CronJobs' : '请选择命名空间'}
+                          {selectedNamespace ? t("noCronJobsInNamespace") : t("selectNamespaceFirst")}
                         </TableCell>
                       </TableRow>
                     ) : (
@@ -273,34 +286,32 @@ function CronJobsContent() {
                             {cj.suspend ? (
                               <Badge variant="secondary">
                                 <Pause className="h-3 w-3 mr-1" />
-                                暂停
+                                {t("statusSuspended")}
                               </Badge>
                             ) : (
                               <Badge variant="default">
                                 <Play className="h-3 w-3 mr-1" />
-                                运行中
+                                {t("statusRunning")}
                               </Badge>
                             )}
                           </TableCell>
                           <TableCell>
-                            <Badge variant={cj.active > 0 ? "default" : "outline"}>
-                              {cj.active}
-                            </Badge>
+                            <Badge variant={cj.active > 0 ? "default" : "outline"}>{cj.active}</Badge>
                           </TableCell>
-                          <TableCell>
-                            {cj.last_schedule_time || '从未执行'}
-                          </TableCell>
+                          <TableCell>{cj.last_schedule_time || t("neverRun")}</TableCell>
                           <TableCell>{cj.age}</TableCell>
                           <TableCell>
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => setConfirmDialog({
-                                open: true,
-                                title: "删除CronJob",
-                                description: `确定要删除CronJob "${cj.name}" 吗？`,
-                                onConfirm: () => handleDelete(cj.name),
-                              })}
+                              onClick={() =>
+                                setConfirmDialog({
+                                  open: true,
+                                  title: t("deleteTitle"),
+                                  description: t("deleteDescription", { name: cj.name }),
+                                  onConfirm: () => handleDelete(cj.name),
+                                })
+                              }
                               disabled={isOperationLoading}
                             >
                               <Trash2 className="h-3 w-3" />
@@ -319,7 +330,7 @@ function CronJobsContent() {
 
       <ConfirmDialog
         open={confirmDialog.open}
-        onOpenChange={(open) => setConfirmDialog(prev => ({ ...prev, open }))}
+        onOpenChange={(open) => setConfirmDialog((prev) => ({ ...prev, open }))}
         title={confirmDialog.title}
         description={confirmDialog.description}
         onConfirm={confirmDialog.onConfirm}

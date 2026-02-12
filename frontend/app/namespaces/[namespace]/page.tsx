@@ -16,6 +16,7 @@ import { useCluster } from "@/lib/cluster-context";
 import { resolveClusterContext, withClusterId } from "@/lib/cluster-context-resolver";
 import { toast } from "sonner";
 import { jobApi, Job, namespaceApi, storageApi } from "@/lib/api";
+import { useTranslations } from "@/hooks/use-translations";
 
 interface NamespaceResources {
   cpu_requests: string;
@@ -80,6 +81,9 @@ interface PVC {
 }
 
 export default function NamespaceDetailsPage({ params }: { params: Promise<{ namespace: string }> }) {
+  const t = useTranslations("namespaceDetails");
+  const tCommon = useTranslations("common");
+  const tAuth = useTranslations("auth");
   const resolvedParams = use(params);
   const { isAuthenticated, isLoading: authLoading, logout } = useAuth();
   const [resources, setResources] = useState<NamespaceResources | null>(null);
@@ -172,7 +176,7 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
       } else if (activeTab === "jobs") {
         // 获取Jobs
         if (!effectiveClusterId) {
-          toast.error("未找到可用集群，请先在页面顶部选择集群");
+          toast.error(t("clusterRequired"));
           setJobs([]);
           return;
         }
@@ -180,7 +184,7 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
         if (jobsResponse.data) {
           setJobs(jobsResponse.data);
         } else if (jobsResponse.error) {
-          toast.error(`获取Jobs失败: ${jobsResponse.error}`);
+          toast.error(t("loadJobsErrorWithMessage", { message: jobsResponse.error }));
         }
       }
     } catch (error) {
@@ -191,7 +195,7 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
   };
 
   const formatAge = (timestamp: string) => {
-    if (!timestamp) return "未知";
+    if (!timestamp) return t("unknownValue");
     const date = new Date(timestamp);
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
@@ -199,10 +203,10 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
     const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
     const diffMinutes = Math.floor(diffMs / (1000 * 60));
 
-    if (diffDays > 0) return `${diffDays}天前`;
-    if (diffHours > 0) return `${diffHours}小时前`;
-    if (diffMinutes > 0) return `${diffMinutes}分钟前`;
-    return "刚刚";
+    if (diffDays > 0) return t("daysAgo", { count: diffDays });
+    if (diffHours > 0) return t("hoursAgo", { count: diffHours });
+    if (diffMinutes > 0) return t("minutesAgo", { count: diffMinutes });
+    return t("justNow");
   };
 
   if (authLoading) {
@@ -235,7 +239,7 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
               <ThemeToggle />
               <Button variant="outline" onClick={logout}>
                 <LogOut className="h-4 w-4 mr-2" />
-                退出登录
+                {tAuth("logout")}
               </Button>
             </div>
           </div>
@@ -249,7 +253,7 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
             <div className="flex items-center">
               <Link href="/namespaces" className="flex items-center">
                 <ArrowLeft className="h-5 w-5 mr-2" />
-                <span className="text-gray-600 dark:text-gray-400">返回命名空间列表</span>
+                <span className="text-gray-600 dark:text-gray-400">{t("backToNamespaces")}</span>
               </Link>
             </div>
             <div className="flex items-center space-x-4">
@@ -259,7 +263,7 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
                 ) : (
                   <RefreshCw className="h-4 w-4 mr-2" />
                 )}
-                刷新
+                {t("refresh")}
               </Button>
             </div>
           </div>
@@ -270,21 +274,21 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <h2 className="text-3xl font-bold text-gray-900 dark:text-white">
-            命名空间详情: {resolvedParams.namespace}
+            {t("title", { namespace: resolvedParams.namespace })}
           </h2>
           <p className="mt-2 text-gray-600 dark:text-gray-400">
-            查看命名空间中的资源和工作负载
+            {t("description")}
           </p>
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="grid w-full grid-cols-6">
-            <TabsTrigger value="overview">概览</TabsTrigger>
-            <TabsTrigger value="deployments">部署</TabsTrigger>
-            <TabsTrigger value="services">服务</TabsTrigger>
+            <TabsTrigger value="overview">{t("tabOverview")}</TabsTrigger>
+            <TabsTrigger value="deployments">{t("tabDeployments")}</TabsTrigger>
+            <TabsTrigger value="services">{t("tabServices")}</TabsTrigger>
             <TabsTrigger value="jobs">Jobs</TabsTrigger>
             <TabsTrigger value="pvcs">PVC</TabsTrigger>
-            <TabsTrigger value="crds">自定义资源</TabsTrigger>
+            <TabsTrigger value="crds">{t("tabCrds")}</TabsTrigger>
           </TabsList>
 
           {/* 概览标签页 */}
@@ -292,7 +296,7 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
             {isLoading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin mr-2" />
-                <span className="text-lg">加载中...</span>
+                <span className="text-lg">{tCommon("loading")}</span>
               </div>
             ) : resources ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -304,7 +308,7 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
                   <CardContent>
                     <div className="text-2xl font-bold">{resources.pods}</div>
                     <p className="text-xs text-muted-foreground">
-                      运行中的Pods数量
+                      {t("podsCountDescription")}
                     </p>
                   </CardContent>
                 </Card>
@@ -317,7 +321,7 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
                   <CardContent>
                     <div className="text-2xl font-bold">{resources.services}</div>
                     <p className="text-xs text-muted-foreground">
-                      服务数量
+                      {t("servicesCountDescription")}
                     </p>
                   </CardContent>
                 </Card>
@@ -330,7 +334,7 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
                   <CardContent>
                     <div className="text-2xl font-bold">{resources.config_maps}</div>
                     <p className="text-xs text-muted-foreground">
-                      配置映射数量
+                      {t("configMapsCountDescription")}
                     </p>
                   </CardContent>
                 </Card>
@@ -343,7 +347,7 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
                   <CardContent>
                     <div className="text-2xl font-bold">{resources.secrets}</div>
                     <p className="text-xs text-muted-foreground">
-                      密钥数量
+                      {t("secretsCountDescription")}
                     </p>
                   </CardContent>
                 </Card>
@@ -356,33 +360,33 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
                   <CardContent>
                     <div className="text-2xl font-bold">{resources.persistent_volume_claims}</div>
                     <p className="text-xs text-muted-foreground">
-                      持久卷声明数量
+                      {t("pvcsCountDescription")}
                     </p>
                   </CardContent>
                 </Card>
 
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">CPU资源</CardTitle>
+                    <CardTitle className="text-sm font-medium">{t("cpuResourcesTitle")}</CardTitle>
                     <Cpu className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
                   <CardContent>
                     <div className="text-2xl font-bold">{resources.cpu_requests}</div>
                     <p className="text-xs text-muted-foreground">
-                      请求: {resources.cpu_requests}, 限制: {resources.cpu_limits}
+                      {t("resourceSummary", { requests: resources.cpu_requests, limits: resources.cpu_limits })}
                     </p>
                   </CardContent>
                 </Card>
 
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">内存资源</CardTitle>
+                    <CardTitle className="text-sm font-medium">{t("memoryResourcesTitle")}</CardTitle>
                     <MemoryStick className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
                   <CardContent>
                     <div className="text-2xl font-bold">{resources.memory_requests}</div>
                     <p className="text-xs text-muted-foreground">
-                      请求: {resources.memory_requests}, 限制: {resources.memory_limits}
+                      {t("resourceSummary", { requests: resources.memory_requests, limits: resources.memory_limits })}
                     </p>
                   </CardContent>
                 </Card>
@@ -392,10 +396,10 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
                 <CardContent className="flex flex-col items-center justify-center py-12">
                   <Activity className="h-12 w-12 text-gray-400 mb-4" />
                   <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                    无法获取资源信息
+                    {t("resourcesUnavailableTitle")}
                   </h3>
                   <p className="text-gray-600 dark:text-gray-400">
-                    无法获取命名空间的资源使用情况
+                    {t("resourcesUnavailableDescription")}
                   </p>
                 </CardContent>
               </Card>
@@ -407,17 +411,17 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
             {isLoading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin mr-2" />
-                <span className="text-lg">加载中...</span>
+                <span className="text-lg">{tCommon("loading")}</span>
               </div>
             ) : deployments.length === 0 ? (
               <Card>
                 <CardContent className="flex flex-col items-center justify-center py-12">
                   <Users className="h-12 w-12 text-gray-400 mb-4" />
                   <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                    暂无部署
+                    {t("noDeploymentsTitle")}
                   </h3>
                   <p className="text-gray-600 dark:text-gray-400">
-                    该命名空间中没有部署资源
+                    {t("noDeploymentsDescription")}
                   </p>
                 </CardContent>
               </Card>
@@ -440,16 +444,19 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
                           </Badge>
                         </div>
                         <CardDescription>
-                          副本: {deployment.ready_replicas}/{deployment.replicas} •
-                          可用: {deployment.available_replicas} •
-                          更新: {deployment.updated_replicas} •
-                          创建时间: {formatAge(deployment.age)}
+                          {t("deploymentMeta", {
+                            ready: deployment.ready_replicas,
+                            replicas: deployment.replicas,
+                            available: deployment.available_replicas,
+                            updated: deployment.updated_replicas,
+                            age: formatAge(deployment.age),
+                          })}
                         </CardDescription>
                       </CardHeader>
                       <CardContent>
                         <div className="space-y-2">
                           <div>
-                            <h4 className="text-sm font-medium mb-1">镜像:</h4>
+                            <h4 className="text-sm font-medium mb-1">{t("imagesLabel")}</h4>
                             <div className="flex flex-wrap gap-1">
                               {deployment.images.map((image, index) => (
                                 <Badge key={index} variant="outline" className="text-xs">
@@ -460,7 +467,7 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
                           </div>
                           {Object.keys(deployment.labels).length > 0 && (
                             <div>
-                              <h4 className="text-sm font-medium mb-1">标签:</h4>
+                              <h4 className="text-sm font-medium mb-1">{t("labelsLabel")}</h4>
                               <div className="flex flex-wrap gap-1">
                                 {Object.entries(deployment.labels).map(([key, value]) => (
                                   <Badge key={key} variant="secondary" className="text-xs">
@@ -484,17 +491,17 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
             {isLoading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin mr-2" />
-                <span className="text-lg">加载中...</span>
+                <span className="text-lg">{tCommon("loading")}</span>
               </div>
             ) : services.length === 0 ? (
               <Card>
                 <CardContent className="flex flex-col items-center justify-center py-12">
                   <Settings className="h-12 w-12 text-gray-400 mb-4" />
                   <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                    暂无服务
+                    {t("noServicesTitle")}
                   </h3>
                   <p className="text-gray-600 dark:text-gray-400">
-                    该命名空间中没有服务资源
+                    {t("noServicesDescription")}
                   </p>
                 </CardContent>
               </Card>
@@ -508,15 +515,17 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
                         <Badge variant="outline">{service.type}</Badge>
                       </div>
                       <CardDescription>
-                        集群IP: {service.cluster_ip} •
-                        {service.external_ip && `外部IP: ${service.external_ip} • `}
-                        创建时间: {formatAge(service.age)}
+                        {t("serviceMeta", {
+                          clusterIp: service.cluster_ip,
+                          externalIp: service.external_ip || "",
+                          age: formatAge(service.age),
+                        })}
                       </CardDescription>
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-2">
                         <div>
-                          <h4 className="text-sm font-medium mb-1">端口:</h4>
+                          <h4 className="text-sm font-medium mb-1">{t("portsLabel")}</h4>
                           <div className="flex flex-wrap gap-1">
                             {service.ports.map((port, index) => (
                               <Badge key={index} variant="outline" className="text-xs">
@@ -527,7 +536,7 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
                         </div>
                         {service.type === 'NodePort' && service.ports.some(port => port.node_port) && (
                           <div>
-                            <h4 className="text-sm font-medium mb-1">访问地址:</h4>
+                            <h4 className="text-sm font-medium mb-1">{t("accessAddressesLabel")}</h4>
                             <div className="flex flex-wrap gap-2">
                               {service.ports.filter(port => port.node_port).map((port, index) => (
                                 <Button
@@ -538,9 +547,9 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
                                     const protocol = port.protocol === 'TCP' ? 'http' : 'https';
                                     const url = `${protocol}://<node-ip>:${port.node_port}`;
                                     navigator.clipboard.writeText(url).then(() => {
-                                      toast.success('访问URL已复制到剪贴板，请将 <node-ip> 替换为集群节点的实际IP地址');
+                                      toast.success(t("accessUrlCopied"));
                                     }).catch(() => {
-                                      toast.error(`复制失败，请手动复制：${url}\n请将 <node-ip> 替换为集群节点的实际IP地址`);
+                                      toast.error(t("accessUrlCopyFailed", { url }));
                                     });
                                   }}
                                   className="text-xs h-7"
@@ -550,12 +559,12 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
                                 </Button>
                               ))}
                             </div>
-                            <p className="text-xs text-gray-500 mt-1">请将 &lt;node-ip&gt; 替换为集群节点的实际IP地址</p>
+                            <p className="text-xs text-gray-500 mt-1">{t("replaceNodeIpHint")}</p>
                           </div>
                         )}
                         {Object.keys(service.selector).length > 0 && (
                           <div>
-                            <h4 className="text-sm font-medium mb-1">选择器:</h4>
+                            <h4 className="text-sm font-medium mb-1">{t("selectorsLabel")}</h4>
                             <div className="flex flex-wrap gap-1">
                               {Object.entries(service.selector).map(([key, value]) => (
                                 <Badge key={key} variant="secondary" className="text-xs">
@@ -567,7 +576,7 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
                         )}
                         {Object.keys(service.labels).length > 0 && (
                           <div>
-                            <h4 className="text-sm font-medium mb-1">标签:</h4>
+                            <h4 className="text-sm font-medium mb-1">{t("labelsLabel")}</h4>
                             <div className="flex flex-wrap gap-1">
                               {Object.entries(service.labels).map(([key, value]) => (
                                 <Badge key={key} variant="secondary" className="text-xs">
@@ -590,17 +599,17 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
             {isLoading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin mr-2" />
-                <span className="text-lg">加载中...</span>
+                <span className="text-lg">{tCommon("loading")}</span>
               </div>
             ) : pvcs.length === 0 ? (
               <Card>
                 <CardContent className="flex flex-col items-center justify-center py-12">
                   <HardDrive className="h-12 w-12 text-gray-400 mb-4" />
                   <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                    暂无持久卷声明
+                    {t("noPvcsTitle")}
                   </h3>
                   <p className="text-gray-600 dark:text-gray-400">
-                    该命名空间中没有持久卷声明
+                    {t("noPvcsDescription")}
                   </p>
                 </CardContent>
               </Card>
@@ -616,15 +625,17 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
                         </Badge>
                       </div>
                       <CardDescription>
-                        容量: {pvc.capacity} •
-                        存储类: {pvc.storage_class || '默认'} •
-                        卷模式: {pvc.volume_mode}
+                        {t("pvcMeta", {
+                          capacity: pvc.capacity,
+                          storageClass: pvc.storage_class || t("defaultStorageClass"),
+                          volumeMode: pvc.volume_mode,
+                        })}
                       </CardDescription>
                     </CardHeader>
                     <CardContent>
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <h4 className="text-sm font-medium mb-1">访问模式:</h4>
+                          <h4 className="text-sm font-medium mb-1">{t("accessModesLabel")}</h4>
                           <div className="flex flex-wrap gap-1">
                             {pvc.access_modes.map((mode) => (
                               <Badge key={mode} variant="outline" className="text-xs">
@@ -635,7 +646,7 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
                         </div>
                         {pvc.volume && (
                           <div>
-                            <h4 className="text-sm font-medium mb-1">绑定卷:</h4>
+                            <h4 className="text-sm font-medium mb-1">{t("boundVolumeLabel")}</h4>
                             <p className="text-sm text-gray-600 dark:text-gray-400">{pvc.volume}</p>
                           </div>
                         )}
@@ -652,17 +663,17 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
             {isLoading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin mr-2" />
-                <span className="text-lg">加载中...</span>
+                <span className="text-lg">{tCommon("loading")}</span>
               </div>
             ) : crds.length === 0 ? (
               <Card>
                 <CardContent className="flex flex-col items-center justify-center py-12">
                   <FileText className="h-12 w-12 text-gray-400 mb-4" />
                   <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                    暂无自定义资源
+                    {t("noCrdsTitle")}
                   </h3>
                   <p className="text-gray-600 dark:text-gray-400">
-                    该命名空间中没有自定义资源
+                    {t("noCrdsDescription")}
                   </p>
                 </CardContent>
               </Card>
@@ -676,14 +687,13 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
                         <Badge variant="outline">{crd.kind}</Badge>
                       </div>
                       <CardDescription>
-                        API版本: {crd.api_version} •
-                        创建时间: {formatAge(crd.age)}
+                        {t("crdMeta", { apiVersion: crd.api_version, age: formatAge(crd.age) })}
                       </CardDescription>
                     </CardHeader>
                     <CardContent>
                       {Object.keys(crd.labels).length > 0 && (
                         <div>
-                          <h4 className="text-sm font-medium mb-1">标签:</h4>
+                          <h4 className="text-sm font-medium mb-1">{t("labelsLabel")}</h4>
                           <div className="flex flex-wrap gap-1">
                             {Object.entries(crd.labels).map(([key, value]) => (
                               <Badge key={key} variant="secondary" className="text-xs">
@@ -705,17 +715,17 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
             {isLoading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin mr-2" />
-                <span className="text-lg">加载中...</span>
+                <span className="text-lg">{tCommon("loading")}</span>
               </div>
             ) : jobs.length === 0 ? (
               <Card>
                 <CardContent className="flex flex-col items-center justify-center py-12">
                   <Briefcase className="h-12 w-12 text-gray-400 mb-4" />
                   <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                    暂无Jobs
+                    {t("noJobsTitle")}
                   </h3>
                   <p className="text-gray-600 dark:text-gray-400">
-                    该命名空间中没有Jobs
+                    {t("noJobsDescription")}
                   </p>
                 </CardContent>
               </Card>
@@ -740,9 +750,12 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
                           </Badge>
                         </div>
                         <CardDescription>
-                          完成度: {job.succeeded}/{job.completions} •
-                          活跃Pods: {job.active} •
-                          创建时间: {formatAge(job.age)}
+                          {t("jobMeta", {
+                            succeeded: job.succeeded,
+                            completions: job.completions,
+                            active: job.active,
+                            age: formatAge(job.age),
+                          })}
                         </CardDescription>
                       </CardHeader>
                       <CardContent>
@@ -750,13 +763,13 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
                           {job.failed > 0 && (
                             <div className="flex items-center space-x-2">
                               <Badge variant="destructive" className="text-xs">
-                                {job.failed}失败
+                                {t("jobFailedCount", { count: job.failed })}
                               </Badge>
                             </div>
                           )}
                           {Object.keys(job.labels).length > 0 && (
                             <div>
-                              <h4 className="text-sm font-medium mb-1">标签:</h4>
+                              <h4 className="text-sm font-medium mb-1">{t("labelsLabel")}</h4>
                               <div className="flex flex-wrap gap-1">
                                 {Object.entries(job.labels).map(([key, value]) => (
                                   <Badge key={key} variant="secondary" className="text-xs">

@@ -10,10 +10,10 @@ import { Plus, Edit, Trash2, TestTube, ArrowLeft, Loader2, Power, PowerOff, Acti
 import Link from "next/link";
 import AuthGuard from "@/components/AuthGuard";
 import { clusterApi, metricsApi } from "@/lib/api";
-import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { MetricsServerInstallDialog } from "@/components/MetricsServerInstallDialog";
 import { useTranslations } from "@/hooks/use-translations";
+import { useAsyncActionFeedback } from "@/hooks/use-async-action-feedback";
 
 interface Cluster {
   id: number;
@@ -26,9 +26,11 @@ interface Cluster {
 function ClustersPageContent() {
   const t = useTranslations("cluster");
   const tCommon = useTranslations("common");
+  const { runWithFeedback } = useAsyncActionFeedback();
 
   const [clusters, setClusters] = useState<Cluster[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isOperationLoading, setIsOperationLoading] = useState(false);
   const [metricsStatus, setMetricsStatus] = useState<Record<number, boolean>>({});
   const [installDialog, setInstallDialog] = useState<{ open: boolean; clusterId: number; clusterName: string }>({
     open: false,
@@ -64,7 +66,7 @@ function ClustersPageContent() {
           statusMap[cluster.id] = false;
         }
       } catch (error) {
-        console.error(`检查集群 ${cluster.id} metrics状态失败:`, error);
+        console.error(`check metrics status failed for cluster ${cluster.id}:`, error);
         statusMap[cluster.id] = false;
       }
     }
@@ -80,10 +82,10 @@ function ClustersPageContent() {
       if (response.data) {
         setClusters(response.data);
       } else {
-        console.error("获取集群列表失败");
+        console.error("load cluster list failed");
       }
     } catch (error) {
-      console.error("获取集群列表出错:", error);
+      console.error("load cluster list error:", error);
     } finally {
       setIsLoading(false);
     }
@@ -99,65 +101,90 @@ function ClustersPageContent() {
   };
 
   const performDeleteCluster = async (clusterId: number, clusterName: string) => {
+    setIsOperationLoading(true);
     try {
-      const token = localStorage.getItem("token");
-      const response = await clusterApi.deleteCluster(clusterId);
-
-      if (response.data !== undefined) {
-        setClusters(clusters.filter(cluster => cluster.id !== clusterId));
-        toast.success(t("deleteCluster") + " " + tCommon("success"));
-      } else {
-        toast.error(t("deleteCluster") + " " + tCommon("failed"));
-      }
+      await runWithFeedback(
+        async () => {
+          const response = await clusterApi.deleteCluster(clusterId);
+          if (response.data === undefined) {
+            throw new Error(response.error || t("deleteClusterErrorUnknown"));
+          }
+          setClusters(clusters.filter((cluster) => cluster.id !== clusterId));
+        },
+        {
+          loading: t("deleteClusterLoading", { name: clusterName }),
+          success: t("deleteClusterSuccess", { name: clusterName }),
+          error: t("deleteClusterError"),
+        }
+      );
     } catch (error) {
-      console.error(t("deleteCluster") + " error:", error);
-      toast.error(t("deleteCluster") + " " + tCommon("error"));
+      console.error("delete cluster failed:", error);
+    } finally {
+      setIsOperationLoading(false);
     }
   };
 
   const handleTestConnection = async (clusterId: number, clusterName: string) => {
+    setIsOperationLoading(true);
     try {
-      const response = await clusterApi.testConnection(clusterId);
-
-      if (response.data) {
-        toast.success(`集群 "${clusterName}" 连接测试成功！`);
-      } else {
-        toast.error(`集群 "${clusterName}" 连接测试失败：${response.error || '未知错误'}`);
-      }
+      await runWithFeedback(
+        async () => {
+          const response = await clusterApi.testConnection(clusterId);
+          if (!response.data) {
+            throw new Error(response.error || t("testConnectionErrorUnknown"));
+          }
+        },
+        {
+          loading: t("testConnectionLoading", { name: clusterName }),
+          success: t("testConnectionSuccess", { name: clusterName }),
+          error: t("testConnectionError"),
+        }
+      );
     } catch (error) {
-      console.error("测试连接出错:", error);
-      toast.error("测试连接时发生错误");
+      console.error("test connection failed:", error);
+    } finally {
+      setIsOperationLoading(false);
     }
   };
 
   const handleToggleActive = (cluster: Cluster) => {
-    const action = cluster.is_active ? "停用" : "激活";
+    const actionKey = cluster.is_active ? "deactivate" : "activate";
     setConfirmDialog({
       open: true,
-      title: `${action}集群`,
-      description: `确定要${action}集群 "${cluster.name}" 吗？`,
-      onConfirm: () => performToggleActive(cluster, action),
+      title: t("toggleClusterTitle", { action: tCommon(actionKey) }),
+      description: t("toggleClusterDescription", {
+        action: tCommon(actionKey),
+        name: cluster.name,
+      }),
+      onConfirm: () => performToggleActive(cluster, actionKey),
     });
   };
 
-  const performToggleActive = async (cluster: Cluster, action: string) => {
+  const performToggleActive = async (cluster: Cluster, actionKey: "activate" | "deactivate") => {
+    setIsOperationLoading(true);
     try {
-      const response = await clusterApi.updateCluster(cluster.id, {
-        is_active: !cluster.is_active
-      });
+      await runWithFeedback(
+        async () => {
+          const response = await clusterApi.updateCluster(cluster.id, {
+            is_active: !cluster.is_active,
+          });
 
-      if (response.data) {
-        // 更新本地状态
-        setClusters(clusters.map(c =>
-          c.id === cluster.id ? { ...c, is_active: !c.is_active } : c
-        ));
-        toast.success(`集群 "${cluster.name}" 已${action}成功！`);
-      } else {
-        toast.error(`${action}集群失败: ${response.error || '未知错误'}`);
-      }
+          if (!response.data) {
+            throw new Error(response.error || t("toggleClusterErrorUnknown"));
+          }
+
+          setClusters(clusters.map((c) => (c.id === cluster.id ? { ...c, is_active: !c.is_active } : c)));
+        },
+        {
+          loading: t("toggleClusterLoading", { action: tCommon(actionKey), name: cluster.name }),
+          success: t("toggleClusterSuccess", { action: tCommon(actionKey), name: cluster.name }),
+          error: t("toggleClusterError"),
+        }
+      );
     } catch (error) {
-      console.error(`${action}集群出错:`, error);
-      toast.error(`${action}集群时发生错误`);
+      console.error("toggle cluster failed:", error);
+    } finally {
+      setIsOperationLoading(false);
     }
   };
 
@@ -245,6 +272,7 @@ function ClustersPageContent() {
                         size="sm"
                         variant={cluster.is_active ? "secondary" : "default"}
                         onClick={() => handleToggleActive(cluster)}
+                        disabled={isOperationLoading}
                       >
                         {cluster.is_active ? (
                           <>
@@ -262,6 +290,7 @@ function ClustersPageContent() {
                         size="sm"
                         variant="outline"
                         onClick={() => handleTestConnection(cluster.id, cluster.name)}
+                        disabled={isOperationLoading}
                       >
                         <TestTube className="h-4 w-4 mr-1" />
                         {t("testConnection")}
@@ -277,7 +306,7 @@ function ClustersPageContent() {
                           })}
                         >
                           <Activity className="h-4 w-4 mr-1" />
-                          安装监控
+                          {t("installMonitoring")}
                         </Button>
                       )}
                       <Button
@@ -294,6 +323,7 @@ function ClustersPageContent() {
                         size="sm"
                         variant="destructive"
                         onClick={() => handleDeleteCluster(cluster.id, cluster.name)}
+                        disabled={isOperationLoading}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>

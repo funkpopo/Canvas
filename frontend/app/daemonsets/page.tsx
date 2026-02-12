@@ -13,6 +13,7 @@ import {
   AgeColumn,
 } from "@/components/ResourceList";
 import { daemonsetApi } from "@/lib/api";
+import { useTranslations } from "@/hooks/use-translations";
 
 // ============ 类型定义 ============
 
@@ -27,6 +28,7 @@ interface DaemonSet extends BaseResource {
 // ============ 内容组件 ============
 
 function DaemonSetsContent() {
+  const t = useTranslations("daemonsets");
   const searchParams = useSearchParams();
   const clusterIdFromUrl = searchParams.get("cluster_id");
 
@@ -40,7 +42,7 @@ function DaemonSetsContent() {
     NameColumn<DaemonSet>(),
     {
       key: "desiredCurrent",
-      header: "期望/当前",
+      header: t("desiredCurrentLabel"),
       render: (item) => (
         <Badge variant={item.current === item.desired ? "default" : "secondary"}>
           {item.desired}/{item.current}
@@ -49,17 +51,17 @@ function DaemonSetsContent() {
     },
     {
       key: "ready",
-      header: "就绪",
+      header: t("readyLabel"),
       render: (item) => item.ready,
     },
     {
       key: "updated",
-      header: "更新",
+      header: t("updatedLabel"),
       render: (item) => item.updated,
     },
     {
       key: "available",
-      header: "可用",
+      header: t("availableLabel"),
       render: (item) => item.available,
     },
     AgeColumn<DaemonSet>(),
@@ -70,7 +72,7 @@ function DaemonSetsContent() {
     {
       key: "delete",
       icon: Trash2,
-      tooltip: "删除",
+      tooltip: t("deleteAction"),
       danger: true,
       onClick: () => {},
     },
@@ -79,8 +81,8 @@ function DaemonSetsContent() {
   return (
     <ResourceList<DaemonSet>
       resourceType="DaemonSet"
-      title="DaemonSets管理"
-      description="管理守护进程工作负载"
+      title={t("title")}
+      description={t("description")}
       icon={Layers}
       columns={columns}
       actions={actions}
@@ -105,11 +107,11 @@ function DaemonSetsContent() {
       requireNamespace={true}
       allowAllNamespaces={false}
       defaultNamespace="default"
-      searchPlaceholder="搜索 DaemonSet..."
+      searchPlaceholder={t("searchPlaceholder")}
       deleteConfirm={{
-        title: "删除 DaemonSet",
+        title: t("deleteTitle"),
         description: (item) =>
-          `确定要删除 DaemonSet "${item.name}" 吗？此操作不可撤销。`,
+          t("deleteDescription", { name: item.name }),
       }}
     />
   );

@@ -9,7 +9,6 @@ import { Label } from "@/components/ui/label";
 import { FolderPen, Plus, Trash2, Loader2 } from "lucide-react";
 import { useCluster } from "@/lib/cluster-context";
 import AuthGuard from "@/components/AuthGuard";
-import { toast } from "sonner";
 import { namespaceApi, Namespace } from "@/lib/api";
 import {
   ResourceList,
@@ -20,26 +19,24 @@ import {
   ApiResponse,
   getStatusBadgeVariant,
 } from "@/components/ResourceList";
+import { useTranslations } from "@/hooks/use-translations";
+import { useAsyncActionFeedback } from "@/hooks/use-async-action-feedback";
 
-// 系统命名空间列表
 const SYSTEM_NAMESPACES = ["default", "kube-system", "kube-public", "kube-node-lease"];
 
-// Namespace 资源接口 - 扩展 BaseResource
 interface NamespaceInfo extends BaseResource {
   status: string;
   annotations: Record<string, string>;
 }
 
-// 转换 Namespace 到 NamespaceInfo (添加 BaseResource 必需字段)
 function transformNamespace(ns: Namespace): NamespaceInfo {
   return {
     ...ns,
     id: `${ns.cluster_id}-${ns.name}`,
-    namespace: "", // 命名空间本身不属于任何命名空间
+    namespace: "",
   };
 }
 
-// 自定义 fetch 函数 - 转换 API 响应
 async function fetchNamespacesApi(clusterId: number): Promise<ApiResponse<NamespaceInfo[]>> {
   const result = await namespaceApi.getNamespaces(clusterId);
   if (result.data) {
@@ -51,6 +48,9 @@ async function fetchNamespacesApi(clusterId: number): Promise<ApiResponse<Namesp
 }
 
 function NamespacesPageContent() {
+  const t = useTranslations("namespaces");
+  const tCommon = useTranslations("common");
+  const { runWithFeedback } = useAsyncActionFeedback();
   const { activeCluster } = useCluster();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newNamespaceName, setNewNamespaceName] = useState("");
@@ -64,37 +64,43 @@ function NamespacesPageContent() {
 
     setIsCreating(true);
     try {
-      const result = await namespaceApi.createNamespace(activeCluster.id, {
-        name: newNamespaceName.trim(),
-      });
+      await runWithFeedback(
+        async () => {
+          const result = await namespaceApi.createNamespace(activeCluster.id, {
+            name: newNamespaceName.trim(),
+          });
 
-      if (result.data) {
-        setIsCreateDialogOpen(false);
-        setNewNamespaceName("");
-        setRefreshKey((prev) => prev + 1);
-        toast.success("命名空间创建成功");
-      } else {
-        toast.error(`创建命名空间失败: ${result.error}`);
-      }
+          if (!result.data) {
+            throw new Error(result.error || t("createErrorUnknown"));
+          }
+
+          setIsCreateDialogOpen(false);
+          setNewNamespaceName("");
+          setRefreshKey((prev) => prev + 1);
+        },
+        {
+          loading: t("createLoading"),
+          success: t("createSuccess"),
+          error: t("createError"),
+        }
+      );
     } catch (error) {
-      console.error("创建命名空间出错:", error);
-      toast.error("创建命名空间时发生错误");
+      console.error("create namespace failed:", error);
     } finally {
       setIsCreating(false);
     }
   };
 
-  // 列定义
   const columns: ColumnDef<NamespaceInfo>[] = [
     {
       key: "name",
-      header: "名称",
+      header: t("name"),
       render: (item) => (
         <div className="flex items-center space-x-2">
           <span className="font-medium">{item.name}</span>
           {SYSTEM_NAMESPACES.includes(item.name) && (
             <Badge variant="secondary" className="text-xs">
-              系统
+              {t("systemNamespace")}
             </Badge>
           )}
         </div>
@@ -102,72 +108,59 @@ function NamespacesPageContent() {
     },
     {
       key: "status",
-      header: "状态",
-      render: (item) => (
-        <Badge variant={getStatusBadgeVariant(item.status)}>{item.status}</Badge>
-      ),
+      header: t("status"),
+      render: (item) => <Badge variant={getStatusBadgeVariant(item.status)}>{item.status}</Badge>,
     },
     {
       key: "cluster",
-      header: "集群",
+      header: t("cluster"),
       render: (item) => item.cluster_name,
     },
     {
       key: "labels",
-      header: "标签",
+      header: t("labels"),
       render: (item) => {
         const labelCount = Object.keys(item.labels || {}).length;
-        return labelCount > 0 ? (
-          <Badge variant="outline">{labelCount} 个标签</Badge>
-        ) : (
-          "-"
-        );
+        return labelCount > 0 ? <Badge variant="outline">{t("labelsCount", { count: labelCount })}</Badge> : t("emptyValue");
       },
     },
     {
       key: "age",
-      header: "年龄",
+      header: t("age"),
       render: (item) => item.age,
     },
   ];
 
-  // 操作按钮定义
   const actions: ActionDef<NamespaceInfo>[] = [
     {
       key: "delete",
       icon: Trash2,
-      tooltip: "删除命名空间",
+      tooltip: t("deleteNamespace"),
       variant: "outline",
       danger: true,
       disabled: (item) => SYSTEM_NAMESPACES.includes(item.name),
-      onClick: () => {
-        // 删除由 ResourceList 内部处理
-      },
+      onClick: () => {},
     },
   ];
 
-  // 卡片视图配置
   const cardConfig: CardRenderConfig<NamespaceInfo> = {
     title: (item) => (
       <div className="flex items-center space-x-2">
         <span>{item.name}</span>
         {SYSTEM_NAMESPACES.includes(item.name) && (
           <Badge variant="secondary" className="text-xs">
-            系统
+            {t("systemNamespace")}
           </Badge>
         )}
       </div>
     ),
     subtitle: (item) => `${item.cluster_name} • ${item.age}`,
-    status: (item) => (
-      <Badge variant={getStatusBadgeVariant(item.status)}>{item.status}</Badge>
-    ),
+    status: (item) => <Badge variant={getStatusBadgeVariant(item.status)}>{item.status}</Badge>,
     content: (item) => (
       <div className="space-y-4">
-        {/* 标签信息 */}
         {Object.keys(item.labels || {}).length > 0 && (
           <div>
-            <h4 className="text-sm font-medium mb-2">标签</h4>
+            <h4 className="text-sm font-medium mb-2">{t("labels")}</h4>
             <div className="flex flex-wrap gap-1">
               {Object.entries(item.labels || {})
                 .slice(0, 3)
@@ -178,7 +171,7 @@ function NamespacesPageContent() {
                 ))}
               {Object.keys(item.labels || {}).length > 3 && (
                 <Badge variant="outline" className="text-xs">
-                  +{Object.keys(item.labels || {}).length - 3} 更多
+                  {t("moreLabels", { count: Object.keys(item.labels || {}).length - 3 })}
                 </Badge>
               )}
             </div>
@@ -188,33 +181,32 @@ function NamespacesPageContent() {
     ),
   };
 
-  // 创建对话框按钮
   const createDialogButton = (
     <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
       <DialogTrigger asChild>
         <Button>
           <Plus className="h-4 w-4 mr-2" />
-          创建命名空间
+          {t("createNamespace")}
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>创建新命名空间</DialogTitle>
-          <DialogDescription>在当前集群中创建新的命名空间</DialogDescription>
+          <DialogTitle>{t("createTitle")}</DialogTitle>
+          <DialogDescription>{t("createDescription")}</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div>
-            <Label htmlFor="namespace-name">命名空间名称</Label>
+            <Label htmlFor="namespace-name">{t("nameInputLabel")}</Label>
             <Input
               id="namespace-name"
               value={newNamespaceName}
               onChange={(e) => setNewNamespaceName(e.target.value)}
-              placeholder="输入命名空间名称"
+              placeholder={t("nameInputPlaceholder")}
             />
           </div>
           {activeCluster && (
             <div>
-              <Label>目标集群</Label>
+              <Label>{t("targetCluster")}</Label>
               <div className="px-3 py-2 bg-muted rounded-md text-sm">
                 {activeCluster.name} ({activeCluster.endpoint})
               </div>
@@ -222,18 +214,11 @@ function NamespacesPageContent() {
           )}
           <div className="flex justify-end space-x-2">
             <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
-              取消
+              {tCommon("cancel")}
             </Button>
-            <Button
-              onClick={handleCreateNamespace}
-              disabled={isCreating || !newNamespaceName.trim() || !activeCluster}
-            >
-              {isCreating ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Plus className="h-4 w-4 mr-2" />
-              )}
-              创建
+            <Button onClick={handleCreateNamespace} disabled={isCreating || !newNamespaceName.trim() || !activeCluster}>
+              {isCreating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />}
+              {t("create")}
             </Button>
           </div>
         </div>
@@ -244,9 +229,9 @@ function NamespacesPageContent() {
   return (
     <ResourceList<NamespaceInfo>
       key={refreshKey}
-      resourceType="命名空间"
-      title="命名空间管理"
-      description="管理Kubernetes集群中的命名空间资源"
+      resourceType={t("resourceType")}
+      title={t("title")}
+      description={t("description")}
       icon={FolderPen}
       columns={columns}
       actions={actions}
@@ -261,8 +246,8 @@ function NamespacesPageContent() {
       statusFilter={{
         field: "status",
         options: [
-          { value: "Active", label: "Active" },
-          { value: "Terminating", label: "Terminating" },
+          { value: "Active", label: t("active") },
+          { value: "Terminating", label: t("terminating") },
         ],
       }}
       requireNamespace={false}
@@ -272,12 +257,11 @@ function NamespacesPageContent() {
       headerActions={createDialogButton}
       detailLink={(item) => `/namespaces/${item.name}?cluster_id=${item.cluster_id}`}
       deleteConfirm={{
-        title: "删除命名空间",
-        description: (item) =>
-          `确定要删除命名空间 "${item.name}" 吗？此操作不可撤销。`,
+        title: t("deleteNamespace"),
+        description: (item) => t("deleteDescription", { name: item.name }),
         showForceOption: false,
       }}
-      emptyText="开始创建您的第一个命名空间"
+      emptyText={t("emptyText")}
     />
   );
 }

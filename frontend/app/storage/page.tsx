@@ -19,6 +19,7 @@ import { useCluster } from "@/lib/cluster-context";
 import { storageApi } from "@/lib/api";
 import type { Cluster } from "@/lib/cluster-context";
 import { toast } from "sonner";
+import { useTranslations } from "@/hooks/use-translations";
 
 interface StorageClass {
   name: string;
@@ -56,6 +57,9 @@ interface PersistentVolumeClaim {
 }
 
 export default function StorageManagement() {
+  const t = useTranslations("storagePage");
+  const tCommon = useTranslations("common");
+
   const [activeTab, setActiveTab] = useState("classes");
   const [storageClasses, setStorageClasses] = useState<StorageClass[]>([]);
   const [persistentVolumes, setPersistentVolumes] = useState<PersistentVolume[]>([]);
@@ -196,7 +200,7 @@ export default function StorageManagement() {
       loadData(selectedClusterId ?? undefined);
     } else if (response.error) {
       console.error("创建存储类失败:", response.error);
-      toast.error(`创建存储类失败: ${response.error}`);
+      toast.error(t("createStorageClassErrorWithMessage", { message: response.error }));
     }
   };
 
@@ -302,7 +306,7 @@ export default function StorageManagement() {
             <div className="flex items-center">
               <Link href="/" className="flex items-center">
                 <ArrowLeft className="h-5 w-5 mr-2" />
-                <span className="text-gray-600 dark:text-gray-400">返回仪表板</span>
+                <span className="text-gray-600 dark:text-gray-400">{tCommon("backToDashboard")}</span>
               </Link>
             </div>
             <div className="flex items-center space-x-4">
@@ -318,19 +322,19 @@ export default function StorageManagement() {
           <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
             <Database className="h-16 w-16 text-gray-400 mb-4" />
             <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-2">
-              没有活跃集群
+              {t("noActiveClusterTitle")}
             </h2>
             <p className="text-gray-600 dark:text-gray-400 mb-4">
-              请先选择或激活一个Kubernetes集群，然后才能管理存储资源。
+              {t("noActiveClusterDescription")}
             </p>
             <div className="text-sm text-gray-500 mt-4">
-              <p>认证状态: {isAuthenticated ? '已认证' : '未认证'}</p>
-              <p>集群数量: {clusters.length}</p>
-              <p>活跃集群: {activeCluster ? '已选择' : '无'}</p>
+              <p>{t("authStatus", { status: isAuthenticated ? t("statusAuthenticated") : t("statusUnauthenticated") })}</p>
+              <p>{t("clusterCount", { count: clusters.length })}</p>
+              <p>{t("activeClusterStatus", { status: activeCluster ? t("statusSelected") : t("statusNone") })}</p>
             </div>
             <Button asChild>
               <Link href="/clusters/new">
-                创建集群
+                {t("createCluster")}
               </Link>
             </Button>
           </div>
@@ -340,48 +344,48 @@ export default function StorageManagement() {
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <h2 className="text-3xl font-bold text-gray-900 dark:text-white">
-            存储管理
+            {t("title")}
           </h2>
           <p className="mt-2 text-gray-600 dark:text-gray-400">
-            管理存储类、持久卷和持久卷声明
+            {t("description")}
           </p>
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle>存储资源管理</CardTitle>
-            <CardDescription>查看和管理Kubernetes集群的存储资源</CardDescription>
+            <CardTitle>{t("resourceManagementTitle")}</CardTitle>
+            <CardDescription>{t("resourceManagementDescription")}</CardDescription>
           </CardHeader>
           <CardContent>
             <Tabs value={activeTab} onValueChange={setActiveTab}>
               <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="classes">存储类</TabsTrigger>
-                <TabsTrigger value="volumes">持久卷</TabsTrigger>
-                <TabsTrigger value="claims">持久卷声明</TabsTrigger>
+                <TabsTrigger value="classes">{t("tabStorageClasses")}</TabsTrigger>
+                <TabsTrigger value="volumes">{t("tabVolumes")}</TabsTrigger>
+                <TabsTrigger value="claims">{t("tabClaims")}</TabsTrigger>
               </TabsList>
 
               {/* 存储类选项卡 */}
               <TabsContent value="classes">
                 <div className="space-y-4">
                   <div className="flex justify-between items-center">
-                    <h3 className="text-lg font-medium">存储类管理</h3>
+                    <h3 className="text-lg font-medium">{t("storageClassesTitle")}</h3>
                     <Dialog open={isCreateSCOpen} onOpenChange={setIsCreateSCOpen}>
                       <DialogTrigger asChild>
                         <Button>
                           <Plus className="h-4 w-4 mr-2" />
-                          创建存储类
+                          {t("createStorageClass")}
                         </Button>
                       </DialogTrigger>
                       <DialogContent>
                         <DialogHeader>
-                          <DialogTitle>创建存储类</DialogTitle>
+                          <DialogTitle>{t("createStorageClass")}</DialogTitle>
                           <DialogDescription>
-                            配置新的存储类参数
+                            {t("createStorageClassDescription")}
                           </DialogDescription>
                         </DialogHeader>
                         <div className="grid gap-4 py-4">
                           <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="sc-name" className="text-right">名称</Label>
+                            <Label htmlFor="sc-name" className="text-right">{t("nameLabel")}</Label>
                             <Input
                               id="sc-name"
                               value={scForm.name}
@@ -390,15 +394,15 @@ export default function StorageManagement() {
                             />
                           </div>
                           <div className="grid grid-cols-4 items-center gap-4">
-                            <Label className="text-right">Provisioner类型</Label>
+                            <Label className="text-right">{t("provisionerTypeLabel")}</Label>
                             <div className="col-span-3 flex items-center space-x-2">
                               <Select value={scForm.custom_provisioner ? "custom" : "preset"} onValueChange={(value) => setScForm({...scForm, custom_provisioner: value === "custom", provisioner: value === "custom" ? "" : scForm.provisioner, provisioner_image: value === "custom" ? scForm.provisioner_image : ""})}>
                                 <SelectTrigger className="flex-1">
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="preset">预设Provisioner</SelectItem>
-                                  <SelectItem value="custom">自定义Provisioner</SelectItem>
+                                  <SelectItem value="preset">{t("presetProvisioner")}</SelectItem>
+                                  <SelectItem value="custom">{t("customProvisioner")}</SelectItem>
                                 </SelectContent>
                               </Select>
                             </div>
@@ -411,7 +415,7 @@ export default function StorageManagement() {
                                 value={scForm.provisioner}
                                 onChange={(e) => setScForm({...scForm, provisioner: e.target.value})}
                                 className="col-span-3"
-                                placeholder="例如: k8s-sigs.io/nfs-subdir-external-provisioner"
+                                placeholder={t("customProvisionerPlaceholder")}
                               />
                             </div>
                           ) : (
@@ -419,12 +423,12 @@ export default function StorageManagement() {
                               <Label htmlFor="sc-provisioner" className="text-right">Provisioner</Label>
                               <Select value={scForm.provisioner} onValueChange={(value) => setScForm({...scForm, provisioner: value, nfs_server: (value === "kubernetes.io/nfs" || value === "k8s-sigs.io/nfs-subdir-external-provisioner") ? scForm.nfs_server : "", nfs_path: (value === "kubernetes.io/nfs" || value === "k8s-sigs.io/nfs-subdir-external-provisioner") ? scForm.nfs_path : ""})}>
                                 <SelectTrigger className="col-span-3">
-                                  <SelectValue placeholder="选择Provisioner" />
+                                  <SelectValue placeholder={t("selectProvisioner")} />
                                 </SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value="kubernetes.io/aws-ebs">AWS EBS</SelectItem>
                                   <SelectItem value="kubernetes.io/gce-pd">GCE PD</SelectItem>
-                                  <SelectItem value="kubernetes.io/nfs">NFS (内置)</SelectItem>
+                                  <SelectItem value="kubernetes.io/nfs">{t("nfsBuiltIn")}</SelectItem>
                                   <SelectItem value="k8s-sigs.io/nfs-subdir-external-provisioner">NFS Subdir External Provisioner</SelectItem>
                                   <SelectItem value="kubernetes.io/host-path">Host Path</SelectItem>
                                 </SelectContent>
@@ -433,20 +437,20 @@ export default function StorageManagement() {
                           )}
                           {scForm.custom_provisioner && (
                             <div className="grid grid-cols-4 items-center gap-4">
-                              <Label htmlFor="sc-provisioner-image" className="text-right">Provisioner镜像</Label>
+                              <Label htmlFor="sc-provisioner-image" className="text-right">{t("provisionerImageLabel")}</Label>
                               <Input
                                 id="sc-provisioner-image"
                                 value={scForm.provisioner_image}
                                 onChange={(e) => setScForm({...scForm, provisioner_image: e.target.value})}
                                 className="col-span-3"
-                                placeholder="例如: eipwork/nfs-subdir-external-provisioner"
+                                placeholder={t("provisionerImagePlaceholder")}
                               />
                             </div>
                           )}
                           {(scForm.provisioner === "kubernetes.io/nfs" || scForm.provisioner === "k8s-sigs.io/nfs-subdir-external-provisioner") && (
                             <>
                               <div className="grid grid-cols-4 items-center gap-4">
-                                <Label htmlFor="sc-nfs-server" className="text-right">NFS服务器</Label>
+                                <Label htmlFor="sc-nfs-server" className="text-right">{t("nfsServerLabel")}</Label>
                                 <Input
                                   id="sc-nfs-server"
                                   value={scForm.nfs_server}
@@ -456,7 +460,7 @@ export default function StorageManagement() {
                                 />
                               </div>
                               <div className="grid grid-cols-4 items-center gap-4">
-                                <Label htmlFor="sc-nfs-path" className="text-right">NFS路径</Label>
+                                <Label htmlFor="sc-nfs-path" className="text-right">{t("nfsPathLabel")}</Label>
                                 <Input
                                   id="sc-nfs-path"
                                   value={scForm.nfs_path}
@@ -469,7 +473,7 @@ export default function StorageManagement() {
                           )}
                           {scForm.provisioner === "k8s-sigs.io/nfs-subdir-external-provisioner" && !scForm.custom_provisioner && (
                             <div className="grid grid-cols-4 items-center gap-4">
-                              <Label htmlFor="sc-provisioner-image" className="text-right">Provisioner镜像</Label>
+                              <Label htmlFor="sc-provisioner-image" className="text-right">{t("provisionerImageLabel")}</Label>
                               <Input
                                 id="sc-provisioner-image"
                                 value={scForm.provisioner_image || "eipwork/nfs-subdir-external-provisioner"}
@@ -480,7 +484,7 @@ export default function StorageManagement() {
                             </div>
                           )}
                           <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="sc-reclaim" className="text-right">回收策略</Label>
+                            <Label htmlFor="sc-reclaim" className="text-right">{t("reclaimPolicyLabel")}</Label>
                             <Select value={scForm.reclaim_policy} onValueChange={(value) => setScForm({...scForm, reclaim_policy: value})}>
                               <SelectTrigger className="col-span-3">
                                 <SelectValue />
@@ -492,7 +496,7 @@ export default function StorageManagement() {
                             </Select>
                           </div>
                           <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="sc-binding-mode" className="text-right">绑定模式</Label>
+                            <Label htmlFor="sc-binding-mode" className="text-right">{t("bindingModeLabel")}</Label>
                             <Select value={scForm.volume_binding_mode} onValueChange={(value) => setScForm({...scForm, volume_binding_mode: value})}>
                               <SelectTrigger className="col-span-3">
                                 <SelectValue />
@@ -505,7 +509,7 @@ export default function StorageManagement() {
                           </div>
                         </div>
                         <DialogFooter>
-                          <Button onClick={handleCreateStorageClass}>创建</Button>
+                          <Button onClick={handleCreateStorageClass}>{tCommon("create")}</Button>
                         </DialogFooter>
                       </DialogContent>
                     </Dialog>
@@ -519,13 +523,13 @@ export default function StorageManagement() {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>名称</TableHead>
+                          <TableHead>{t("nameLabel")}</TableHead>
                           <TableHead>Provisioner</TableHead>
-                          <TableHead>回收策略</TableHead>
-                          <TableHead>绑定模式</TableHead>
-                          <TableHead>允许扩展</TableHead>
-                          <TableHead>集群</TableHead>
-                          <TableHead>操作</TableHead>
+                          <TableHead>{t("reclaimPolicyLabel")}</TableHead>
+                          <TableHead>{t("bindingModeLabel")}</TableHead>
+                          <TableHead>{t("allowExpansionLabel")}</TableHead>
+                          <TableHead>{t("clusterLabel")}</TableHead>
+                          <TableHead>{tCommon("actions")}</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -539,7 +543,7 @@ export default function StorageManagement() {
                               </Badge>
                             </TableCell>
                             <TableCell>{sc.volume_binding_mode}</TableCell>
-                            <TableCell>{sc.allow_volume_expansion ? '是' : '否'}</TableCell>
+                            <TableCell>{sc.allow_volume_expansion ? t("yes") : t("no")}</TableCell>
                             <TableCell>{sc.cluster_name}</TableCell>
                             <TableCell>
                               <Button
@@ -562,24 +566,24 @@ export default function StorageManagement() {
               <TabsContent value="volumes">
                 <div className="space-y-4">
                   <div className="flex justify-between items-center">
-                    <h3 className="text-lg font-medium">持久卷管理</h3>
+                    <h3 className="text-lg font-medium">{t("volumesTitle")}</h3>
                     <Dialog open={isCreatePVOpen} onOpenChange={setIsCreatePVOpen}>
                       <DialogTrigger asChild>
                         <Button>
                           <Plus className="h-4 w-4 mr-2" />
-                          创建持久卷
+                          {t("createVolume")}
                         </Button>
                       </DialogTrigger>
                       <DialogContent>
                         <DialogHeader>
-                          <DialogTitle>创建持久卷</DialogTitle>
+                          <DialogTitle>{t("createVolume")}</DialogTitle>
                           <DialogDescription>
-                            配置新的持久卷参数
+                            {t("createVolumeDescription")}
                           </DialogDescription>
                         </DialogHeader>
                         <div className="grid gap-4 py-4">
                           <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="pv-name" className="text-right">名称</Label>
+                            <Label htmlFor="pv-name" className="text-right">{t("nameLabel")}</Label>
                             <Input
                               id="pv-name"
                               value={pvForm.name}
@@ -588,7 +592,7 @@ export default function StorageManagement() {
                             />
                           </div>
                           <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="pv-capacity" className="text-right">容量</Label>
+                            <Label htmlFor="pv-capacity" className="text-right">{t("capacityLabel")}</Label>
                             <Input
                               id="pv-capacity"
                               value={pvForm.capacity}
@@ -609,7 +613,7 @@ export default function StorageManagement() {
                           </div>
                         </div>
                         <DialogFooter>
-                          <Button onClick={handleCreatePV}>创建</Button>
+                          <Button onClick={handleCreatePV}>{tCommon("create")}</Button>
                         </DialogFooter>
                       </DialogContent>
                     </Dialog>
@@ -623,13 +627,13 @@ export default function StorageManagement() {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>名称</TableHead>
-                          <TableHead>容量</TableHead>
-                          <TableHead>访问模式</TableHead>
-                          <TableHead>状态</TableHead>
-                          <TableHead>存储类</TableHead>
-                          <TableHead>绑定声明</TableHead>
-                          <TableHead>操作</TableHead>
+                          <TableHead>{t("nameLabel")}</TableHead>
+                          <TableHead>{t("capacityLabel")}</TableHead>
+                          <TableHead>{t("accessModesLabel")}</TableHead>
+                          <TableHead>{t("statusLabel")}</TableHead>
+                          <TableHead>{t("storageClassLabel")}</TableHead>
+                          <TableHead>{t("boundClaimLabel")}</TableHead>
+                          <TableHead>{tCommon("actions")}</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -679,24 +683,24 @@ export default function StorageManagement() {
               <TabsContent value="claims">
                 <div className="space-y-4">
                   <div className="flex justify-between items-center">
-                    <h3 className="text-lg font-medium">持久卷声明管理</h3>
+                    <h3 className="text-lg font-medium">{t("claimsTitle")}</h3>
                     <Dialog open={isCreatePVCOpen} onOpenChange={setIsCreatePVCOpen}>
                       <DialogTrigger asChild>
                         <Button>
                           <Plus className="h-4 w-4 mr-2" />
-                          创建PVC
+                          {t("createPvc")}
                         </Button>
                       </DialogTrigger>
                       <DialogContent>
                         <DialogHeader>
-                          <DialogTitle>创建持久卷声明</DialogTitle>
+                          <DialogTitle>{t("createPvc")}</DialogTitle>
                           <DialogDescription>
-                            配置新的持久卷声明参数
+                            {t("createPvcDescription")}
                           </DialogDescription>
                         </DialogHeader>
                         <div className="grid gap-4 py-4">
                           <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="pvc-name" className="text-right">名称</Label>
+                            <Label htmlFor="pvc-name" className="text-right">{t("nameLabel")}</Label>
                             <Input
                               id="pvc-name"
                               value={pvcForm.name}
@@ -705,7 +709,7 @@ export default function StorageManagement() {
                             />
                           </div>
                           <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="pvc-namespace" className="text-right">命名空间</Label>
+                            <Label htmlFor="pvc-namespace" className="text-right">{t("namespaceLabel")}</Label>
                             <Input
                               id="pvc-namespace"
                               value={pvcForm.namespace}
@@ -715,7 +719,7 @@ export default function StorageManagement() {
                             />
                           </div>
                           <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="pvc-storage" className="text-right">存储大小</Label>
+                            <Label htmlFor="pvc-storage" className="text-right">{t("storageSizeLabel")}</Label>
                             <Input
                               id="pvc-storage"
                               value={pvcForm.storage}
@@ -726,7 +730,7 @@ export default function StorageManagement() {
                           </div>
                         </div>
                         <DialogFooter>
-                          <Button onClick={handleCreatePVC}>创建</Button>
+                          <Button onClick={handleCreatePVC}>{tCommon("create")}</Button>
                         </DialogFooter>
                       </DialogContent>
                     </Dialog>
@@ -740,14 +744,14 @@ export default function StorageManagement() {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>名称</TableHead>
-                          <TableHead>命名空间</TableHead>
-                          <TableHead>状态</TableHead>
-                          <TableHead>容量</TableHead>
-                          <TableHead>访问模式</TableHead>
-                          <TableHead>存储类</TableHead>
-                          <TableHead>绑定卷</TableHead>
-                          <TableHead>操作</TableHead>
+                          <TableHead>{t("nameLabel")}</TableHead>
+                          <TableHead>{t("namespaceLabel")}</TableHead>
+                          <TableHead>{t("statusLabel")}</TableHead>
+                          <TableHead>{t("capacityLabel")}</TableHead>
+                          <TableHead>{t("accessModesLabel")}</TableHead>
+                          <TableHead>{t("storageClassLabel")}</TableHead>
+                          <TableHead>{t("boundVolumeLabel")}</TableHead>
+                          <TableHead>{tCommon("actions")}</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>

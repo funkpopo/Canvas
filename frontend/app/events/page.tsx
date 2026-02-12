@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { AlertTriangle, Info, CheckCircle, XCircle } from "lucide-react";
 import AuthGuard from "@/components/AuthGuard";
 import { eventApi } from "@/lib/api";
+import { useTranslations } from "@/hooks/use-translations";
 import {
   ResourceList,
   BaseResource,
@@ -66,11 +67,13 @@ async function fetchEventsPage(
 }
 
 function EventsPageContent() {
+  const t = useTranslations("events");
+
   const columns: ColumnDef<EventRow>[] = useMemo(
     () => [
       {
         key: "type",
-        header: "类型",
+        header: t("type"),
         render: (item) => {
           const variant =
             item.type === "Warning" || item.type === "Error"
@@ -97,10 +100,10 @@ function EventsPageContent() {
           );
         },
       },
-      { key: "reason", header: "原因", render: (item) => <span className="font-medium">{item.reason}</span> },
+      { key: "reason", header: t("reason"), render: (item) => <span className="font-medium">{item.reason}</span> },
       {
         key: "object",
-        header: "对象",
+        header: t("object"),
         render: (item) => (
           <div className="text-sm">
             <div className="font-medium">
@@ -112,26 +115,26 @@ function EventsPageContent() {
       },
       {
         key: "message",
-        header: "消息",
+        header: t("message"),
         render: (item) => (
           <div className="max-w-xs truncate" title={item.message}>
             {item.message}
           </div>
         ),
       },
-      { key: "source", header: "来源", render: (item) => item.source || "Unknown" },
-      { key: "count", header: "计数", render: (item) => item.count },
-      { key: "age", header: "年龄", render: (item) => item.age },
-      { key: "cluster", header: "集群", render: (item) => item.cluster_name },
+      { key: "source", header: t("source"), render: (item) => item.source || t("unknownSource") },
+      { key: "count", header: t("count"), render: (item) => item.count },
+      { key: "age", header: t("age"), render: (item) => item.age },
+      { key: "cluster", header: t("cluster"), render: (item) => item.cluster_name },
     ],
-    []
+    [t]
   );
 
   return (
     <ResourceList<EventRow>
       resourceType="Event"
-      title="事件查看"
-      description="分页查看集群内部事件（按需加载）"
+      title={t("title")}
+      description={t("descriptionPaged")}
       icon={Info}
       columns={columns}
       fetchPageFn={fetchEventsPage}
@@ -141,7 +144,7 @@ function EventsPageContent() {
       defaultViewMode="table"
       allowViewToggle={false}
       searchFields={["name", "namespace", "reason", "message"]}
-      emptyText="暂无事件"
+      emptyText={t("noEvents")}
     />
   );
 }

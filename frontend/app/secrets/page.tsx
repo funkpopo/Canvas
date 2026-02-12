@@ -28,6 +28,8 @@ import {
 } from "@/components/ResourceList";
 import { secretApi } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { useAsyncActionFeedback } from "@/hooks/use-async-action-feedback";
+import { useTranslations } from "@/hooks/use-translations";
 import { toast } from "sonner";
 
 // ============ 类型定义 ============
@@ -41,6 +43,9 @@ interface Secret extends BaseResource {
 // ============ 页面组件 ============
 
 export default function SecretsPage() {
+  const t = useTranslations("secrets");
+  const tCommon = useTranslations("common");
+  const { runWithFeedback } = useAsyncActionFeedback();
   const { user } = useAuth();
 
   // 创建对话框状态
@@ -79,20 +84,29 @@ export default function SecretsPage() {
   // 查看 YAML
   const handleViewYaml = async (secret: Secret) => {
     try {
-      const response = await secretApi.getSecretYaml(
-        secret.cluster_id,
-        secret.namespace,
-        secret.name
+      await runWithFeedback(
+        async () => {
+          const response = await secretApi.getSecretYaml(
+            secret.cluster_id,
+            secret.namespace,
+            secret.name
+          );
+          if (!response.data) {
+            throw new Error(response.error || t("yamlLoadErrorUnknown"));
+          }
+
+          setYamlPreview(response.data.yaml);
+          setSelectedSecret(secret);
+          setIsYamlOpen(true);
+        },
+        {
+          loading: t("yamlLoadLoading"),
+          success: t("yamlLoadSuccess"),
+          error: t("yamlLoadError"),
+        }
       );
-      if (response.data) {
-        setYamlPreview(response.data.yaml);
-        setSelectedSecret(secret);
-        setIsYamlOpen(true);
-      } else {
-        toast.error(`获取YAML失败: ${response.error}`);
-      }
-    } catch {
-      toast.error("获取YAML失败");
+    } catch (error) {
+      console.error("load secret yaml failed:", error);
     }
   };
 
@@ -111,22 +125,38 @@ data: {}
 
   // 创建 Secret
   const handleCreateSecret = async () => {
-    if (!selectedClusterId || !yamlContent.trim()) return;
+    if (!selectedClusterId) {
+      toast.error(t("selectClusterFirst"));
+      return;
+    }
+
+    if (!yamlContent.trim()) {
+      toast.error(t("yamlRequired"));
+      return;
+    }
 
     try {
-      const response = await secretApi.createSecretYaml(
-        selectedClusterId,
-        yamlContent
+      await runWithFeedback(
+        async () => {
+          const response = await secretApi.createSecretYaml(
+            selectedClusterId,
+            yamlContent
+          );
+          if (!response.data) {
+            throw new Error(response.error || t("createErrorUnknown"));
+          }
+
+          setIsCreateOpen(false);
+          resetForm();
+        },
+        {
+          loading: t("createLoading"),
+          success: t("createSuccess"),
+          error: t("createError"),
+        }
       );
-      if (response.data) {
-        toast.success("Secret创建成功");
-        setIsCreateOpen(false);
-        resetForm();
-      } else {
-        toast.error(`创建Secret失败: ${response.error}`);
-      }
-    } catch {
-      toast.error("创建Secret失败");
+    } catch (error) {
+      console.error("create secret failed:", error);
     }
   };
 
@@ -162,13 +192,13 @@ stringData:
     NameColumn<Secret>(),
     {
       key: "type",
-      header: "类型",
+      header: t("type"),
       render: (item) => <Badge variant="outline">{item.type}</Badge>,
     },
     {
       key: "dataCount",
-      header: "数据项数量",
-      render: (item) => `${item.data_keys?.length || 0} 项`,
+      header: t("dataItems"),
+      render: (item) => t("itemsCount", { count: item.data_keys?.length || 0 }),
     },
     AgeColumn<Secret>(),
   ];
@@ -178,7 +208,7 @@ stringData:
     {
       key: "yaml",
       icon: Code,
-      tooltip: "查看YAML",
+      tooltip: t("viewYaml"),
       onClick: handleViewYaml,
     },
   ];
@@ -189,13 +219,13 @@ stringData:
       <DialogTrigger asChild>
         <Button onClick={resetForm}>
           <Plus className="w-4 h-4 mr-2" />
-          创建Secret
+          {t("createSecret")}
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>创建Secret</DialogTitle>
-          <DialogDescription>使用YAML格式创建新的机密数据</DialogDescription>
+          <DialogTitle>{t("createTitle")}</DialogTitle>
+          <DialogDescription>{t("createDescription")}</DialogDescription>
         </DialogHeader>
         <YamlEditor
           value={yamlContent}
@@ -204,19 +234,19 @@ stringData:
             setYamlError("");
           }}
           error={yamlError}
-          label="Secret YAML配置"
+          label={t("yamlEditorLabel")}
           template={yamlTemplate}
           onApplyTemplate={() => setYamlContent(yamlTemplate)}
         />
         <DialogFooter>
           <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
-            取消
+            {tCommon("cancel")}
           </Button>
           <Button
             onClick={handleCreateSecret}
             disabled={!yamlContent.trim() || !!yamlError}
           >
-            创建Secret
+            {t("createSecret")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -227,8 +257,8 @@ stringData:
     <>
       <ResourceList<Secret>
         resourceType="Secret"
-        title="Secrets管理"
-        description="管理Kubernetes集群中的机密数据（支持YAML格式编辑）"
+        title={t("title")}
+        description={t("description")}
         icon={Lock}
         columns={columns}
         actions={actions}
@@ -245,12 +275,12 @@ stringData:
         requireNamespace={true}
         allowAllNamespaces={true}
         defaultNamespace=""
-        searchPlaceholder="搜索 Secret..."
+        searchPlaceholder={t("searchPlaceholder")}
         headerActions={createButton}
         deleteConfirm={{
-          title: "删除 Secret",
+          title: t("deleteTitle"),
           description: (item) =>
-            `确定要删除 Secret "${item.namespace}/${item.name}" 吗？此操作不可撤销。`,
+            t("deleteDescription", { namespace: item.namespace, name: item.name }),
         }}
       />
 
@@ -260,8 +290,8 @@ stringData:
           <DialogHeader>
             <DialogTitle>
               {selectedSecret
-                ? `${selectedSecret.namespace}/${selectedSecret.name} - YAML配置`
-                : "YAML配置"}
+                ? t("yamlDialogTitle", { namespace: selectedSecret.namespace, name: selectedSecret.name })
+                : t("yamlDialogFallbackTitle")}
             </DialogTitle>
           </DialogHeader>
           <div className="mt-4">
@@ -272,7 +302,7 @@ stringData:
             />
           </div>
           <DialogFooter>
-            <Button onClick={() => setIsYamlOpen(false)}>关闭</Button>
+            <Button onClick={() => setIsYamlOpen(false)}>{tCommon("close")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

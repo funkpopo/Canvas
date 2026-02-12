@@ -7,6 +7,7 @@ import Link from "next/link";
 import ClusterForm from "@/components/ClusterForm";
 import AuthGuard from "@/components/AuthGuard";
 import { clusterApi } from "@/lib/api";
+import { useTranslations } from "@/hooks/use-translations";
 
 interface Cluster {
   id: number;
@@ -20,6 +21,8 @@ interface Cluster {
 }
 
 function EditClusterPageContent() {
+  const tCluster = useTranslations("cluster");
+  const tCommon = useTranslations("common");
   const [cluster, setCluster] = useState<Cluster | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
@@ -52,7 +55,7 @@ function EditClusterPageContent() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin mr-2" />
-        <span className="text-lg">加载中...</span>
+        <span className="text-lg">{tCommon("loading")}</span>
       </div>
     );
   }
@@ -62,13 +65,13 @@ function EditClusterPageContent() {
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-            集群不存在
+            {tCluster("clusterNotFound")}
           </h2>
           <p className="text-gray-600 dark:text-gray-400 mb-4">
-            您请求的集群不存在或已被删除
+            {tCluster("clusterNotFoundDescription")}
           </p>
           <Link href="/clusters" className="text-zinc-600 hover:text-zinc-500">
-            返回集群列表
+            {tCluster("backToClusterList")}
           </Link>
         </div>
       </div>
@@ -84,7 +87,7 @@ function EditClusterPageContent() {
             <div className="flex items-center">
               <Link href="/clusters" className="flex items-center">
                 <ArrowLeft className="h-5 w-5 mr-2" />
-                <span className="text-gray-600 dark:text-gray-400">返回集群列表</span>
+                <span className="text-gray-600 dark:text-gray-400">{tCluster("backToClusterList")}</span>
               </Link>
             </div>
           </div>

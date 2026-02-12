@@ -18,6 +18,8 @@ import { useCluster } from "@/lib/cluster-context";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { hpaApi, namespaceApi } from "@/lib/api";
+import { useTranslations } from "@/hooks/use-translations";
+import { useAsyncActionFeedback } from "@/hooks/use-async-action-feedback";
 
 interface HPA {
   name: string;
@@ -39,6 +41,10 @@ interface Namespace {
 }
 
 function HPAsContent() {
+  const t = useTranslations("hpas");
+  const tCommon = useTranslations("common");
+  const tAuth = useTranslations("auth");
+  const { runWithFeedback } = useAsyncActionFeedback();
   const { isAuthenticated, isLoading: authLoading, logout } = useAuth();
   const { activeCluster } = useCluster();
   const [hpas, setHPAs] = useState<HPA[]>([]);
@@ -56,6 +62,7 @@ function HPAsContent() {
 
   const router = useRouter();
   const clusterId = activeCluster?.id.toString();
+  const clusterIdNum = clusterId ? parseInt(clusterId, 10) : null;
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -65,72 +72,82 @@ function HPAsContent() {
   }, [isAuthenticated, authLoading, router]);
 
   useEffect(() => {
-    if (isAuthenticated && clusterId) {
+    if (isAuthenticated && clusterIdNum) {
       fetchNamespaces();
     }
-  }, [isAuthenticated, clusterId]);
+  }, [isAuthenticated, clusterIdNum]);
 
   useEffect(() => {
-    if (isAuthenticated && clusterId && selectedNamespace) {
+    if (isAuthenticated && clusterIdNum && selectedNamespace) {
       fetchHPAs();
     }
-  }, [isAuthenticated, clusterId, selectedNamespace]);
+  }, [isAuthenticated, clusterIdNum, selectedNamespace]);
 
   const fetchNamespaces = async () => {
+    if (!clusterIdNum) return;
+
     try {
-      const response = await namespaceApi.getNamespaces(parseInt(clusterId!));
+      const response = await namespaceApi.getNamespaces(clusterIdNum);
       if (response.data) {
         setNamespaces(response.data);
         if (response.data.length > 0 && !selectedNamespace) {
           setSelectedNamespace(response.data[0].name);
         }
       } else if (response.error) {
-        toast.error('获取命名空间失败: ' + response.error);
+        toast.error(t("namespacesLoadErrorWithMessage", { message: response.error }));
       }
     } catch (error) {
-      console.error('获取命名空间失败:', error);
-      toast.error('获取命名空间失败');
+      console.error("load namespaces failed:", error);
+      toast.error(t("namespacesLoadError"));
     }
   };
 
   const fetchHPAs = async () => {
-    if (!selectedNamespace) return;
+    if (!selectedNamespace || !clusterIdNum) return;
 
     setIsLoading(true);
     try {
-      const response = await hpaApi.getHPAs(parseInt(clusterId!), selectedNamespace);
+      const response = await hpaApi.getHPAs(clusterIdNum, selectedNamespace);
       if (response.data) {
         setHPAs(response.data);
       } else if (response.error) {
-        toast.error('获取HPAs失败: ' + response.error);
+        toast.error(t("listLoadErrorWithMessage", { message: response.error }));
       }
     } catch (error) {
-      console.error('获取HPAs失败:', error);
-      toast.error('获取HPAs失败');
+      console.error("load hpas failed:", error);
+      toast.error(t("listLoadError"));
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleDelete = async (name: string) => {
+    if (!clusterIdNum) return;
+
     setIsOperationLoading(true);
     try {
-      const response = await hpaApi.deleteHPA(parseInt(clusterId!), selectedNamespace, name);
-      if (response.data !== undefined) {
-        toast.success('HPA删除成功');
-        fetchHPAs();
-      } else if (response.error) {
-        toast.error('删除失败: ' + response.error);
-      }
+      await runWithFeedback(
+        async () => {
+          const response = await hpaApi.deleteHPA(clusterIdNum, selectedNamespace, name);
+          if (response.error) {
+            throw new Error(response.error || t("deleteErrorUnknown"));
+          }
+          await fetchHPAs();
+        },
+        {
+          loading: t("deleteLoading"),
+          success: t("deleteSuccess"),
+          error: t("deleteError"),
+        }
+      );
     } catch (error) {
-      console.error('删除失败:', error);
-      toast.error('删除失败');
+      console.error("delete hpa failed:", error);
     } finally {
       setIsOperationLoading(false);
     }
   };
 
-  const filteredHPAs = hpas.filter(hpa =>
+  const filteredHPAs = hpas.filter((hpa) =>
     hpa.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -146,7 +163,7 @@ function HPAsContent() {
     return null;
   }
 
-  if (!clusterId) {
+  if (!clusterIdNum) {
     return (
       <div className="min-h-screen bg-background">
         <header className="bg-card shadow-sm border-b">
@@ -154,9 +171,7 @@ function HPAsContent() {
             <div className="flex justify-between items-center h-16">
               <div className="flex items-center">
                 <Server className="h-8 w-8 text-zinc-600" />
-                <h1 className="ml-2 text-xl font-semibold text-gray-900 dark:text-white">
-                  Canvas
-                </h1>
+                <h1 className="ml-2 text-xl font-semibold text-gray-900 dark:text-white">Canvas</h1>
               </div>
               <div className="flex items-center space-x-4">
                 <ClusterSelector />
@@ -164,7 +179,7 @@ function HPAsContent() {
                 <ThemeToggle />
                 <Button variant="outline" onClick={logout}>
                   <LogOut className="h-4 w-4 mr-2" />
-                  退出登录
+                  {tAuth("logout")}
                 </Button>
               </div>
             </div>
@@ -173,12 +188,8 @@ function HPAsContent() {
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-12">
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                请选择集群
-              </h3>
-              <p className="text-gray-600 dark:text-gray-400 mb-4">
-                请先从顶部选择一个集群来查看HPA资源
-              </p>
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">{t("clusterRequiredTitle")}</h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-4">{t("clusterRequiredDescription")}</p>
             </CardContent>
           </Card>
         </main>
@@ -188,15 +199,12 @@ function HPAsContent() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Main Header */}
       <header className="bg-card shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
               <Server className="h-8 w-8 text-zinc-600" />
-              <h1 className="ml-2 text-xl font-semibold text-gray-900 dark:text-white">
-                Canvas
-              </h1>
+              <h1 className="ml-2 text-xl font-semibold text-gray-900 dark:text-white">Canvas</h1>
             </div>
             <div className="flex items-center space-x-4">
               <ClusterSelector />
@@ -204,148 +212,149 @@ function HPAsContent() {
               <ThemeToggle />
               <Button variant="outline" onClick={logout}>
                 <LogOut className="h-4 w-4 mr-2" />
-                退出登录
+                {tAuth("logout")}
               </Button>
             </div>
           </div>
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <Link href="/">
-            <Button variant="outline" size="sm">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              返回
-            </Button>
-          </Link>
-          <div>
-            <h1 className="text-3xl font-bold">HPA管理</h1>
-            <p className="text-muted-foreground">管理水平Pod自动伸缩器</p>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <Link href="/">
+              <Button variant="outline" size="sm">
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                {t("back")}
+              </Button>
+            </Link>
+            <div>
+              <h1 className="text-3xl font-bold">{t("title")}</h1>
+              <p className="text-muted-foreground">{t("description")}</p>
+            </div>
           </div>
+          <Button onClick={fetchHPAs} disabled={isLoading}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
+            {t("refresh")}
+          </Button>
         </div>
-        <Button onClick={fetchHPAs} disabled={isLoading}>
-          <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-          刷新
-        </Button>
-      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>HPA列表</CardTitle>
-          <CardDescription>选择命名空间查看其中的水平Pod自动伸缩器</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col space-y-4">
-            <div className="flex flex-wrap gap-4">
-              <div className="flex-1 min-w-[200px]">
-                <Select value={selectedNamespace} onValueChange={setSelectedNamespace}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="选择命名空间" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {namespaces.map((ns) => (
-                      <SelectItem key={ns.name} value={ns.name}>
-                        {ns.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex-1 min-w-[200px]">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                  <Input
-                    placeholder="搜索HPA名称..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10"
-                  />
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("listTitle")}</CardTitle>
+            <CardDescription>{t("listDescription")}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col space-y-4">
+              <div className="flex flex-wrap gap-4">
+                <div className="flex-1 min-w-[200px]">
+                  <Select value={selectedNamespace} onValueChange={setSelectedNamespace}>
+                    <SelectTrigger>
+                      <SelectValue placeholder={t("namespacePlaceholder")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {namespaces.map((ns) => (
+                        <SelectItem key={ns.name} value={ns.name}>
+                          {ns.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex-1 min-w-[200px]">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                    <Input
+                      placeholder={t("searchPlaceholder")}
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {isLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-8 w-8 animate-spin" />
-                <span className="ml-2">加载中...</span>
-              </div>
-            ) : (
-              <div className="border rounded-lg">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>名称</TableHead>
-                      <TableHead>目标资源</TableHead>
-                      <TableHead>副本数范围</TableHead>
-                      <TableHead>当前/期望副本数</TableHead>
-                      <TableHead>年龄</TableHead>
-                      <TableHead>操作</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredHPAs.length === 0 ? (
+              {isLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin" />
+                  <span className="ml-2">{tCommon("loading")}</span>
+                </div>
+              ) : (
+                <div className="border rounded-lg">
+                  <Table>
+                    <TableHeader>
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                          {selectedNamespace ? '该命名空间中没有HPAs' : '请选择命名空间'}
-                        </TableCell>
+                        <TableHead>{t("nameLabel")}</TableHead>
+                        <TableHead>{t("targetLabel")}</TableHead>
+                        <TableHead>{t("replicasRangeLabel")}</TableHead>
+                        <TableHead>{t("currentDesiredLabel")}</TableHead>
+                        <TableHead>{t("ageLabel")}</TableHead>
+                        <TableHead>{tCommon("actions")}</TableHead>
                       </TableRow>
-                    ) : (
-                      filteredHPAs.map((hpa) => (
-                        <TableRow key={hpa.name}>
-                          <TableCell className="font-medium">
-                            <div className="flex items-center">
-                              <TrendingUp className="h-4 w-4 mr-2 text-blue-500" />
-                              {hpa.name}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline">{hpa.target_ref}</Badge>
-                          </TableCell>
-                          <TableCell>
-                            {hpa.min_replicas} - {hpa.max_replicas}
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant={hpa.current_replicas === hpa.desired_replicas ? "default" : "secondary"}>
-                              {hpa.current_replicas} / {hpa.desired_replicas}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>{hpa.age}</TableCell>
-                          <TableCell>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => setConfirmDialog({
-                                open: true,
-                                title: "删除HPA",
-                                description: `确定要删除HPA "${hpa.name}" 吗？`,
-                                onConfirm: () => handleDelete(hpa.name),
-                              })}
-                              disabled={isOperationLoading}
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </Button>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredHPAs.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                            {selectedNamespace ? t("noHpasInNamespace") : t("selectNamespaceFirst")}
                           </TableCell>
                         </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+                      ) : (
+                        filteredHPAs.map((hpa) => (
+                          <TableRow key={hpa.name}>
+                            <TableCell className="font-medium">
+                              <div className="flex items-center">
+                                <TrendingUp className="h-4 w-4 mr-2 text-blue-500" />
+                                {hpa.name}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline">{hpa.target_ref}</Badge>
+                            </TableCell>
+                            <TableCell>
+                              {hpa.min_replicas} - {hpa.max_replicas}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={hpa.current_replicas === hpa.desired_replicas ? "default" : "secondary"}>
+                                {hpa.current_replicas} / {hpa.desired_replicas}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>{hpa.age}</TableCell>
+                            <TableCell>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() =>
+                                  setConfirmDialog({
+                                    open: true,
+                                    title: t("deleteTitle"),
+                                    description: t("deleteDescription", { name: hpa.name }),
+                                    onConfirm: () => handleDelete(hpa.name),
+                                  })
+                                }
+                                disabled={isOperationLoading}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
-      <ConfirmDialog
-        open={confirmDialog.open}
-        onOpenChange={(open) => setConfirmDialog(prev => ({ ...prev, open }))}
-        title={confirmDialog.title}
-        description={confirmDialog.description}
-        onConfirm={confirmDialog.onConfirm}
-      />
+        <ConfirmDialog
+          open={confirmDialog.open}
+          onOpenChange={(open) => setConfirmDialog((prev) => ({ ...prev, open }))}
+          title={confirmDialog.title}
+          description={confirmDialog.description}
+          onConfirm={confirmDialog.onConfirm}
+        />
       </main>
     </div>
   );

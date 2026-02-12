@@ -30,8 +30,11 @@ import { useAuth } from "@/lib/auth-context";
 import { useCluster } from "@/lib/cluster-context";
 import { canManageRBAC } from "@/lib/utils";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { useTranslations } from "@/hooks/use-translations";
 
 export default function RBACPage() {
+  const t = useTranslations("rbac");
+  const tCommon = useTranslations("common");
   const router = useRouter();
   const { user: currentUser, isLoading: authLoading } = useAuth();
   const { activeCluster: selectedCluster } = useCluster();
@@ -85,7 +88,7 @@ export default function RBACPage() {
     if (!currentUser || !canManageRBAC(currentUser)) {
       setIsAuthorized(false);
       if (!permissionErrorShown) {
-        toast.error("需要管理员权限");
+        toast.error(t("adminRequired"));
         setPermissionErrorShown(true);
       }
       router.push("/");
@@ -116,10 +119,10 @@ export default function RBACPage() {
       if (response.data) {
         setRoles(response.data.roles);
       } else {
-        toast.error(response.error || "获取Roles失败");
+        toast.error(response.error || t("loadRolesError"));
       }
     } catch (error) {
-      toast.error("获取Roles失败");
+      toast.error(t("loadRolesError"));
     } finally {
       setRolesLoading(false);
     }
@@ -133,10 +136,10 @@ export default function RBACPage() {
       if (response.data) {
         setRoleBindings(response.data.role_bindings);
       } else {
-        toast.error(response.error || "获取RoleBindings失败");
+        toast.error(response.error || t("loadRoleBindingsError"));
       }
     } catch (error) {
-      toast.error("获取RoleBindings失败");
+      toast.error(t("loadRoleBindingsError"));
     } finally {
       setRoleBindingsLoading(false);
     }
@@ -150,10 +153,10 @@ export default function RBACPage() {
       if (response.data) {
         setServiceAccounts(response.data.service_accounts);
       } else {
-        toast.error(response.error || "获取ServiceAccounts失败");
+        toast.error(response.error || t("loadServiceAccountsError"));
       }
     } catch (error) {
-      toast.error("获取ServiceAccounts失败");
+      toast.error(t("loadServiceAccountsError"));
     } finally {
       setServiceAccountsLoading(false);
     }
@@ -167,10 +170,10 @@ export default function RBACPage() {
       if (response.data) {
         setClusterRoles(response.data.cluster_roles);
       } else {
-        toast.error(response.error || "获取ClusterRoles失败");
+        toast.error(response.error || t("loadClusterRolesError"));
       }
     } catch (error) {
-      toast.error("获取ClusterRoles失败");
+      toast.error(t("loadClusterRolesError"));
     } finally {
       setClusterRolesLoading(false);
     }
@@ -184,10 +187,10 @@ export default function RBACPage() {
       if (response.data) {
         setClusterRoleBindings(response.data.cluster_role_bindings);
       } else {
-        toast.error(response.error || "获取ClusterRoleBindings失败");
+        toast.error(response.error || t("loadClusterRoleBindingsError"));
       }
     } catch (error) {
-      toast.error("获取ClusterRoleBindings失败");
+      toast.error(t("loadClusterRoleBindingsError"));
     } finally {
       setClusterRoleBindingsLoading(false);
     }
@@ -213,12 +216,12 @@ export default function RBACPage() {
       if (response?.error) {
         toast.error(response.error);
       } else {
-        toast.success("删除成功");
+        toast.success(t("deleteSuccess"));
         setDeleteDialog({ open: false, type: null, namespace: '', name: '' });
         fetchAllData();
       }
     } catch (error) {
-      toast.error("删除失败");
+      toast.error(t("deleteError"));
     } finally {
       setIsDeleting(false);
     }
@@ -267,15 +270,15 @@ export default function RBACPage() {
             <Button variant="ghost" onClick={() => router.push("/")}>
               <ArrowLeft className="h-4 w-4" />
             </Button>
-            <div>
-              <h1 className="text-3xl font-bold">RBAC权限管理</h1>
-              <p className="text-muted-foreground">管理Kubernetes RBAC资源</p>
+          <div>
+              <h1 className="text-3xl font-bold">{t("title")}</h1>
+              <p className="text-muted-foreground">{t("description")}</p>
             </div>
           </div>
           <Card>
             <CardContent className="py-8">
               <div className="text-center text-muted-foreground">
-                请先选择一个集群
+                {t("selectClusterFirst")}
               </div>
             </CardContent>
           </Card>
@@ -293,9 +296,9 @@ export default function RBACPage() {
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
-            <h1 className="text-3xl font-bold">RBAC权限管理</h1>
+            <h1 className="text-3xl font-bold">{t("title")}</h1>
             <p className="text-muted-foreground">
-              管理Kubernetes RBAC资源 - {selectedCluster.name}
+              {t("descriptionWithCluster", { cluster: selectedCluster.name })}
             </p>
           </div>
         </div>
@@ -331,12 +334,12 @@ export default function RBACPage() {
               <CardHeader>
                 <CardTitle>Roles</CardTitle>
                 <CardDescription>
-                  命名空间级别的角色定义
+                  {t("rolesDescription")}
                 </CardDescription>
                 <div className="relative">
                   <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                   <Input
-                    placeholder="搜索Roles..."
+                    placeholder={t("searchRoles")}
                     value={rolesSearch}
                     onChange={(e) => setRolesSearch(e.target.value)}
                     className="pl-9"
@@ -350,17 +353,17 @@ export default function RBACPage() {
                   </div>
                 ) : filteredRoles.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">
-                    暂无Roles
+                    {t("noRoles")}
                   </div>
                 ) : (
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>名称</TableHead>
-                        <TableHead>命名空间</TableHead>
-                        <TableHead>规则数</TableHead>
-                        <TableHead>创建时间</TableHead>
-                        <TableHead className="text-right">操作</TableHead>
+                        <TableHead>{t("nameLabel")}</TableHead>
+                        <TableHead>{t("namespaceLabel")}</TableHead>
+                        <TableHead>{t("rulesCountLabel")}</TableHead>
+                        <TableHead>{t("createdAtLabel")}</TableHead>
+                        <TableHead className="text-right">{tCommon("actions")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -368,7 +371,7 @@ export default function RBACPage() {
                         <TableRow key={`${role.namespace}/${role.name}`}>
                           <TableCell className="font-medium">{role.name}</TableCell>
                           <TableCell>
-                            <Badge variant="outline">{role.namespace}</Badge>
+                              <Badge variant="outline">{role.namespace}</Badge>
                           </TableCell>
                           <TableCell>{role.rules?.length || 0}</TableCell>
                           <TableCell className="text-xs">
@@ -403,12 +406,12 @@ export default function RBACPage() {
               <CardHeader>
                 <CardTitle>RoleBindings</CardTitle>
                 <CardDescription>
-                  将角色绑定到用户或ServiceAccount
+                  {t("roleBindingsDescription")}
                 </CardDescription>
                 <div className="relative">
                   <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                   <Input
-                    placeholder="搜索RoleBindings..."
+                    placeholder={t("searchRoleBindings")}
                     value={roleBindingsSearch}
                     onChange={(e) => setRoleBindingsSearch(e.target.value)}
                     className="pl-9"
@@ -422,18 +425,18 @@ export default function RBACPage() {
                   </div>
                 ) : filteredRoleBindings.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">
-                    暂无RoleBindings
+                    {t("noRoleBindings")}
                   </div>
                 ) : (
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>名称</TableHead>
-                        <TableHead>命名空间</TableHead>
-                        <TableHead>角色</TableHead>
-                        <TableHead>主体数</TableHead>
-                        <TableHead>创建时间</TableHead>
-                        <TableHead className="text-right">操作</TableHead>
+                        <TableHead>{t("nameLabel")}</TableHead>
+                        <TableHead>{t("namespaceLabel")}</TableHead>
+                        <TableHead>{t("roleLabel")}</TableHead>
+                        <TableHead>{t("subjectsCountLabel")}</TableHead>
+                        <TableHead>{t("createdAtLabel")}</TableHead>
+                        <TableHead className="text-right">{tCommon("actions")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -483,12 +486,12 @@ export default function RBACPage() {
               <CardHeader>
                 <CardTitle>ServiceAccounts</CardTitle>
                 <CardDescription>
-                  Pod运行时使用的服务账号
+                  {t("serviceAccountsDescription")}
                 </CardDescription>
                 <div className="relative">
                   <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                   <Input
-                    placeholder="搜索ServiceAccounts..."
+                    placeholder={t("searchServiceAccounts")}
                     value={serviceAccountsSearch}
                     onChange={(e) => setServiceAccountsSearch(e.target.value)}
                     className="pl-9"
@@ -502,17 +505,17 @@ export default function RBACPage() {
                   </div>
                 ) : filteredServiceAccounts.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">
-                    暂无ServiceAccounts
+                    {t("noServiceAccounts")}
                   </div>
                 ) : (
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>名称</TableHead>
-                        <TableHead>命名空间</TableHead>
-                        <TableHead>Secrets数</TableHead>
-                        <TableHead>创建时间</TableHead>
-                        <TableHead className="text-right">操作</TableHead>
+                        <TableHead>{t("nameLabel")}</TableHead>
+                        <TableHead>{t("namespaceLabel")}</TableHead>
+                        <TableHead>{t("secretsCountLabel")}</TableHead>
+                        <TableHead>{t("createdAtLabel")}</TableHead>
+                        <TableHead className="text-right">{tCommon("actions")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -555,12 +558,12 @@ export default function RBACPage() {
               <CardHeader>
                 <CardTitle>ClusterRoles</CardTitle>
                 <CardDescription>
-                  集群级别的角色定义（只读）
+                  {t("clusterRolesDescription")}
                 </CardDescription>
                 <div className="relative">
                   <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                   <Input
-                    placeholder="搜索ClusterRoles..."
+                    placeholder={t("searchClusterRoles")}
                     value={clusterRolesSearch}
                     onChange={(e) => setClusterRolesSearch(e.target.value)}
                     className="pl-9"
@@ -574,15 +577,15 @@ export default function RBACPage() {
                   </div>
                 ) : filteredClusterRoles.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">
-                    暂无ClusterRoles
+                    {t("noClusterRoles")}
                   </div>
                 ) : (
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>名称</TableHead>
-                        <TableHead>规则数</TableHead>
-                        <TableHead>创建时间</TableHead>
+                        <TableHead>{t("nameLabel")}</TableHead>
+                        <TableHead>{t("rulesCountLabel")}</TableHead>
+                        <TableHead>{t("createdAtLabel")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -608,12 +611,12 @@ export default function RBACPage() {
               <CardHeader>
                 <CardTitle>ClusterRoleBindings</CardTitle>
                 <CardDescription>
-                  集群级别的角色绑定（只读）
+                  {t("clusterRoleBindingsDescription")}
                 </CardDescription>
                 <div className="relative">
                   <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                   <Input
-                    placeholder="搜索ClusterRoleBindings..."
+                    placeholder={t("searchClusterRoleBindings")}
                     value={clusterRoleBindingsSearch}
                     onChange={(e) => setClusterRoleBindingsSearch(e.target.value)}
                     className="pl-9"
@@ -627,16 +630,16 @@ export default function RBACPage() {
                   </div>
                 ) : filteredClusterRoleBindings.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">
-                    暂无ClusterRoleBindings
+                    {t("noClusterRoleBindings")}
                   </div>
                 ) : (
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>名称</TableHead>
-                        <TableHead>角色</TableHead>
-                        <TableHead>主体数</TableHead>
-                        <TableHead>创建时间</TableHead>
+                        <TableHead>{t("nameLabel")}</TableHead>
+                        <TableHead>{t("roleLabel")}</TableHead>
+                        <TableHead>{t("subjectsCountLabel")}</TableHead>
+                        <TableHead>{t("createdAtLabel")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -668,10 +671,18 @@ export default function RBACPage() {
         <ConfirmDialog
           open={deleteDialog.open}
           onOpenChange={(open) => !open && setDeleteDialog({ open: false, type: null, namespace: '', name: '' })}
-          title="确认删除"
-          description={`确定要删除 ${deleteDialog.type === 'role' ? 'Role' : deleteDialog.type === 'roleBinding' ? 'RoleBinding' : 'ServiceAccount'} "${deleteDialog.name}" 吗？此操作无法撤销。`}
+          title={t("confirmDeleteTitle")}
+          description={t("confirmDeleteDescription", {
+            type:
+              deleteDialog.type === "role"
+                ? "Role"
+                : deleteDialog.type === "roleBinding"
+                ? "RoleBinding"
+                : "ServiceAccount",
+            name: deleteDialog.name,
+          })}
           onConfirm={handleDelete}
-          confirmText="删除"
+          confirmText={tCommon("delete")}
         />
       </div>
     </div>

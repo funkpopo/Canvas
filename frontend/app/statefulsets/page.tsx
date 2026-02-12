@@ -24,9 +24,8 @@ import {
   AgeColumn,
 } from "@/components/ResourceList";
 import { statefulsetApi } from "@/lib/api";
-import { toast } from "sonner";
-
-// ============ 类型定义 ============
+import { useTranslations } from "@/hooks/use-translations";
+import { useAsyncActionFeedback } from "@/hooks/use-async-action-feedback";
 
 interface StatefulSet extends BaseResource {
   replicas: number;
@@ -35,65 +34,69 @@ interface StatefulSet extends BaseResource {
   updated_replicas: number;
 }
 
-// ============ 内容组件 ============
-
 function StatefulSetsContent() {
+  const t = useTranslations("statefulsets");
+  const tCommon = useTranslations("common");
+  const { runWithFeedback } = useAsyncActionFeedback();
   const searchParams = useSearchParams();
   const clusterIdFromUrl = searchParams.get("cluster_id");
 
-  // 扩缩容对话框状态
   const [isScaleOpen, setIsScaleOpen] = useState(false);
   const [scaleTarget, setScaleTarget] = useState<StatefulSet | null>(null);
   const [newReplicas, setNewReplicas] = useState(0);
   const [isOperationLoading, setIsOperationLoading] = useState(false);
   const [selectedNamespace, setSelectedNamespace] = useState("default");
   const [selectedClusterId, setSelectedClusterId] = useState<number | null>(
-    clusterIdFromUrl ? parseInt(clusterIdFromUrl) : null
+    clusterIdFromUrl ? parseInt(clusterIdFromUrl, 10) : null
   );
 
-  // 刷新回调
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // 打开扩缩容对话框
   const openScaleDialog = (sts: StatefulSet) => {
     setScaleTarget(sts);
     setNewReplicas(sts.replicas);
     setIsScaleOpen(true);
   };
 
-  // 执行扩缩容
   const handleScale = async () => {
     if (!scaleTarget || !selectedClusterId) return;
 
     setIsOperationLoading(true);
     try {
-      const response = await statefulsetApi.scaleStatefulSet(
-        selectedClusterId,
-        scaleTarget.namespace,
-        scaleTarget.name,
-        newReplicas
+      await runWithFeedback(
+        async () => {
+          const response = await statefulsetApi.scaleStatefulSet(
+            selectedClusterId,
+            scaleTarget.namespace,
+            scaleTarget.name,
+            newReplicas
+          );
+          if (!response.data) {
+            throw new Error(response.error || t("scaleErrorUnknown"));
+          }
+
+          setIsScaleOpen(false);
+          setScaleTarget(null);
+          setRefreshKey((k) => k + 1);
+        },
+        {
+          loading: t("scaleLoading", { name: scaleTarget.name }),
+          success: t("scaleSuccess", { name: scaleTarget.name }),
+          error: t("scaleError"),
+        }
       );
-      if (response.data) {
-        toast.success("扩缩容成功");
-        setIsScaleOpen(false);
-        setScaleTarget(null);
-        setRefreshKey((k) => k + 1);
-      } else if (response.error) {
-        toast.error("扩缩容失败: " + response.error);
-      }
-    } catch {
-      toast.error("扩缩容失败");
+    } catch (error) {
+      console.error("scale statefulset failed:", error);
     } finally {
       setIsOperationLoading(false);
     }
   };
 
-  // ============ 列定义 ============
   const columns: ColumnDef<StatefulSet>[] = [
     NameColumn<StatefulSet>(),
     {
       key: "replicas",
-      header: "副本数",
+      header: t("replicasLabel"),
       render: (item) => (
         <Badge variant={item.ready_replicas === item.replicas ? "default" : "secondary"}>
           {item.ready_replicas}/{item.replicas}
@@ -102,26 +105,24 @@ function StatefulSetsContent() {
     },
     {
       key: "status",
-      header: "就绪/当前/更新",
-      render: (item) =>
-        `${item.ready_replicas}/${item.current_replicas}/${item.updated_replicas}`,
+      header: t("statusSummaryLabel"),
+      render: (item) => `${item.ready_replicas}/${item.current_replicas}/${item.updated_replicas}`,
     },
     AgeColumn<StatefulSet>(),
   ];
 
-  // ============ 操作按钮定义 ============
   const actions: ActionDef<StatefulSet>[] = [
     {
       key: "scale",
       icon: Settings,
-      tooltip: "扩缩容",
+      tooltip: t("scale"),
       onClick: openScaleDialog,
       disabled: () => isOperationLoading,
     },
     {
       key: "delete",
       icon: Trash2,
-      tooltip: "删除",
+      tooltip: tCommon("delete"),
       danger: true,
       onClick: () => {},
     },
@@ -132,8 +133,8 @@ function StatefulSetsContent() {
       <ResourceList<StatefulSet>
         key={refreshKey}
         resourceType="StatefulSet"
-        title="StatefulSets管理"
-        description="管理有状态应用工作负载"
+        title={t("title")}
+        description={t("description")}
         icon={Server}
         columns={columns}
         actions={actions}
@@ -158,33 +159,29 @@ function StatefulSetsContent() {
         requireNamespace={true}
         allowAllNamespaces={false}
         defaultNamespace="default"
-        searchPlaceholder="搜索 StatefulSet..."
+        searchPlaceholder={t("searchPlaceholder")}
         deleteConfirm={{
-          title: "删除 StatefulSet",
-          description: (item) =>
-            `确定要删除 StatefulSet "${item.name}" 吗？此操作不可撤销。`,
+          title: t("deleteTitle"),
+          description: (item) => t("deleteDescription", { name: item.name }),
         }}
       />
 
-      {/* 扩缩容对话框 */}
       <Dialog open={isScaleOpen} onOpenChange={setIsScaleOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>调整副本数</DialogTitle>
-            <DialogDescription>
-              修改StatefulSet {scaleTarget?.name} 的副本数量
-            </DialogDescription>
+            <DialogTitle>{t("scaleDialogTitle")}</DialogTitle>
+            <DialogDescription>{t("scaleDialogDescription", { name: scaleTarget?.name || "" })}</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="replicas" className="text-right">
-                副本数
+                {t("replicasInputLabel")}
               </Label>
               <Input
                 id="replicas"
                 type="number"
                 value={newReplicas}
-                onChange={(e) => setNewReplicas(parseInt(e.target.value) || 0)}
+                onChange={(e) => setNewReplicas(parseInt(e.target.value, 10) || 0)}
                 className="col-span-3"
                 min="0"
               />
@@ -192,16 +189,11 @@ function StatefulSetsContent() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsScaleOpen(false)}>
-              取消
+              {tCommon("cancel")}
             </Button>
-            <Button
-              onClick={handleScale}
-              disabled={isOperationLoading || newReplicas < 0}
-            >
-              {isOperationLoading && (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              )}
-              确认调整
+            <Button onClick={handleScale} disabled={isOperationLoading || newReplicas < 0}>
+              {isOperationLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {t("scaleConfirm")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -209,8 +201,6 @@ function StatefulSetsContent() {
     </>
   );
 }
-
-// ============ 页面组件 ============
 
 export default function StatefulSetsPage() {
   return (

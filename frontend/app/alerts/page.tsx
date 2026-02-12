@@ -10,6 +10,7 @@ import { apiClient } from "@/lib/api";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { AlertRuleDialog } from "@/components/AlertRuleDialog";
+import { useTranslations } from "@/hooks/use-translations";
 
 interface AlertRule {
   id: number;
@@ -55,6 +56,9 @@ interface AlertStats {
 }
 
 function AlertsPageContent() {
+  const t = useTranslations("alerts");
+  const tCommon = useTranslations("common");
+
   const [rules, setRules] = useState<AlertRule[]>([]);
   const [events, setEvents] = useState<AlertEvent[]>([]);
   const [stats, setStats] = useState<AlertStats | null>(null);
@@ -84,12 +88,12 @@ function AlertsPageContent() {
     try {
       const response = await apiClient.get<AlertRule[]>("/alerts/rules");
       if (response.error) {
-        toast.error(`获取告警规则失败: ${response.error}`);
+        toast.error(t("loadRulesErrorWithMessage", { message: response.error }));
         return;
       }
       setRules(response.data ?? []);
     } catch {
-      toast.error("获取告警规则失败: 网络错误");
+      toast.error(t("loadRulesNetworkError"));
     }
   };
 
@@ -97,12 +101,12 @@ function AlertsPageContent() {
     try {
       const response = await apiClient.get<AlertEvent[]>("/alerts/events?status=firing&limit=50");
       if (response.error) {
-        toast.error(`获取告警事件失败: ${response.error}`);
+        toast.error(t("loadEventsErrorWithMessage", { message: response.error }));
         return;
       }
       setEvents(response.data ?? []);
     } catch {
-      toast.error("获取告警事件失败: 网络错误");
+      toast.error(t("loadEventsNetworkError"));
     }
   };
 
@@ -110,12 +114,12 @@ function AlertsPageContent() {
     try {
       const response = await apiClient.get<AlertStats>("/alerts/stats");
       if (response.error) {
-        toast.error(`获取告警统计失败: ${response.error}`);
+        toast.error(t("loadStatsErrorWithMessage", { message: response.error }));
         return;
       }
       setStats(response.data ?? null);
     } catch {
-      toast.error("获取告警统计失败: 网络错误");
+      toast.error(t("loadStatsNetworkError"));
     }
   };
 
@@ -123,13 +127,13 @@ function AlertsPageContent() {
     try {
       const result = await apiClient.put(`/alerts/rules/${rule.id}`, { enabled: !rule.enabled });
       if (result.error) {
-        toast.error(`操作失败: ${result.error}`);
+        toast.error(t("operationFailedWithMessage", { message: result.error }));
         return;
       }
-      toast.success(rule.enabled ? "告警规则已禁用" : "告警规则已启用");
+      toast.success(rule.enabled ? t("ruleDisabled") : t("ruleEnabled"));
       fetchRules();
     } catch {
-      toast.error("操作失败: 网络错误");
+      toast.error(t("operationNetworkError"));
     }
   };
 
@@ -137,13 +141,13 @@ function AlertsPageContent() {
     try {
       const result = await apiClient.delete(`/alerts/rules/${ruleId}`);
       if (result.error) {
-        toast.error(`删除失败: ${result.error}`);
+        toast.error(t("deleteFailedWithMessage", { message: result.error }));
         return;
       }
-      toast.success("告警规则已删除");
+      toast.success(t("ruleDeleted"));
       fetchRules();
     } catch {
-      toast.error("删除失败: 网络错误");
+      toast.error(t("deleteNetworkError"));
     }
   };
 
@@ -151,14 +155,14 @@ function AlertsPageContent() {
     try {
       const result = await apiClient.post(`/alerts/events/${eventId}/resolve`, {});
       if (result.error) {
-        toast.error(`操作失败: ${result.error}`);
+        toast.error(t("operationFailedWithMessage", { message: result.error }));
         return;
       }
-      toast.success("告警已标记为已解决");
+      toast.success(t("alertResolved"));
       fetchEvents();
       fetchStats();
     } catch {
-      toast.error("操作失败: 网络错误");
+      toast.error(t("operationNetworkError"));
     }
   };
 
@@ -173,9 +177,9 @@ function AlertsPageContent() {
 
   const getRuleTypeLabel = (type: string) => {
     switch (type) {
-      case "resource_usage": return "资源使用";
-      case "pod_restart": return "Pod重启";
-      case "node_unavailable": return "节点不可用";
+      case "resource_usage": return t("ruleTypeResourceUsage");
+      case "pod_restart": return t("ruleTypePodRestart");
+      case "node_unavailable": return t("ruleTypeNodeUnavailable");
       default: return type;
     }
   };
@@ -184,10 +188,10 @@ function AlertsPageContent() {
     <AuthGuard>
       <div className="container mx-auto p-6">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl font-bold">告警管理</h1>
+          <h1 className="text-3xl font-bold">{t("title")}</h1>
           <Button onClick={() => setRuleDialog({ open: true })}>
             <Plus className="mr-2 h-4 w-4" />
-            创建告警规则
+            {t("createRule")}
           </Button>
         </div>
 
@@ -195,7 +199,7 @@ function AlertsPageContent() {
           <div className="grid gap-4 md:grid-cols-4 mb-6">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">告警总数</CardTitle>
+                <CardTitle className="text-sm font-medium">{t("totalAlerts")}</CardTitle>
                 <Activity className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
@@ -204,7 +208,7 @@ function AlertsPageContent() {
             </Card>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">进行中</CardTitle>
+                <CardTitle className="text-sm font-medium">{t("firing")}</CardTitle>
                 <Bell className="h-4 w-4 text-orange-500" />
               </CardHeader>
               <CardContent>
@@ -213,7 +217,7 @@ function AlertsPageContent() {
             </Card>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">严重告警</CardTitle>
+                <CardTitle className="text-sm font-medium">{t("criticalAlerts")}</CardTitle>
                 <AlertTriangle className="h-4 w-4 text-red-500" />
               </CardHeader>
               <CardContent>
@@ -222,7 +226,7 @@ function AlertsPageContent() {
             </Card>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">已解决</CardTitle>
+                <CardTitle className="text-sm font-medium">{t("resolved")}</CardTitle>
                 <BellOff className="h-4 w-4 text-green-500" />
               </CardHeader>
               <CardContent>
@@ -235,14 +239,14 @@ function AlertsPageContent() {
         <div className="grid gap-6 md:grid-cols-2">
           <Card>
             <CardHeader>
-              <CardTitle>告警规则</CardTitle>
-              <CardDescription>配置集群资源监控告警规则</CardDescription>
+              <CardTitle>{t("rulesTitle")}</CardTitle>
+              <CardDescription>{t("rulesDescription")}</CardDescription>
             </CardHeader>
             <CardContent>
               {isLoading ? (
-                <div className="text-center py-4">加载中...</div>
+                <div className="text-center py-4">{tCommon("loading")}</div>
               ) : rules.length === 0 ? (
-                <div className="text-center py-4 text-muted-foreground">暂无告警规则</div>
+                <div className="text-center py-4 text-muted-foreground">{t("noRules")}</div>
               ) : (
                 <div className="space-y-3">
                   {rules.map((rule) => (
@@ -253,13 +257,13 @@ function AlertsPageContent() {
                           <Badge variant={getSeverityColor(rule.severity)}>{rule.severity}</Badge>
                           <Badge variant="outline">{getRuleTypeLabel(rule.rule_type)}</Badge>
                           {rule.enabled ? (
-                            <Badge variant="default">启用</Badge>
+                            <Badge variant="default">{t("enabled")}</Badge>
                           ) : (
-                            <Badge variant="secondary">禁用</Badge>
+                            <Badge variant="secondary">{t("disabled")}</Badge>
                           )}
                         </div>
                         <div className="text-sm text-muted-foreground">
-                          集群: {rule.cluster_name}
+                          {t("clusterLabel", { cluster: rule.cluster_name })}
                         </div>
                       </div>
                       <div className="flex gap-2">
@@ -283,8 +287,8 @@ function AlertsPageContent() {
                           onClick={() => {
                             setConfirmDialog({
                               open: true,
-                              title: "删除告警规则",
-                              description: `确定要删除告警规则 "${rule.name}" 吗？`,
+                              title: t("deleteRuleTitle"),
+                              description: t("deleteRuleDescription", { name: rule.name }),
                               onConfirm: () => handleDeleteRule(rule.id),
                             });
                           }}
@@ -301,14 +305,14 @@ function AlertsPageContent() {
 
           <Card>
             <CardHeader>
-              <CardTitle>活跃告警</CardTitle>
-              <CardDescription>当前正在触发的告警事件</CardDescription>
+              <CardTitle>{t("activeAlertsTitle")}</CardTitle>
+              <CardDescription>{t("activeAlertsDescription")}</CardDescription>
             </CardHeader>
             <CardContent>
               {isLoading ? (
-                <div className="text-center py-4">加载中...</div>
+                <div className="text-center py-4">{tCommon("loading")}</div>
               ) : events.length === 0 ? (
-                <div className="text-center py-4 text-muted-foreground">暂无活跃告警</div>
+                <div className="text-center py-4 text-muted-foreground">{t("noActiveAlerts")}</div>
               ) : (
                 <div className="space-y-3 max-h-[600px] overflow-y-auto">
                   {events.map((event) => (
@@ -323,16 +327,20 @@ function AlertsPageContent() {
                           variant="outline"
                           onClick={() => handleResolveEvent(event.id)}
                         >
-                          解决
+                          {t("resolve")}
                         </Button>
                       </div>
                       <div className="text-sm mb-1">{event.message}</div>
                       <div className="text-xs text-muted-foreground">
-                        集群: {event.cluster_name} | 资源: {event.resource_type}/{event.resource_name}
+                        {t("eventMeta", {
+                          cluster: event.cluster_name,
+                          resourceType: event.resource_type,
+                          resourceName: event.resource_name,
+                        })}
                         {event.namespace && ` (${event.namespace})`}
                       </div>
                       <div className="text-xs text-muted-foreground mt-1">
-                        首次触发: {new Date(event.first_triggered_at).toLocaleString()}
+                        {t("firstTriggeredAt", { time: new Date(event.first_triggered_at).toLocaleString() })}
                       </div>
                     </div>
                   ))}

@@ -10,7 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { Activity, Eye, Code, RotateCcw, Scale } from "lucide-react";
+import { Activity, Eye, Code, RotateCcw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import {
@@ -27,7 +27,8 @@ import {
 import { deploymentApi } from "@/lib/api";
 import { canManageResources } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
-import { toast } from "sonner";
+import { useTranslations } from "@/hooks/use-translations";
+import { useAsyncActionFeedback } from "@/hooks/use-async-action-feedback";
 
 // ============ 类型定义 ============
 
@@ -42,25 +43,27 @@ interface Deployment extends BaseResource {
 
 // ============ 状态判断函数 ============
 
-function getDeploymentStatus(deployment: Deployment): string {
+type DeploymentStatus = "running" | "failed" | "updating";
+
+function getDeploymentStatus(deployment: Deployment): DeploymentStatus {
   const { replicas, ready_replicas, available_replicas } = deployment;
 
   if (ready_replicas === replicas && available_replicas === replicas) {
-    return "Running";
+    return "running";
   } else if (ready_replicas === 0) {
-    return "Failed";
+    return "failed";
   } else {
-    return "Updating";
+    return "updating";
   }
 }
 
-function getStatusBadgeClass(status: string): string {
+function getStatusBadgeClass(status: DeploymentStatus): string {
   switch (status) {
-    case "Running":
+    case "running":
       return "bg-green-500";
-    case "Failed":
+    case "failed":
       return "bg-red-500";
-    case "Updating":
+    case "updating":
       return "bg-yellow-500";
     default:
       return "bg-gray-500";
@@ -90,6 +93,9 @@ async function fetchDeploymentsPage(
 
 export default function DeploymentsPage() {
   const router = useRouter();
+  const t = useTranslations("deployments");
+  const tCommon = useTranslations("common");
+  const { runWithFeedback } = useAsyncActionFeedback();
   const { user } = useAuth();
   const [yamlPreview, setYamlPreview] = useState("");
   const [isYamlOpen, setIsYamlOpen] = useState(false);
@@ -98,38 +104,54 @@ export default function DeploymentsPage() {
   // 查看 YAML
   const handleViewYaml = async (deployment: Deployment) => {
     try {
-      const response = await deploymentApi.getDeploymentYaml(
-        deployment.cluster_id,
-        deployment.namespace,
-        deployment.name
+      await runWithFeedback(
+        async () => {
+          const response = await deploymentApi.getDeploymentYaml(
+            deployment.cluster_id,
+            deployment.namespace,
+            deployment.name
+          );
+          if (!response.data) {
+            throw new Error(response.error || t("yamlLoadErrorUnknown"));
+          }
+
+          setYamlPreview(response.data.yaml);
+          setSelectedDeployment(deployment);
+          setIsYamlOpen(true);
+        },
+        {
+          loading: t("yamlLoadLoading"),
+          success: t("yamlLoadSuccess"),
+          error: t("yamlLoadError"),
+        }
       );
-      if (response.data) {
-        setYamlPreview(response.data.yaml);
-        setSelectedDeployment(deployment);
-        setIsYamlOpen(true);
-      } else {
-        toast.error(`获取YAML失败: ${response.error}`);
-      }
-    } catch {
-      toast.error("获取YAML失败");
+    } catch (error) {
+      console.error("load deployment yaml failed:", error);
     }
   };
 
   // 重启 Deployment
   const handleRestart = async (deployment: Deployment) => {
     try {
-      const response = await deploymentApi.restartDeployment(
-        deployment.cluster_id,
-        deployment.namespace,
-        deployment.name
+      await runWithFeedback(
+        async () => {
+          const response = await deploymentApi.restartDeployment(
+            deployment.cluster_id,
+            deployment.namespace,
+            deployment.name
+          );
+          if (response.error) {
+            throw new Error(response.error);
+          }
+        },
+        {
+          loading: t("restartLoading", { name: deployment.name }),
+          success: t("restartSuccess", { name: deployment.name }),
+          error: t("restartError"),
+        }
       );
-      if (!response.error) {
-        toast.success(`Deployment ${deployment.name} 重启成功`);
-      } else {
-        toast.error(`重启失败: ${response.error}`);
-      }
-    } catch {
-      toast.error("重启失败");
+    } catch (error) {
+      console.error("restart deployment failed:", error);
     }
   };
 
@@ -140,15 +162,21 @@ export default function DeploymentsPage() {
     ClusterColumn<Deployment>(),
     {
       key: "status",
-      header: "状态",
+      header: t("status"),
       render: (item) => {
         const status = getDeploymentStatus(item);
-        return <Badge className={getStatusBadgeClass(status)}>{status}</Badge>;
+        const statusLabel =
+          status === "running"
+            ? t("statusRunning")
+            : status === "failed"
+            ? t("statusFailed")
+            : t("statusUpdating");
+        return <Badge className={getStatusBadgeClass(status)}>{statusLabel}</Badge>;
       },
     },
     {
       key: "replicas",
-      header: "副本",
+      header: t("replicas"),
       render: (item) => `${item.ready_replicas}/${item.replicas}`,
     },
     AgeColumn<Deployment>(),
@@ -159,7 +187,7 @@ export default function DeploymentsPage() {
     {
       key: "view",
       icon: Eye,
-      tooltip: "查看详情",
+      tooltip: t("viewDetails"),
       onClick: (item) =>
         router.push(
           `/deployments/${item.namespace}/${item.name}?cluster_id=${item.cluster_id}`
@@ -168,13 +196,13 @@ export default function DeploymentsPage() {
     {
       key: "yaml",
       icon: Code,
-      tooltip: "查看YAML",
+      tooltip: t("viewYaml"),
       onClick: handleViewYaml,
     },
     {
       key: "restart",
       icon: RotateCcw,
-      tooltip: "重启",
+      tooltip: t("restart"),
       visible: () => canManageResources(user),
       onClick: handleRestart,
     },
@@ -184,8 +212,8 @@ export default function DeploymentsPage() {
     <>
       <ResourceList<Deployment>
         resourceType="Deployment"
-        title="Deployments"
-        description="管理和监控 Kubernetes Deployments"
+        title={t("title")}
+        description={t("description")}
         icon={Activity}
         columns={columns}
         actions={actions}
@@ -202,20 +230,20 @@ export default function DeploymentsPage() {
         statusFilter={{
           field: "replicas" as keyof Deployment,
           options: [
-            { value: "running", label: "运行中" },
-            { value: "updating", label: "更新中" },
-            { value: "failed", label: "失败" },
+            { value: "running", label: t("statusRunning") },
+            { value: "updating", label: t("statusUpdating") },
+            { value: "failed", label: t("statusFailed") },
           ],
         }}
         requireNamespace={false}
-        searchPlaceholder="搜索 Deployment..."
+        searchPlaceholder={t("searchPlaceholder")}
         detailLink={(item) =>
           `/deployments/${item.namespace}/${item.name}?cluster_id=${item.cluster_id}`
         }
         deleteConfirm={{
-          title: "删除 Deployment",
+          title: t("deleteTitle"),
           description: (item) =>
-            `确定要删除 Deployment "${item.namespace}/${item.name}" 吗？此操作将删除所有关联的 ReplicaSets 和 Pods。`,
+            t("deleteDescription", { namespace: item.namespace, name: item.name }),
         }}
       />
 
@@ -225,8 +253,11 @@ export default function DeploymentsPage() {
           <DialogHeader>
             <DialogTitle>
               {selectedDeployment
-                ? `${selectedDeployment.namespace}/${selectedDeployment.name} - YAML配置`
-                : "YAML配置"}
+                ? t("yamlDialogTitle", {
+                    namespace: selectedDeployment.namespace,
+                    name: selectedDeployment.name,
+                  })
+                : t("yamlDialogFallbackTitle")}
             </DialogTitle>
           </DialogHeader>
           <div className="mt-4">
@@ -237,7 +268,7 @@ export default function DeploymentsPage() {
             />
           </div>
           <DialogFooter>
-            <Button onClick={() => setIsYamlOpen(false)}>关闭</Button>
+            <Button onClick={() => setIsYamlOpen(false)}>{tCommon("close")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -189,7 +189,7 @@ export default function Home() {
               <Button variant="outline" asChild>
                 <Link href="/user-center">
                   <UserIcon className="h-4 w-4 mr-2" />
-                  用户中心
+                  {t("userCenter")}
                 </Link>
               </Button>
               <Button variant="outline" onClick={logout}>
@@ -287,7 +287,7 @@ export default function Home() {
               ) : (
                 <>
                   <div className="text-2xl font-bold">{stats?.total_services || 0}</div>
-                  <p className="text-xs text-muted-foreground">LoadBalancers and ClusterIPs</p>
+                  <p className="text-xs text-muted-foreground">{t("serviceTypesHint")}</p>
                 </>
               )}
             </CardContent>
@@ -300,17 +300,17 @@ export default function Home() {
             <CardHeader>
               <CardTitle className="flex items-center">
                 <Activity className="h-5 w-5 mr-2" />
-                集群实时监控
+                {t("clusterRealtimeMetrics")}
               </CardTitle>
               <CardDescription>
-                当前集群的资源使用情况 ({clusterMetrics?.cluster_name})
+                {t("clusterUsageDescription", { cluster: clusterMetrics?.cluster_name ?? "-" })}
               </CardDescription>
             </CardHeader>
             <CardContent>
               {isLoadingMetrics ? (
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="h-6 w-6 animate-spin mr-2" />
-                  <span>加载监控数据...</span>
+                  <span>{t("metricsLoading")}</span>
                 </div>
               ) : (
                 <div className="space-y-6">
@@ -318,25 +318,25 @@ export default function Home() {
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <Card>
                       <CardHeader className="pb-2">
-                        <CardDescription>集群CPU使用</CardDescription>
-                        <CardTitle className="text-2xl">{clusterMetrics?.cpu_usage} 核</CardTitle>
+                        <CardDescription>{t("clusterCpuUsage")}</CardDescription>
+                        <CardTitle className="text-2xl">{t("cpuCoresValue", { value: clusterMetrics?.cpu_usage ?? "-" })}</CardTitle>
                       </CardHeader>
                     </Card>
                     <Card>
                       <CardHeader className="pb-2">
-                        <CardDescription>集群内存使用</CardDescription>
+                        <CardDescription>{t("clusterMemoryUsage")}</CardDescription>
                         <CardTitle className="text-2xl">{clusterMetrics?.memory_usage}</CardTitle>
                       </CardHeader>
                     </Card>
                     <Card>
                       <CardHeader className="pb-2">
-                        <CardDescription>节点数量</CardDescription>
+                        <CardDescription>{t("clusterNodeCount")}</CardDescription>
                         <CardTitle className="text-2xl">{clusterMetrics?.node_count}</CardTitle>
                       </CardHeader>
                     </Card>
                     <Card>
                       <CardHeader className="pb-2">
-                        <CardDescription>Pod数量</CardDescription>
+                        <CardDescription>{t("clusterPodCount")}</CardDescription>
                         <CardTitle className="text-2xl">{clusterMetrics?.pod_count}</CardTitle>
                       </CardHeader>
                     </Card>
@@ -347,7 +347,7 @@ export default function Home() {
                     <div>
                       <h3 className="text-lg font-semibold mb-3 flex items-center">
                         <Server className="h-5 w-5 mr-2" />
-                        节点资源使用
+                        {t("nodeResourceUsage")}
                       </h3>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {nodeMetrics.map((node) => (
@@ -360,10 +360,10 @@ export default function Home() {
                                 <div className="flex justify-between mb-2">
                                   <span className="text-sm font-medium flex items-center">
                                     <Cpu className="h-4 w-4 mr-1" />
-                                    CPU使用率
+                                    {t("cpuUsageRate")}
                                   </span>
                                   <span className="text-sm text-muted-foreground">
-                                    {node.cpu_usage} 核 ({node.cpu_percentage.toFixed(1)}%)
+                                    {t("cpuUsageValue", { usage: node.cpu_usage, percentage: node.cpu_percentage.toFixed(1) })}
                                   </span>
                                 </div>
                                 <Progress value={node.cpu_percentage} />
@@ -373,7 +373,7 @@ export default function Home() {
                                 <div className="flex justify-between mb-2">
                                   <span className="text-sm font-medium flex items-center">
                                     <MemoryStick className="h-4 w-4 mr-1" />
-                                    内存使用率
+                                    {t("memoryUsageRate")}
                                   </span>
                                   <span className="text-sm text-muted-foreground">
                                     {node.memory_usage} ({node.memory_percentage.toFixed(1)}%)
@@ -396,39 +396,39 @@ export default function Home() {
         {/* Quick Actions */}
         <Card>
           <CardHeader>
-            <CardTitle>快速操作</CardTitle>
-            <CardDescription>常用Kubernetes管理任务</CardDescription>
+            <CardTitle>{t("quickActions")}</CardTitle>
+            <CardDescription>{t("quickActionsDescription")}</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <Button variant="outline" className="h-20 flex-col" asChild>
                 <Link href="/nodes">
                   <Server className="h-6 w-6 mb-2" />
-                  节点管理
+                  {t("quickActionNodes")}
                 </Link>
               </Button>
               <Button variant="outline" className="h-20 flex-col" asChild>
                 <Link href="/namespaces">
                   <FolderPen className="h-6 w-6 mb-2" />
-                  命名空间
+                  {t("quickActionNamespaces")}
                 </Link>
               </Button>
               <Button variant="outline" className="h-20 flex-col" asChild>
                 <Link href="/pods">
                   <Activity className="h-6 w-6 mb-2" />
-                  Pod监控
+                  {t("quickActionPods")}
                 </Link>
               </Button>
               <Button variant="outline" className="h-20 flex-col" asChild>
                 <Link href="/storage">
                   <Database className="h-6 w-6 mb-2" />
-                  存储管理
+                  {t("quickActionStorage")}
                 </Link>
               </Button>
               <Button variant="outline" className="h-20 flex-col" asChild>
                 <Link href="/services">
                   <Settings2 className="h-6 w-6 mb-2" />
-                  服务管理
+                  {t("quickActionServices")}
                 </Link>
               </Button>
               <Button variant="outline" className="h-20 flex-col" asChild>
@@ -446,49 +446,49 @@ export default function Home() {
               <Button variant="outline" className="h-20 flex-col" asChild>
                 <Link href="/network-policies">
                   <Shield className="h-6 w-6 mb-2" />
-                  网络策略
+                  {t("quickActionNetworkPolicies")}
                 </Link>
               </Button>
               <Button variant="outline" className="h-20 flex-col" asChild>
                 <Link href="/resource-quotas">
                   <Cpu className="h-6 w-6 mb-2" />
-                  资源配额
+                  {t("quickActionResourceQuotas")}
                 </Link>
               </Button>
               <Button variant="outline" className="h-20 flex-col" asChild>
                 <Link href="/events">
                   <AlertCircle className="h-6 w-6 mb-2" />
-                  事件查看
+                  {t("quickActionEvents")}
                 </Link>
               </Button>
               <Button variant="outline" className="h-20 flex-col" asChild>
                 <Link href="/clusters">
                   <Settings className="h-6 w-6 mb-2" />
-                  集群管理
+                  {t("quickActionClusters")}
                 </Link>
               </Button>
               <Button variant="outline" className="h-20 flex-col" asChild>
                 <Link href="/users">
                   <UserIcon className="h-6 w-6 mb-2" />
-                  用户管理
+                  {t("quickActionUsers")}
                 </Link>
               </Button>
               <Button variant="outline" className="h-20 flex-col" asChild>
                 <Link href="/audit-logs">
                   <Activity className="h-6 w-6 mb-2" />
-                  审计日志
+                  {t("quickActionAuditLogs")}
                 </Link>
               </Button>
               <Button variant="outline" className="h-20 flex-col" asChild>
                 <Link href="/rbac">
                   <Shield className="h-6 w-6 mb-2" />
-                  RBAC权限
+                  {t("quickActionRbac")}
                 </Link>
               </Button>
               <Button variant="outline" className="h-20 flex-col" asChild>
                 <Link href="/alerts">
                   <Bell className="h-6 w-6 mb-2" />
-                  告警管理
+                  {t("quickActionAlerts")}
                 </Link>
               </Button>
             </div>
@@ -498,8 +498,8 @@ export default function Home() {
         {/* Kubernetes资源管理增强 */}
         <Card className="mt-6">
           <CardHeader>
-            <CardTitle>工作负载管理</CardTitle>
-            <CardDescription>管理有状态应用、守护进程、定时任务等</CardDescription>
+            <CardTitle>{t("workloadManagement")}</CardTitle>
+            <CardDescription>{t("workloadManagementDescription")}</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

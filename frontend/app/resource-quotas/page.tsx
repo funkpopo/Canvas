@@ -17,6 +17,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useCluster } from "@/lib/cluster-context";
 import { resourceQuotaApi, namespaceApi } from "@/lib/api";
 import { toast } from "sonner";
+import { useTranslations } from "@/hooks/use-translations";
 
 interface ResourceQuota {
   name: string;
@@ -31,6 +32,9 @@ interface ResourceQuota {
 }
 
 export default function ResourceQuotasManagement() {
+  const t = useTranslations("resourceQuotasPage");
+  const tCommon = useTranslations("common");
+
   const [quotas, setQuotas] = useState<ResourceQuota[]>([]);
   const [isQuotasLoading, setIsQuotasLoading] = useState(true);
   const [selectedClusterId, setSelectedClusterId] = useState<number | null>(null);
@@ -58,11 +62,11 @@ export default function ResourceQuotasManagement() {
       if (response.data) {
         setQuotas(response.data);
       } else if (response.error) {
-        toast.error(`获取Resource Quota列表失败: ${response.error}`);
+        toast.error(t("loadListErrorWithMessage", { message: response.error }));
       }
     } catch (error) {
       console.error("获取Resource Quota列表失败:", error);
-      toast.error(`获取Resource Quota列表失败: ${error instanceof Error ? error.message : '网络错误'}`);
+      toast.error(t("loadListErrorWithMessage", { message: error instanceof Error ? error.message : t("networkError") }));
     } finally {
       setIsQuotasLoading(false);
     }
@@ -108,13 +112,13 @@ export default function ResourceQuotasManagement() {
     try {
       const response = await resourceQuotaApi.deleteResourceQuota(quota.cluster_id, quota.namespace, quota.name);
       if (!response.error) {
-        toast.success("Resource Quota删除成功");
+        toast.success(t("deleteSuccess"));
         fetchResourceQuotas();
       } else {
-        toast.error(`删除Resource Quota失败: ${response.error}`);
+        toast.error(t("deleteErrorWithMessage", { message: response.error }));
       }
     } catch {
-      toast.error("删除Resource Quota失败");
+      toast.error(t("deleteError"));
     }
   };
 
@@ -127,10 +131,10 @@ export default function ResourceQuotasManagement() {
         setSelectedQuota(response.data);
         setIsPreviewOpen(true);
       } else {
-        toast.error(`获取Resource Quota详情失败: ${response.error}`);
+        toast.error(t("loadDetailsErrorWithMessage", { message: response.error }));
       }
     } catch {
-      toast.error("获取Resource Quota详情失败");
+      toast.error(t("loadDetailsError"));
     } finally {
       setIsPreviewLoading(false);
     }
@@ -139,21 +143,21 @@ export default function ResourceQuotasManagement() {
   // 创建Resource Quota
   const handleCreateResourceQuota = async (quotaData: any) => {
     if (!selectedClusterId) {
-      toast.error("请选择集群");
+      toast.error(t("selectClusterFirst"));
       return;
     }
 
     try {
       const response = await resourceQuotaApi.createResourceQuota(selectedClusterId, quotaData);
       if (!response.error) {
-        toast.success("Resource Quota创建成功");
+        toast.success(t("createSuccess"));
         setIsCreateOpen(false);
         fetchResourceQuotas();
       } else {
-        toast.error(`创建Resource Quota失败: ${response.error}`);
+        toast.error(t("createErrorWithMessage", { message: response.error }));
       }
     } catch {
-      toast.error("创建Resource Quota失败");
+      toast.error(t("createError"));
     }
   };
 
@@ -170,8 +174,8 @@ export default function ResourceQuotasManagement() {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
-          <h2 className="text-2xl font-bold mb-4">请先登录</h2>
-          <Button onClick={() => router.push('/login')}>前往登录</Button>
+          <h2 className="text-2xl font-bold mb-4">{t("pleaseLogin")}</h2>
+          <Button onClick={() => router.push('/login')}>{t("goToLogin")}</Button>
         </div>
       </div>
     );
@@ -186,7 +190,7 @@ export default function ResourceQuotasManagement() {
             <div className="flex items-center">
               <Link href="/" className="flex items-center">
                 <ArrowLeft className="h-5 w-5 mr-2" />
-                <span className="text-gray-600 dark:text-gray-400">返回仪表板</span>
+                <span className="text-gray-600 dark:text-gray-400">{tCommon("backToDashboard")}</span>
               </Link>
             </div>
             <div className="flex items-center space-x-4">
@@ -196,7 +200,7 @@ export default function ResourceQuotasManagement() {
               />
               <Select value={selectedNamespace} onValueChange={setSelectedNamespace}>
                 <SelectTrigger className="w-[200px]">
-                  <SelectValue placeholder="选择命名空间" />
+                  <SelectValue placeholder={t("selectNamespace")} />
                 </SelectTrigger>
                 <SelectContent>
                   {namespaces.map(ns => (
@@ -214,10 +218,10 @@ export default function ResourceQuotasManagement() {
         <div className="mb-8">
           <h2 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
             <Cpu className="w-8 h-8" />
-            Resource Quotas管理
+            {t("title")}
           </h2>
           <p className="mt-2 text-gray-600 dark:text-gray-400">
-            管理Kubernetes集群中的资源配额
+            {t("description")}
           </p>
         </div>
 
@@ -225,14 +229,14 @@ export default function ResourceQuotasManagement() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>Resource Quota列表</CardTitle>
+              <CardTitle>{t("listTitle")}</CardTitle>
               <CardDescription>
-                {selectedNamespace ? `命名空间: ${selectedNamespace}` : "请选择命名空间"}
+                {selectedNamespace ? t("namespaceValue", { namespace: selectedNamespace }) : t("selectNamespaceHint")}
               </CardDescription>
             </div>
             <Button onClick={() => setIsCreateOpen(true)}>
               <Plus className="w-4 h-4 mr-2" />
-              创建Resource Quota
+              {t("createQuota")}
             </Button>
           </div>
         </CardHeader>
@@ -240,21 +244,21 @@ export default function ResourceQuotasManagement() {
           {isQuotasLoading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="w-8 h-8 animate-spin" />
-              <span className="ml-2">加载中...</span>
+              <span className="ml-2">{tCommon("loading")}</span>
             </div>
           ) : quotas.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              {selectedNamespace ? "该命名空间下没有Resource Quotas" : "请选择命名空间查看Resource Quotas"}
+              {selectedNamespace ? t("noQuotasInNamespace") : t("selectNamespaceToView")}
             </div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>名称</TableHead>
-                  <TableHead>硬限制</TableHead>
-                  <TableHead>已使用</TableHead>
-                  <TableHead>年龄</TableHead>
-                  <TableHead>操作</TableHead>
+                  <TableHead>{t("nameLabel")}</TableHead>
+                  <TableHead>{t("hardLimitsLabel")}</TableHead>
+                  <TableHead>{t("usedLabel")}</TableHead>
+                  <TableHead>{t("ageLabel")}</TableHead>
+                  <TableHead>{tCommon("actions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -267,7 +271,7 @@ export default function ResourceQuotasManagement() {
                           <div key={key} className="truncate">{key}: {String(value)}</div>
                         ))}
                         {Object.keys(quota.hard).length > 3 && (
-                          <div className="text-muted-foreground">+{Object.keys(quota.hard).length - 3} 更多</div>
+                          <div className="text-muted-foreground">{t("moreCount", { count: Object.keys(quota.hard).length - 3 })}</div>
                         )}
                       </div>
                     </TableCell>
@@ -277,7 +281,7 @@ export default function ResourceQuotasManagement() {
                           <div key={key} className="truncate">{key}: {String(value)}</div>
                         ))}
                         {Object.keys(quota.used).length > 3 && (
-                          <div className="text-muted-foreground">+{Object.keys(quota.used).length - 3} 更多</div>
+                          <div className="text-muted-foreground">{t("moreCount", { count: Object.keys(quota.used).length - 3 })}</div>
                         )}
                       </div>
                     </TableCell>
@@ -316,28 +320,28 @@ export default function ResourceQuotasManagement() {
         <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              {selectedQuota ? `${selectedQuota.namespace}/${selectedQuota.name} - Resource Quota详情` : "Resource Quota详情"}
+              {selectedQuota ? t("detailsTitleWithName", { namespace: selectedQuota.namespace, name: selectedQuota.name }) : t("detailsTitle")}
             </DialogTitle>
           </DialogHeader>
           {selectedQuota && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label className="font-medium">名称</Label>
+                  <Label className="font-medium">{t("nameLabel")}</Label>
                   <p className="text-sm text-muted-foreground">{selectedQuota.name}</p>
                 </div>
                 <div>
-                  <Label className="font-medium">命名空间</Label>
+                  <Label className="font-medium">{t("namespaceLabel")}</Label>
                   <p className="text-sm text-muted-foreground">{selectedQuota.namespace}</p>
                 </div>
                 <div>
-                  <Label className="font-medium">年龄</Label>
+                  <Label className="font-medium">{t("ageLabel")}</Label>
                   <p className="text-sm text-muted-foreground">{selectedQuota.age}</p>
                 </div>
               </div>
 
               <div>
-                <Label className="font-medium">硬限制</Label>
+                <Label className="font-medium">{t("hardLimitsLabel")}</Label>
                 <div className="mt-1">
                   {selectedQuota.hard && Object.keys(selectedQuota.hard).length > 0 ? (
                     <div className="bg-muted p-3 rounded">
@@ -351,13 +355,13 @@ export default function ResourceQuotasManagement() {
                       </div>
                     </div>
                   ) : (
-                    <p className="text-sm text-muted-foreground">无硬限制</p>
+                    <p className="text-sm text-muted-foreground">{t("noHardLimits")}</p>
                   )}
                 </div>
               </div>
 
               <div>
-                <Label className="font-medium">已使用</Label>
+                <Label className="font-medium">{t("usedLabel")}</Label>
                 <div className="mt-1">
                   {selectedQuota.used && Object.keys(selectedQuota.used).length > 0 ? (
                     <div className="bg-muted p-3 rounded">
@@ -371,40 +375,40 @@ export default function ResourceQuotasManagement() {
                       </div>
                     </div>
                   ) : (
-                    <p className="text-sm text-muted-foreground">无使用记录</p>
+                    <p className="text-sm text-muted-foreground">{t("noUsage")}</p>
                   )}
                 </div>
               </div>
 
               <div>
-                <Label className="font-medium">标签</Label>
+                <Label className="font-medium">{t("labelsLabel")}</Label>
                 <div className="mt-1">
                   {selectedQuota.labels && Object.keys(selectedQuota.labels).length > 0 ? (
                     <div className="bg-muted p-2 rounded text-sm font-mono">
                       {JSON.stringify(selectedQuota.labels, null, 2)}
                     </div>
                   ) : (
-                    <p className="text-sm text-muted-foreground">无标签</p>
+                    <p className="text-sm text-muted-foreground">{t("noLabels")}</p>
                   )}
                 </div>
               </div>
 
               <div>
-                <Label className="font-medium">注解</Label>
+                <Label className="font-medium">{t("annotationsLabel")}</Label>
                 <div className="mt-1">
                   {selectedQuota.annotations && Object.keys(selectedQuota.annotations).length > 0 ? (
                     <div className="bg-muted p-2 rounded text-sm font-mono">
                       {JSON.stringify(selectedQuota.annotations, null, 2)}
                     </div>
                   ) : (
-                    <p className="text-sm text-muted-foreground">无注解</p>
+                    <p className="text-sm text-muted-foreground">{t("noAnnotations")}</p>
                   )}
                 </div>
               </div>
 
               {selectedQuota.scopes && selectedQuota.scopes.length > 0 && (
                 <div>
-                  <Label className="font-medium">作用域</Label>
+                  <Label className="font-medium">{t("scopesLabel")}</Label>
                   <div className="mt-1">
                     <div className="flex flex-wrap gap-2">
                       {selectedQuota.scopes.map((scope: string, index: number) => (
@@ -417,7 +421,7 @@ export default function ResourceQuotasManagement() {
 
               {selectedQuota.scope_selector && selectedQuota.scope_selector.length > 0 && (
                 <div>
-                  <Label className="font-medium">作用域选择器</Label>
+                  <Label className="font-medium">{t("scopeSelectorLabel")}</Label>
                   <div className="mt-1">
                     <div className="bg-muted p-2 rounded text-sm font-mono">
                       {JSON.stringify(selectedQuota.scope_selector, null, 2)}
@@ -428,7 +432,7 @@ export default function ResourceQuotasManagement() {
             </div>
           )}
           <DialogFooter>
-            <Button onClick={() => setIsPreviewOpen(false)}>关闭</Button>
+            <Button onClick={() => setIsPreviewOpen(false)}>{tCommon("close")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -437,7 +441,7 @@ export default function ResourceQuotasManagement() {
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
         <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>创建Resource Quota</DialogTitle>
+            <DialogTitle>{t("createQuota")}</DialogTitle>
           </DialogHeader>
           <ResourceQuotaForm
             onSubmit={handleCreateResourceQuota}

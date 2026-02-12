@@ -31,6 +31,8 @@ import {
 import { configmapApi, ConfigMap as ApiConfigMap } from "@/lib/api";
 import { canManageConfigMaps } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
+import { useAsyncActionFeedback } from "@/hooks/use-async-action-feedback";
+import { useTranslations } from "@/hooks/use-translations";
 import { toast } from "sonner";
 
 // ============ 类型定义 ============
@@ -40,6 +42,9 @@ type ConfigMap = ApiConfigMap;
 // ============ 页面组件 ============
 
 export default function ConfigMapsPage() {
+  const t = useTranslations("configmaps");
+  const tCommon = useTranslations("common");
+  const { runWithFeedback } = useAsyncActionFeedback();
   const { user } = useAuth();
 
   // 创建对话框状态
@@ -82,40 +87,58 @@ export default function ConfigMapsPage() {
   // 查看 ConfigMap 详情
   const handleViewConfigMap = async (cm: ConfigMap) => {
     try {
-      const response = await configmapApi.getConfigMap(
-        cm.cluster_id,
-        cm.namespace,
-        cm.name
+      await runWithFeedback(
+        async () => {
+          const response = await configmapApi.getConfigMap(
+            cm.cluster_id,
+            cm.namespace,
+            cm.name
+          );
+          if (!response.data) {
+            throw new Error(response.error || t("detailsLoadErrorUnknown"));
+          }
+
+          setCmDetails(response.data);
+          setSelectedCm(cm);
+          setIsPreviewOpen(true);
+        },
+        {
+          loading: t("detailsLoadLoading"),
+          success: t("detailsLoadSuccess"),
+          error: t("detailsLoadError"),
+        }
       );
-      if (response.data) {
-        setCmDetails(response.data);
-        setSelectedCm(cm);
-        setIsPreviewOpen(true);
-      } else {
-        toast.error(`获取ConfigMap详情失败: ${response.error}`);
-      }
-    } catch {
-      toast.error("获取ConfigMap详情失败");
+    } catch (error) {
+      console.error("load configmap details failed:", error);
     }
   };
 
   // 查看 YAML
   const handleViewYaml = async (cm: ConfigMap) => {
     try {
-      const response = await configmapApi.getConfigMapYaml(
-        cm.cluster_id,
-        cm.namespace,
-        cm.name
+      await runWithFeedback(
+        async () => {
+          const response = await configmapApi.getConfigMapYaml(
+            cm.cluster_id,
+            cm.namespace,
+            cm.name
+          );
+          if (!response.data) {
+            throw new Error(response.error || t("yamlLoadErrorUnknown"));
+          }
+
+          setYamlPreview(response.data.yaml);
+          setSelectedCm(cm);
+          setIsYamlOpen(true);
+        },
+        {
+          loading: t("yamlLoadLoading"),
+          success: t("yamlLoadSuccess"),
+          error: t("yamlLoadError"),
+        }
       );
-      if (response.data) {
-        setYamlPreview(response.data.yaml);
-        setSelectedCm(cm);
-        setIsYamlOpen(true);
-      } else {
-        toast.error(`获取YAML失败: ${response.error}`);
-      }
-    } catch {
-      toast.error("获取YAML失败");
+    } catch (error) {
+      console.error("load configmap yaml failed:", error);
     }
   };
 
@@ -133,22 +156,38 @@ data: {}
 
   // 创建 ConfigMap
   const handleCreateConfigMap = async () => {
-    if (!selectedClusterId || !yamlContent.trim()) return;
+    if (!selectedClusterId) {
+      toast.error(t("selectClusterFirst"));
+      return;
+    }
+
+    if (!yamlContent.trim()) {
+      toast.error(t("yamlRequired"));
+      return;
+    }
 
     try {
-      const response = await configmapApi.createConfigMapYaml(
-        selectedClusterId,
-        yamlContent
+      await runWithFeedback(
+        async () => {
+          const response = await configmapApi.createConfigMapYaml(
+            selectedClusterId,
+            yamlContent
+          );
+          if (!response.data) {
+            throw new Error(response.error || t("createErrorUnknown"));
+          }
+
+          setIsCreateOpen(false);
+          resetForm();
+        },
+        {
+          loading: t("createLoading"),
+          success: t("createSuccess"),
+          error: t("createError"),
+        }
       );
-      if (response.data) {
-        toast.success("ConfigMap创建成功");
-        setIsCreateOpen(false);
-        resetForm();
-      } else {
-        toast.error(`创建ConfigMap失败: ${response.error}`);
-      }
-    } catch {
-      toast.error("创建ConfigMap失败");
+    } catch (error) {
+      console.error("create configmap failed:", error);
     }
   };
 
@@ -187,9 +226,9 @@ data:
     NameColumn<ConfigMap>(),
     {
       key: "dataCount",
-      header: "数据项数量",
+      header: t("dataItems"),
       render: (item) => (
-        <Badge variant="outline">{Object.keys(item.data || {}).length} 项</Badge>
+        <Badge variant="outline">{t("itemsCount", { count: Object.keys(item.data || {}).length })}</Badge>
       ),
     },
     AgeColumn<ConfigMap>(),
@@ -200,13 +239,13 @@ data:
     {
       key: "view",
       icon: Eye,
-      tooltip: "查看详情",
+      tooltip: t("viewDetails"),
       onClick: handleViewConfigMap,
     },
     {
       key: "yaml",
       icon: Code,
-      tooltip: "查看YAML",
+      tooltip: t("viewYaml"),
       onClick: handleViewYaml,
     },
   ];
@@ -217,17 +256,17 @@ data:
       <DialogTrigger asChild>
         <Button onClick={resetForm}>
           <Plus className="w-4 h-4 mr-2" />
-          创建ConfigMap
+          {t("createConfigMap")}
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>创建ConfigMap</DialogTitle>
-          <DialogDescription>使用YAML格式创建新的配置映射</DialogDescription>
+          <DialogTitle>{t("createTitle")}</DialogTitle>
+          <DialogDescription>{t("createDescription")}</DialogDescription>
         </DialogHeader>
         <Tabs defaultValue="yaml" className="w-full">
           <TabsList className="grid w-full grid-cols-1">
-            <TabsTrigger value="yaml">YAML配置</TabsTrigger>
+            <TabsTrigger value="yaml">{t("yamlConfig")}</TabsTrigger>
           </TabsList>
           <TabsContent value="yaml" className="space-y-4">
             <YamlEditor
@@ -237,7 +276,7 @@ data:
                 setYamlError("");
               }}
               error={yamlError}
-              label="ConfigMap YAML配置"
+              label={t("yamlEditorLabel")}
               template={yamlTemplate}
               onApplyTemplate={() => setYamlContent(yamlTemplate)}
             />
@@ -245,13 +284,13 @@ data:
         </Tabs>
         <DialogFooter>
           <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
-            取消
+            {tCommon("cancel")}
           </Button>
           <Button
             onClick={handleCreateConfigMap}
             disabled={!yamlContent.trim() || !!yamlError}
           >
-            创建ConfigMap
+            {t("createConfigMap")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -262,8 +301,8 @@ data:
     <>
       <ResourceList<ConfigMap>
         resourceType="ConfigMap"
-        title="ConfigMaps管理"
-        description="管理Kubernetes集群中的配置映射（支持YAML格式编辑）"
+        title={t("title")}
+        description={t("description")}
         icon={FileText}
         columns={columns}
         actions={actions}
@@ -280,12 +319,12 @@ data:
         requireNamespace={true}
         allowAllNamespaces={true}
         defaultNamespace=""
-        searchPlaceholder="搜索 ConfigMap..."
+        searchPlaceholder={t("searchPlaceholder")}
         headerActions={createButton}
         deleteConfirm={{
-          title: "删除 ConfigMap",
+          title: t("deleteTitle"),
           description: (item) =>
-            `确定要删除 ConfigMap "${item.namespace}/${item.name}" 吗？此操作不可撤销。`,
+            t("deleteDescription", { namespace: item.namespace, name: item.name }),
         }}
       />
 
@@ -295,35 +334,35 @@ data:
           <DialogHeader>
             <DialogTitle>
               {selectedCm
-                ? `${selectedCm.namespace}/${selectedCm.name} - ConfigMap详情`
-                : "ConfigMap详情"}
+                ? t("detailsDialogTitle", { namespace: selectedCm.namespace, name: selectedCm.name })
+                : t("detailsDialogFallbackTitle")}
             </DialogTitle>
           </DialogHeader>
           {cmDetails && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label className="font-medium">名称</Label>
+                  <Label className="font-medium">{t("name")}</Label>
                   <p className="text-sm text-muted-foreground">{cmDetails.name}</p>
                 </div>
                 <div>
-                  <Label className="font-medium">命名空间</Label>
+                  <Label className="font-medium">{t("namespace")}</Label>
                   <p className="text-sm text-muted-foreground">{cmDetails.namespace}</p>
                 </div>
                 <div>
-                  <Label className="font-medium">年龄</Label>
+                  <Label className="font-medium">{t("age")}</Label>
                   <p className="text-sm text-muted-foreground">{cmDetails.age}</p>
                 </div>
                 <div>
-                  <Label className="font-medium">数据项数量</Label>
+                  <Label className="font-medium">{t("dataItems")}</Label>
                   <p className="text-sm text-muted-foreground">
-                    {Object.keys(cmDetails.data || {}).length} 项
+                    {t("itemsCount", { count: Object.keys(cmDetails.data || {}).length })}
                   </p>
                 </div>
               </div>
 
               <div>
-                <Label className="font-medium">数据</Label>
+                <Label className="font-medium">{t("data")}</Label>
                 <div className="mt-1">
                   {cmDetails.data && Object.keys(cmDetails.data).length > 0 ? (
                     <div className="space-y-2">
@@ -339,26 +378,26 @@ data:
                       ))}
                     </div>
                   ) : (
-                    <p className="text-sm text-muted-foreground">无数据</p>
+                    <p className="text-sm text-muted-foreground">{t("noData")}</p>
                   )}
                 </div>
               </div>
 
               <div>
-                <Label className="font-medium">标签</Label>
+                <Label className="font-medium">{t("labels")}</Label>
                 <div className="mt-1">
                   {cmDetails.labels && Object.keys(cmDetails.labels).length > 0 ? (
                     <div className="bg-black p-3 rounded text-xs font-mono text-gray-100">
                       {JSON.stringify(cmDetails.labels, null, 2)}
                     </div>
                   ) : (
-                    <p className="text-sm text-muted-foreground">无标签</p>
+                    <p className="text-sm text-muted-foreground">{t("noLabels")}</p>
                   )}
                 </div>
               </div>
 
               <div>
-                <Label className="font-medium">注解</Label>
+                <Label className="font-medium">{t("annotations")}</Label>
                 <div className="mt-1">
                   {cmDetails.annotations &&
                   Object.keys(cmDetails.annotations).length > 0 ? (
@@ -366,14 +405,14 @@ data:
                       {JSON.stringify(cmDetails.annotations, null, 2)}
                     </div>
                   ) : (
-                    <p className="text-sm text-muted-foreground">无注解</p>
+                    <p className="text-sm text-muted-foreground">{t("noAnnotations")}</p>
                   )}
                 </div>
               </div>
             </div>
           )}
           <DialogFooter>
-            <Button onClick={() => setIsPreviewOpen(false)}>关闭</Button>
+            <Button onClick={() => setIsPreviewOpen(false)}>{tCommon("close")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -384,8 +423,8 @@ data:
           <DialogHeader>
             <DialogTitle>
               {selectedCm
-                ? `${selectedCm.namespace}/${selectedCm.name} - YAML配置`
-                : "YAML配置"}
+                ? t("yamlDialogTitle", { namespace: selectedCm.namespace, name: selectedCm.name })
+                : t("yamlDialogFallbackTitle")}
             </DialogTitle>
           </DialogHeader>
           <div className="mt-4">
@@ -396,7 +435,7 @@ data:
             />
           </div>
           <DialogFooter>
-            <Button onClick={() => setIsYamlOpen(false)}>关闭</Button>
+            <Button onClick={() => setIsYamlOpen(false)}>{tCommon("close")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

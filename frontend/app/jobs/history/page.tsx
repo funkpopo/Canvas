@@ -11,6 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ArrowLeft, Loader2, RefreshCw, Search, Filter, Calendar } from "lucide-react";
 import { jobApi, clusterApi, namespaceApi, JobHistory } from "@/lib/api";
+import { useTranslations } from "@/hooks/use-translations";
+import { useAsyncActionFeedback } from "@/hooks/use-async-action-feedback";
 import { toast } from "sonner";
 
 interface Cluster {
@@ -24,21 +26,26 @@ interface Namespace {
 }
 
 function JobHistoryContent() {
+  const t = useTranslations("jobs");
+  const tCommon = useTranslations("common");
+  const { runWithFeedback } = useAsyncActionFeedback();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [history, setHistory] = useState<JobHistory[]>([]);
   const [clusters, setClusters] = useState<Cluster[]>([]);
   const [namespaces, setNamespaces] = useState<Namespace[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isOperationLoading, setIsOperationLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [clusterFilter, setClusterFilter] = useState<string>("all");
+  const searchParams = useSearchParams();
+  const clusterIdFromUrl = searchParams.get("cluster_id");
+  const [clusterFilter, setClusterFilter] = useState<string>(clusterIdFromUrl ?? "all");
   const [namespaceFilter, setNamespaceFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
-  const [limit, setLimit] = useState<number>(50);
+  const [limit] = useState<number>(50);
 
   const router = useRouter();
-  const searchParams = useSearchParams();
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -58,9 +65,15 @@ function JobHistoryContent() {
   }, [isAuthenticated]);
 
   useEffect(() => {
-    if (isAuthenticated && clusterFilter && clusterFilter !== "all") {
-      fetchNamespaces();
+    if (!isAuthenticated) return;
+
+    if (!clusterFilter || clusterFilter === "all") {
+      setNamespaces([]);
+      setNamespaceFilter("all");
+      return;
     }
+
+    fetchNamespaces();
   }, [isAuthenticated, clusterFilter]);
 
   const fetchClusters = async () => {
@@ -69,11 +82,11 @@ function JobHistoryContent() {
       if (response.data) {
         setClusters(response.data);
       } else if (response.error) {
-        toast.error('获取集群失败: ' + response.error);
+        toast.error(t("clustersLoadErrorWithMessage", { message: response.error }));
       }
     } catch (error) {
-      console.error('获取集群失败:', error);
-      toast.error('获取集群失败');
+      console.error("load clusters failed:", error);
+      toast.error(t("clustersLoadError"));
     }
   };
 
@@ -81,15 +94,15 @@ function JobHistoryContent() {
     if (!clusterFilter || clusterFilter === "all") return;
 
     try {
-      const response = await namespaceApi.getNamespaces(parseInt(clusterFilter));
+      const response = await namespaceApi.getNamespaces(parseInt(clusterFilter, 10));
       if (response.data) {
         setNamespaces(response.data);
       } else if (response.error) {
-        toast.error('获取命名空间失败: ' + response.error);
+        toast.error(t("namespacesLoadErrorWithMessage", { message: response.error }));
       }
     } catch (error) {
-      console.error('获取命名空间失败:', error);
-      toast.error('获取命名空间失败');
+      console.error("load namespaces failed:", error);
+      toast.error(t("namespacesLoadError"));
     }
   };
 
@@ -97,7 +110,7 @@ function JobHistoryContent() {
     setIsLoading(true);
     try {
       const response = await jobApi.getJobHistory(
-        clusterFilter && clusterFilter !== "all" ? parseInt(clusterFilter) : undefined,
+        clusterFilter && clusterFilter !== "all" ? parseInt(clusterFilter, 10) : undefined,
         namespaceFilter && namespaceFilter !== "all" ? namespaceFilter : undefined,
         statusFilter && statusFilter !== "all" ? statusFilter : undefined,
         startDate || undefined,
@@ -108,68 +121,96 @@ function JobHistoryContent() {
       if (response.data) {
         setHistory(response.data);
       } else if (response.error) {
-        toast.error(response.error);
+        toast.error(t("historyLoadErrorWithMessage", { message: response.error }));
       }
     } catch (error) {
-      console.error('获取历史记录失败:', error);
-      toast.error('获取历史记录失败');
+      console.error("load history failed:", error);
+      toast.error(t("historyLoadError"));
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleMonitorStatus = async (historyId: number) => {
+  const handleMonitorStatus = async (record: JobHistory) => {
+    setIsOperationLoading(true);
     try {
-      const response = await jobApi.monitorJobStatus(historyId);
-      if (response.data) {
-        toast.success('状态监控完成');
-        fetchHistory(); // 刷新列表
-      } else if (response.error) {
-        toast.error(response.error);
-      }
+      await runWithFeedback(
+        async () => {
+          const response = await jobApi.monitorJobStatus(record.id);
+          if (!response.data) {
+            throw new Error(response.error || t("monitorStatusErrorUnknown"));
+          }
+          await fetchHistory();
+        },
+        {
+          loading: t("monitorStatusLoading", { name: record.job_name }),
+          success: t("monitorStatusSuccess", { name: record.job_name }),
+          error: t("monitorStatusError"),
+        }
+      );
     } catch (error) {
-      console.error('监控状态失败:', error);
-      toast.error('监控状态失败');
+      console.error("monitor status failed:", error);
+    } finally {
+      setIsOperationLoading(false);
     }
   };
 
   const getStatusBadgeVariant = (status: string) => {
     switch (status.toLowerCase()) {
-      case 'succeeded':
-        return 'default';
-      case 'failed':
-        return 'destructive';
-      case 'running':
-      case 'active':
-        return 'secondary';
+      case "succeeded":
+        return "default";
+      case "failed":
+        return "destructive";
+      case "running":
+      case "active":
+        return "secondary";
       default:
-        return 'outline';
+        return "outline";
+    }
+  };
+
+  const getStatusLabel = (status: string) => {
+    switch (status.toLowerCase()) {
+      case "pending":
+        return t("statusPending");
+      case "running":
+      case "active":
+        return t("statusRunning");
+      case "succeeded":
+        return t("statusSucceeded");
+      case "failed":
+        return t("statusFailed");
+      default:
+        return status;
     }
   };
 
   const formatDuration = (seconds?: number) => {
-    if (!seconds) return '-';
+    if (!seconds) return t("emptyValue");
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     const secs = seconds % 60;
 
     if (hours > 0) {
-      return `${hours}h ${minutes}m ${secs}s`;
-    } else if (minutes > 0) {
-      return `${minutes}m ${secs}s`;
-    } else {
-      return `${secs}s`;
+      return t("durationHoursMinutesSeconds", { hours, minutes, seconds: secs });
     }
+
+    if (minutes > 0) {
+      return t("durationMinutesSeconds", { minutes, seconds: secs });
+    }
+
+    return t("durationSeconds", { seconds: secs });
   };
 
-  const filteredHistory = history.filter(record => {
-    const matchesSearch = record.job_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         (record.error_message && record.error_message.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filteredHistory = history.filter((record) => {
+    const matchesSearch =
+      record.job_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (record.error_message && record.error_message.toLowerCase().includes(searchTerm.toLowerCase()));
     return matchesSearch;
   });
 
   if (!isAuthenticated) {
-    return <div>验证中...</div>;
+    return <div>{t("authVerifying")}</div>;
   }
 
   return (
@@ -179,47 +220,43 @@ function JobHistoryContent() {
           <Link href="/jobs">
             <Button variant="outline" size="sm">
               <ArrowLeft className="h-4 w-4 mr-2" />
-              返回Jobs
+              {t("backToJobs")}
             </Button>
           </Link>
           <div>
-            <h1 className="text-3xl font-bold">Job历史记录</h1>
-            <p className="text-muted-foreground">查看和管理Job的执行历史</p>
+            <h1 className="text-3xl font-bold">{t("historyTitle")}</h1>
+            <p className="text-muted-foreground">{t("historyDescription")}</p>
           </div>
         </div>
         <Button onClick={fetchHistory} disabled={isLoading}>
-          <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-          刷新
+          <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
+          {t("refresh")}
         </Button>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>历史记录筛选</CardTitle>
-          <CardDescription>
-            使用筛选条件查找特定的Job历史记录
-          </CardDescription>
+          <CardTitle>{t("historyFiltersTitle")}</CardTitle>
+          <CardDescription>{t("historyFiltersDescription")}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-            {/* 搜索 */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
               <Input
-                placeholder="搜索Job名称..."
+                placeholder={t("searchHistoryPlaceholder")}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10"
               />
             </div>
 
-            {/* 集群筛选 */}
             <Select value={clusterFilter} onValueChange={setClusterFilter}>
               <SelectTrigger>
-                <SelectValue placeholder="选择集群" />
+                <SelectValue placeholder={t("selectClusterPlaceholder")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">所有集群</SelectItem>
+                <SelectItem value="all">{t("allClusters")}</SelectItem>
                 {clusters.map((cluster) => (
                   <SelectItem key={cluster.id} value={cluster.id.toString()}>
                     {cluster.name}
@@ -228,13 +265,12 @@ function JobHistoryContent() {
               </SelectContent>
             </Select>
 
-            {/* 命名空间筛选 */}
             <Select value={namespaceFilter} onValueChange={setNamespaceFilter} disabled={clusterFilter === "all"}>
               <SelectTrigger>
-                <SelectValue placeholder="选择命名空间" />
+                <SelectValue placeholder={t("selectNamespacePlaceholder")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">所有命名空间</SelectItem>
+                <SelectItem value="all">{t("allNamespaces")}</SelectItem>
                 {namespaces.map((ns) => (
                   <SelectItem key={ns.name} value={ns.name}>
                     {ns.name}
@@ -243,36 +279,35 @@ function JobHistoryContent() {
               </SelectContent>
             </Select>
 
-            {/* 状态筛选 */}
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger>
-                <SelectValue placeholder="选择状态" />
+                <SelectValue placeholder={t("selectStatusPlaceholder")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">所有状态</SelectItem>
-                <SelectItem value="Pending">等待中</SelectItem>
-                <SelectItem value="Running">运行中</SelectItem>
-                <SelectItem value="Succeeded">成功</SelectItem>
-                <SelectItem value="Failed">失败</SelectItem>
+                <SelectItem value="all">{t("allStatuses")}</SelectItem>
+                <SelectItem value="Pending">{t("statusPending")}</SelectItem>
+                <SelectItem value="Running">{t("statusRunning")}</SelectItem>
+                <SelectItem value="Succeeded">{t("statusSucceeded")}</SelectItem>
+                <SelectItem value="Failed">{t("statusFailed")}</SelectItem>
               </SelectContent>
             </Select>
 
-            {/* 开始日期 */}
             <div className="relative">
               <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
               <Input
                 type="date"
+                aria-label={t("startTime")}
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
                 className="pl-10"
               />
             </div>
 
-            {/* 结束日期 */}
             <div className="relative">
               <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
               <Input
                 type="date"
+                aria-label={t("completionTime")}
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
                 className="pl-10"
@@ -283,7 +318,7 @@ function JobHistoryContent() {
           <div className="flex justify-end mt-4">
             <Button onClick={fetchHistory} disabled={isLoading}>
               <Filter className="h-4 w-4 mr-2" />
-              应用筛选
+              {t("applyFilters")}
             </Button>
           </div>
         </CardContent>
@@ -291,35 +326,31 @@ function JobHistoryContent() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Job历史记录列表</CardTitle>
-          <CardDescription>
-            显示 {filteredHistory.length} 条记录
-          </CardDescription>
+          <CardTitle>{t("historyListTitle")}</CardTitle>
+          <CardDescription>{t("historyRecordsCount", { count: filteredHistory.length })}</CardDescription>
         </CardHeader>
         <CardContent>
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-8 w-8 animate-spin" />
-              <span className="ml-2">加载中...</span>
+              <span className="ml-2">{tCommon("loading")}</span>
             </div>
           ) : filteredHistory.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              没有找到匹配的历史记录
-            </div>
+            <div className="text-center py-8 text-muted-foreground">{t("noMatchingHistory")}</div>
           ) : (
             <div className="border rounded-lg">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Job名称</TableHead>
-                    <TableHead>命名空间</TableHead>
-                    <TableHead>集群</TableHead>
-                    <TableHead>状态</TableHead>
-                    <TableHead>开始时间</TableHead>
-                    <TableHead>结束时间</TableHead>
-                    <TableHead>持续时间</TableHead>
-                    <TableHead>Pods统计</TableHead>
-                    <TableHead>操作</TableHead>
+                    <TableHead>{t("jobNameLabel")}</TableHead>
+                    <TableHead>{t("namespaceLabel")}</TableHead>
+                    <TableHead>{t("clusterLabel")}</TableHead>
+                    <TableHead>{t("status")}</TableHead>
+                    <TableHead>{t("startTime")}</TableHead>
+                    <TableHead>{t("completionTime")}</TableHead>
+                    <TableHead>{t("duration")}</TableHead>
+                    <TableHead>{t("podsStatsLabel")}</TableHead>
+                    <TableHead>{tCommon("actions")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -329,31 +360,27 @@ function JobHistoryContent() {
                       <TableCell>{record.namespace}</TableCell>
                       <TableCell>{record.cluster_id}</TableCell>
                       <TableCell>
-                        <Badge variant={getStatusBadgeVariant(record.status)}>
-                          {record.status}
-                        </Badge>
+                        <Badge variant={getStatusBadgeVariant(record.status)}>{getStatusLabel(record.status)}</Badge>
                       </TableCell>
-                      <TableCell>
-                        {record.start_time ? new Date(record.start_time).toLocaleString() : '-'}
-                      </TableCell>
-                      <TableCell>
-                        {record.end_time ? new Date(record.end_time).toLocaleString() : '-'}
-                      </TableCell>
+                      <TableCell>{record.start_time ? new Date(record.start_time).toLocaleString() : t("emptyValue")}</TableCell>
+                      <TableCell>{record.end_time ? new Date(record.end_time).toLocaleString() : t("emptyValue")}</TableCell>
                       <TableCell>{formatDuration(record.duration || undefined)}</TableCell>
                       <TableCell>
                         <div className="text-sm">
-                          <div>成功: {record.succeeded_pods}</div>
-                          <div>失败: {record.failed_pods}</div>
-                          <div>总数: {record.total_pods}</div>
+                          <div>{t("podsSucceededCount", { count: record.succeeded_pods })}</div>
+                          <div>{t("podsFailedCount", { count: record.failed_pods })}</div>
+                          <div>{t("podsTotalCount", { count: record.total_pods })}</div>
                         </div>
                       </TableCell>
                       <TableCell>
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => handleMonitorStatus(record.id)}
+                          onClick={() => handleMonitorStatus(record)}
+                          disabled={isOperationLoading}
                         >
-                          监控状态
+                          {isOperationLoading && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+                          {t("monitorStatus")}
                         </Button>
                       </TableCell>
                     </TableRow>

@@ -16,6 +16,8 @@ import { LanguageToggle } from "@/components/ui/language-toggle";
 import ClusterSelector from "@/components/ClusterSelector";
 import { useAuth } from "@/lib/auth-context";
 import { jobApi, JobDetails, JobPod } from "@/lib/api";
+import { useTranslations } from "@/hooks/use-translations";
+import { useAsyncActionFeedback } from "@/hooks/use-async-action-feedback";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 
@@ -32,6 +34,10 @@ interface JobCondition {
 export default function JobDetailsPage({ params }: { params: Promise<{ namespace: string; job: string }> }) {
   const resolvedParams = use(params);
   const { isAuthenticated, isLoading: authLoading, logout } = useAuth();
+  const t = useTranslations("jobs");
+  const tCommon = useTranslations("common");
+  const tAuth = useTranslations("auth");
+  const { runWithFeedback } = useAsyncActionFeedback();
   const [jobDetails, setJobDetails] = useState<JobDetails | null>(null);
   const [jobPods, setJobPods] = useState<JobPod[]>([]);
   const [yamlContent, setYamlContent] = useState<string>("");
@@ -48,6 +54,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ namespace
   const router = useRouter();
   const searchParams = useSearchParams();
   const clusterId = searchParams.get('cluster_id');
+  const clusterIdNum = clusterId ? parseInt(clusterId, 10) : null;
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -57,16 +64,18 @@ export default function JobDetailsPage({ params }: { params: Promise<{ namespace
   }, [isAuthenticated, authLoading, router]);
 
   useEffect(() => {
-    if (isAuthenticated && clusterId) {
+    if (isAuthenticated && clusterIdNum) {
       fetchJobData();
     }
-  }, [isAuthenticated, clusterId, resolvedParams.namespace, resolvedParams.job, activeTab]);
+  }, [isAuthenticated, clusterIdNum, resolvedParams.namespace, resolvedParams.job, activeTab]);
 
   const fetchJobData = async () => {
+    if (!clusterIdNum) return;
+
     setIsLoading(true);
     try {
       // 获取Job详情
-      const jobResponse = await jobApi.getJob(parseInt(clusterId!), resolvedParams.namespace, resolvedParams.job);
+      const jobResponse = await jobApi.getJob(clusterIdNum, resolvedParams.namespace, resolvedParams.job);
       if (jobResponse.data) {
         setJobDetails(jobResponse.data);
       } else if (jobResponse.error) {
@@ -76,7 +85,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ namespace
 
       // 获取关联的Pods
       if (activeTab === "pods") {
-        const podsResponse = await jobApi.getJobPods(parseInt(clusterId!), resolvedParams.namespace, resolvedParams.job);
+        const podsResponse = await jobApi.getJobPods(clusterIdNum, resolvedParams.namespace, resolvedParams.job);
         if (podsResponse.data) {
           setJobPods(podsResponse.data);
         }
@@ -84,68 +93,93 @@ export default function JobDetailsPage({ params }: { params: Promise<{ namespace
 
       // 获取YAML配置
       if (activeTab === "yaml") {
-        const yamlResponse = await jobApi.getJobYaml(parseInt(clusterId!), resolvedParams.namespace, resolvedParams.job);
+        const yamlResponse = await jobApi.getJobYaml(clusterIdNum, resolvedParams.namespace, resolvedParams.job);
         if (yamlResponse.data) {
           setYamlContent(yamlResponse.data.yaml_content);
         }
       }
     } catch (error) {
-      console.error('获取Job数据失败:', error);
-      toast.error('获取Job数据失败');
+      console.error("load job data failed:", error);
+      toast.error(t("detailsLoadError"));
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleDeleteJob = async () => {
+    if (!clusterIdNum) return;
+
     setIsOperationLoading(true);
     try {
-      const response = await jobApi.deleteJob(parseInt(clusterId!), resolvedParams.namespace, resolvedParams.job);
-      if (response.data) {
-        toast.success('Job删除成功');
-        router.push(`/jobs?cluster_id=${clusterId}`);
-      } else if (response.error) {
-        toast.error(response.error);
-      }
+      await runWithFeedback(
+        async () => {
+          const response = await jobApi.deleteJob(clusterIdNum, resolvedParams.namespace, resolvedParams.job);
+          if (!response.data) {
+            throw new Error(response.error || t("deleteErrorUnknown"));
+          }
+
+          router.push(`/jobs?cluster_id=${clusterIdNum}`);
+        },
+        {
+          loading: t("deleteLoading"),
+          success: t("deleteSuccess"),
+          error: t("deleteError"),
+        }
+      );
     } catch (error) {
-      console.error('删除Job失败:', error);
-      toast.error('删除Job失败');
+      console.error("delete job failed:", error);
     } finally {
       setIsOperationLoading(false);
     }
   };
 
   const handleRestartJob = async () => {
+    if (!clusterIdNum) return;
+
     setIsOperationLoading(true);
     try {
-      const response = await jobApi.restartJob(parseInt(clusterId!), resolvedParams.namespace, resolvedParams.job);
-      if (response.data) {
-        toast.success('Job重启成功');
-        fetchJobData();
-      } else if (response.error) {
-        toast.error(response.error);
-      }
+      await runWithFeedback(
+        async () => {
+          const response = await jobApi.restartJob(clusterIdNum, resolvedParams.namespace, resolvedParams.job);
+          if (!response.data) {
+            throw new Error(response.error || t("restartErrorUnknown"));
+          }
+          await fetchJobData();
+        },
+        {
+          loading: t("restartLoading", { name: resolvedParams.job }),
+          success: t("restartSuccess", { name: resolvedParams.job }),
+          error: t("restartError"),
+        }
+      );
     } catch (error) {
-      console.error('重启Job失败:', error);
-      toast.error('重启Job失败');
+      console.error("restart job failed:", error);
     } finally {
       setIsOperationLoading(false);
     }
   };
 
   const handleSaveYaml = async (content: string) => {
+    if (!clusterIdNum) return;
+
     setIsOperationLoading(true);
     try {
-      const response = await jobApi.updateJobYaml(parseInt(clusterId!), resolvedParams.namespace, resolvedParams.job, content);
-      if (response.data) {
-        toast.success('YAML更新成功');
-        setYamlContent(content);
-      } else if (response.error) {
-        toast.error(response.error);
-      }
+      await runWithFeedback(
+        async () => {
+          const response = await jobApi.updateJobYaml(clusterIdNum, resolvedParams.namespace, resolvedParams.job, content);
+          if (!response.data) {
+            throw new Error(response.error || t("yamlSaveErrorUnknown"));
+          }
+          setYamlContent(content);
+        },
+        {
+          loading: t("yamlSaveLoading"),
+          success: t("yamlSaveSuccess"),
+          error: t("yamlSaveError"),
+        }
+      );
     } catch (error) {
-      console.error('更新YAML失败:', error);
-      toast.error('更新YAML失败');
+      console.error("save job yaml failed:", error);
     } finally {
       setIsOperationLoading(false);
     }
@@ -190,7 +224,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ namespace
                 <ThemeToggle />
                 <Button variant="outline" onClick={logout}>
                   <LogOut className="h-4 w-4 mr-2" />
-                  退出登录
+                  {tAuth("logout")}
                 </Button>
               </div>
             </div>
@@ -199,7 +233,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ namespace
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="flex items-center justify-center py-8">
             <Loader2 className="h-8 w-8 animate-spin" />
-            <span className="ml-2">加载中...</span>
+            <span className="ml-2">{tCommon("loading")}</span>
           </div>
         </main>
       </div>
@@ -224,7 +258,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ namespace
               <ThemeToggle />
               <Button variant="outline" onClick={logout}>
                 <LogOut className="h-4 w-4 mr-2" />
-                退出登录
+                {tAuth("logout")}
               </Button>
             </div>
           </div>
@@ -239,37 +273,40 @@ export default function JobDetailsPage({ params }: { params: Promise<{ namespace
               <Link href={`/jobs?cluster_id=${clusterId}`}>
                 <Button variant="outline" size="sm">
                   <ArrowLeft className="h-4 w-4 mr-2" />
-                  返回列表
+                  {t("backToJobs")}
                 </Button>
               </Link>
               <div>
                 <h1 className="text-3xl font-bold">{jobDetails.name}</h1>
                 <p className="text-muted-foreground">
-                  命名空间: {jobDetails.namespace} | 集群: {jobDetails.cluster_name}
+                  {t("namespaceAndCluster", {
+                    namespace: jobDetails.namespace,
+                    cluster: jobDetails.cluster_name,
+                  })}
                 </p>
               </div>
             </div>
             <div className="flex space-x-2">
               <Button onClick={fetchJobData} disabled={isLoading}>
                 <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-                刷新
+                {t("refresh")}
               </Button>
               <Button variant="outline" onClick={handleRestartJob} disabled={isOperationLoading}>
                 <Play className="h-4 w-4 mr-2" />
-                重启
+                {t("restart")}
               </Button>
               <Button
                 variant="outline"
                 onClick={() => setConfirmDialog({
                   open: true,
-                  title: "删除Job",
-                  description: `确定要删除Job "${jobDetails.name}" 吗？此操作不可撤销。`,
+                  title: t("deleteTitle"),
+                  description: t("deleteDescription", { name: jobDetails.name }),
                   onConfirm: handleDeleteJob,
                 })}
                 disabled={isOperationLoading}
               >
                 <Trash2 className="h-4 w-4 mr-2" />
-                删除
+                {tCommon("delete")}
               </Button>
             </div>
           </div>
@@ -282,7 +319,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ namespace
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">状态</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("status")}</CardTitle>
             <Activity className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -294,7 +331,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ namespace
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">完成度</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("completion")}</CardTitle>
             <FileText className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -303,7 +340,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ namespace
             </div>
             {jobDetails.failed > 0 && (
               <p className="text-xs text-red-600">
-                {jobDetails.failed} 个失败
+                {t("failedCount", { count: jobDetails.failed })}
               </p>
             )}
           </CardContent>
@@ -311,7 +348,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ namespace
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">活跃Pods</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("activePods")}</CardTitle>
             <Activity className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -321,7 +358,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ namespace
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">年龄</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("age")}</CardTitle>
             <Activity className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -333,9 +370,9 @@ export default function JobDetailsPage({ params }: { params: Promise<{ namespace
       {/* 详细内容选项卡 */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList>
-          <TabsTrigger value="overview">概览</TabsTrigger>
-          <TabsTrigger value="pods">Pods</TabsTrigger>
-          <TabsTrigger value="yaml">YAML</TabsTrigger>
+          <TabsTrigger value="overview">{t("overview")}</TabsTrigger>
+          <TabsTrigger value="pods">{t("podsTab")}</TabsTrigger>
+          <TabsTrigger value="yaml">{t("yamlTab")}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4">
@@ -343,32 +380,32 @@ export default function JobDetailsPage({ params }: { params: Promise<{ namespace
             {/* 基本信息 */}
             <Card>
               <CardHeader>
-                <CardTitle>基本信息</CardTitle>
+                <CardTitle>{t("basicInfo")}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label className="text-sm font-medium text-muted-foreground">名称</Label>
+                    <Label className="text-sm font-medium text-muted-foreground">{t("nameLabel")}</Label>
                     <p className="text-sm">{jobDetails.name}</p>
                   </div>
                   <div>
-                    <Label className="text-sm font-medium text-muted-foreground">命名空间</Label>
+                    <Label className="text-sm font-medium text-muted-foreground">{t("namespaceLabel")}</Label>
                     <p className="text-sm">{jobDetails.namespace}</p>
                   </div>
                   <div>
-                    <Label className="text-sm font-medium text-muted-foreground">并行度</Label>
+                    <Label className="text-sm font-medium text-muted-foreground">{t("parallelismLabel")}</Label>
                     <p className="text-sm">{jobDetails.parallelism}</p>
                   </div>
                   <div>
-                    <Label className="text-sm font-medium text-muted-foreground">重试限制</Label>
+                    <Label className="text-sm font-medium text-muted-foreground">{t("backoffLimitLabel")}</Label>
                     <p className="text-sm">{jobDetails.backoff_limit}</p>
                   </div>
                   <div>
-                    <Label className="text-sm font-medium text-muted-foreground">创建时间</Label>
+                    <Label className="text-sm font-medium text-muted-foreground">{t("createdAtLabel")}</Label>
                     <p className="text-sm">{new Date(jobDetails.creation_timestamp).toLocaleString()}</p>
                   </div>
                   <div>
-                    <Label className="text-sm font-medium text-muted-foreground">年龄</Label>
+                    <Label className="text-sm font-medium text-muted-foreground">{t("ageLabel")}</Label>
                     <p className="text-sm">{jobDetails.age}</p>
                   </div>
                 </div>
@@ -378,7 +415,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ namespace
             {/* 状态条件 */}
             <Card>
               <CardHeader>
-                <CardTitle>状态条件</CardTitle>
+                <CardTitle>{t("conditionsTitle")}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
@@ -397,7 +434,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ namespace
                           {condition.message}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          最后更新: {new Date(condition.last_transition_time).toLocaleString()}
+                          {t("lastUpdated", { time: new Date(condition.last_transition_time).toLocaleString() })}
                         </p>
                       </div>
                     </div>
@@ -412,7 +449,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ namespace
             {Object.keys(jobDetails.labels).length > 0 && (
               <Card>
                 <CardHeader>
-                  <CardTitle>标签</CardTitle>
+                  <CardTitle>{t("labelsTitle")}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="flex flex-wrap gap-2">
@@ -429,7 +466,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ namespace
             {Object.keys(jobDetails.annotations).length > 0 && (
               <Card>
                 <CardHeader>
-                  <CardTitle>注解</CardTitle>
+                  <CardTitle>{t("annotationsTitle")}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-2">
@@ -448,31 +485,31 @@ export default function JobDetailsPage({ params }: { params: Promise<{ namespace
         <TabsContent value="pods" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>关联的Pods</CardTitle>
+              <CardTitle>{t("relatedPodsTitle")}</CardTitle>
               <CardDescription>
-                Job创建的Pod实例列表
+                {t("relatedPodsDescription")}
               </CardDescription>
             </CardHeader>
             <CardContent>
               {isLoading ? (
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="h-6 w-6 animate-spin" />
-                  <span className="ml-2">加载中...</span>
+                  <span className="ml-2">{tCommon("loading")}</span>
                 </div>
               ) : jobPods.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
-                  没有找到关联的Pods
+                  {t("noRelatedPods")}
                 </div>
               ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Pod名称</TableHead>
-                      <TableHead>状态</TableHead>
-                      <TableHead>节点</TableHead>
-                      <TableHead>重启次数</TableHead>
-                      <TableHead>准备就绪</TableHead>
-                      <TableHead>年龄</TableHead>
+                      <TableHead>{t("podNameLabel")}</TableHead>
+                      <TableHead>{t("status")}</TableHead>
+                      <TableHead>{t("nodeLabel")}</TableHead>
+                      <TableHead>{t("restartCountLabel")}</TableHead>
+                      <TableHead>{t("readyLabel")}</TableHead>
+                      <TableHead>{t("age")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -500,16 +537,16 @@ export default function JobDetailsPage({ params }: { params: Promise<{ namespace
         <TabsContent value="yaml" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>YAML配置</CardTitle>
+              <CardTitle>{t("yamlConfig")}</CardTitle>
               <CardDescription>
-                Job的完整YAML配置，可以直接编辑
+                {t("yamlDescription")}
               </CardDescription>
             </CardHeader>
             <CardContent>
               {isLoading ? (
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="h-6 w-6 animate-spin" />
-                  <span className="ml-2">加载中...</span>
+                  <span className="ml-2">{tCommon("loading")}</span>
                 </div>
               ) : (
                 <YamlEditor

@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useState } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -27,7 +27,8 @@ import {
   getStatusBadgeVariant,
 } from "@/components/ResourceList";
 import { jobApi, Job as ApiJob } from "@/lib/api";
-import { useAuth } from "@/lib/auth-context";
+import { useTranslations } from "@/hooks/use-translations";
+import { useAsyncActionFeedback } from "@/hooks/use-async-action-feedback";
 import { toast } from "sonner";
 
 // ============ 类型定义 ============
@@ -37,9 +38,10 @@ type Job = ApiJob & BaseResource;
 // ============ 内容组件 ============
 
 function JobsContent() {
-  const router = useRouter();
   const searchParams = useSearchParams();
-  const { user } = useAuth();
+  const tJobs = useTranslations("jobs");
+  const tCommon = useTranslations("common");
+  const { runWithFeedback } = useAsyncActionFeedback();
 
   // 从 URL 获取 cluster_id
   const clusterIdFromUrl = searchParams.get("cluster_id");
@@ -55,27 +57,40 @@ function JobsContent() {
 
   // 创建 Job
   const handleCreateJob = async () => {
-    if (!selectedClusterId || !yamlContent.trim()) {
-      toast.error("请输入YAML配置");
+    if (!selectedClusterId) {
+      toast.error(tJobs("selectClusterFirst"));
+      return;
+    }
+
+    if (!yamlContent.trim()) {
+      toast.error(tJobs("yamlRequired"));
       return;
     }
 
     setIsOperationLoading(true);
     try {
-      const response = await jobApi.createJob(
-        selectedClusterId,
-        selectedNamespace,
-        yamlContent
+      await runWithFeedback(
+        async () => {
+          const response = await jobApi.createJob(
+            selectedClusterId,
+            selectedNamespace,
+            yamlContent
+          );
+          if (!response.data) {
+            throw new Error(response.error || tJobs("createErrorUnknown"));
+          }
+
+          setIsCreateOpen(false);
+          setYamlContent("");
+        },
+        {
+          loading: tJobs("createLoading"),
+          success: tJobs("createSuccess"),
+          error: tJobs("createError"),
+        }
       );
-      if (response.data) {
-        toast.success("Job创建成功");
-        setIsCreateOpen(false);
-        setYamlContent("");
-      } else if (response.error) {
-        toast.error(response.error);
-      }
-    } catch {
-      toast.error("创建Job失败");
+    } catch (error) {
+      console.error("create job failed:", error);
     } finally {
       setIsOperationLoading(false);
     }
@@ -85,18 +100,25 @@ function JobsContent() {
   const handleRestartJob = async (job: Job) => {
     setIsOperationLoading(true);
     try {
-      const response = await jobApi.restartJob(
-        job.cluster_id,
-        job.namespace,
-        job.name
+      await runWithFeedback(
+        async () => {
+          const response = await jobApi.restartJob(
+            job.cluster_id,
+            job.namespace,
+            job.name
+          );
+          if (!response.data) {
+            throw new Error(response.error || tJobs("restartErrorUnknown"));
+          }
+        },
+        {
+          loading: tJobs("restartLoading", { name: job.name }),
+          success: tJobs("restartSuccess", { name: job.name }),
+          error: tJobs("restartError"),
+        }
       );
-      if (response.data) {
-        toast.success("Job重启成功");
-      } else if (response.error) {
-        toast.error(response.error);
-      }
-    } catch {
-      toast.error("重启Job失败");
+    } catch (error) {
+      console.error("restart job failed:", error);
     } finally {
       setIsOperationLoading(false);
     }
@@ -107,7 +129,7 @@ function JobsContent() {
     NameColumn<Job>(),
     {
       key: "completion",
-      header: "完成度",
+      header: tJobs("completion"),
       render: (item) => (
         <div className="flex items-center space-x-2">
           <span className="text-sm">
@@ -115,7 +137,7 @@ function JobsContent() {
           </span>
           {item.failed > 0 && (
             <Badge variant="destructive" className="text-xs">
-              {item.failed}失败
+              {tJobs("failedCount", { count: item.failed })}
             </Badge>
           )}
         </div>
@@ -123,12 +145,12 @@ function JobsContent() {
     },
     {
       key: "active",
-      header: "活跃Pods",
+      header: tJobs("activePods"),
       render: (item) => item.active,
     },
     {
       key: "status",
-      header: "状态",
+      header: tJobs("status"),
       render: (item) => (
         <Badge variant={getStatusBadgeVariant(item.status)}>{item.status}</Badge>
       ),
@@ -141,14 +163,14 @@ function JobsContent() {
     {
       key: "restart",
       icon: Play,
-      tooltip: "重新运行",
+      tooltip: tJobs("restartJob"),
       onClick: handleRestartJob,
       disabled: () => isOperationLoading,
     },
     {
       key: "delete",
       icon: Trash2,
-      tooltip: "删除",
+      tooltip: tCommon("delete"),
       danger: true,
       onClick: () => {},
     },
@@ -160,27 +182,27 @@ function JobsContent() {
       <Link href="/jobs/history">
         <Button variant="outline">
           <History className="h-4 w-4 mr-2" />
-          历史记录
+          {tJobs("history")}
         </Button>
       </Link>
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
         <DialogTrigger asChild>
           <Button>
             <Plus className="h-4 w-4 mr-2" />
-            创建Job
+            {tJobs("createJob")}
           </Button>
         </DialogTrigger>
         <DialogContent className="max-w-4xl">
           <DialogHeader>
-            <DialogTitle>创建Job</DialogTitle>
-            <DialogDescription>输入Job的YAML配置来创建新的Job</DialogDescription>
+            <DialogTitle>{tJobs("createJobTitle")}</DialogTitle>
+            <DialogDescription>{tJobs("createJobDescription")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label htmlFor="yaml">YAML配置</Label>
+              <Label htmlFor="yaml">{tJobs("yamlConfig")}</Label>
               <Textarea
                 id="yaml"
-                placeholder="粘贴Job的YAML配置..."
+                placeholder={tJobs("yamlPlaceholder")}
                 value={yamlContent}
                 onChange={(e) => setYamlContent(e.target.value)}
                 className="min-h-[400px] font-mono text-sm"
@@ -189,13 +211,13 @@ function JobsContent() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
-              取消
+              {tCommon("cancel")}
             </Button>
             <Button onClick={handleCreateJob} disabled={isOperationLoading}>
               {isOperationLoading && (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               )}
-              创建
+              {tJobs("create")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -206,8 +228,8 @@ function JobsContent() {
   return (
     <ResourceList<Job>
       resourceType="Job"
-      title="Jobs管理"
-      description="管理工作负载中的一次性任务"
+      title={tJobs("title")}
+      description={tJobs("description")}
       icon={Briefcase}
       columns={columns}
       actions={actions}
@@ -232,24 +254,24 @@ function JobsContent() {
       statusFilter={{
         field: "status",
         options: [
-          { value: "succeeded", label: "成功" },
-          { value: "failed", label: "失败" },
-          { value: "running", label: "运行中" },
-          { value: "pending", label: "等待中" },
+          { value: "succeeded", label: tJobs("statusSucceeded") },
+          { value: "failed", label: tJobs("statusFailed") },
+          { value: "running", label: tJobs("statusRunning") },
+          { value: "pending", label: tJobs("statusPending") },
         ],
       }}
       requireNamespace={true}
       allowAllNamespaces={false}
       defaultNamespace="default"
-      searchPlaceholder="搜索 Job..."
+      searchPlaceholder={tJobs("searchPlaceholder")}
       headerActions={headerActions}
       detailLink={(item) =>
         `/jobs/${item.namespace}/${item.name}?cluster_id=${item.cluster_id}`
       }
       deleteConfirm={{
-        title: "删除 Job",
+        title: tJobs("deleteTitle"),
         description: (item) =>
-          `确定要删除 Job "${item.name}" 吗？此操作不可撤销。`,
+          tJobs("deleteDescription", { name: item.name }),
       }}
     />
   );

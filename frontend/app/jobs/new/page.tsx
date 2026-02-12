@@ -13,6 +13,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Loader2, Plus, FileText, Search } from "lucide-react";
 import { jobApi, namespaceApi, JobTemplate } from "@/lib/api";
+import { useTranslations } from "@/hooks/use-translations";
+import { useAsyncActionFeedback } from "@/hooks/use-async-action-feedback";
 import { toast } from "sonner";
 
 interface Namespace {
@@ -21,6 +23,9 @@ interface Namespace {
 }
 
 function CreateJobContent() {
+  const t = useTranslations("jobs");
+  const tCommon = useTranslations("common");
+  const { runWithFeedback } = useAsyncActionFeedback();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [namespaces, setNamespaces] = useState<Namespace[]>([]);
   const [templates, setTemplates] = useState<JobTemplate[]>([]);
@@ -34,6 +39,7 @@ function CreateJobContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const clusterId = searchParams.get('cluster_id');
+  const clusterIdNum = clusterId ? parseInt(clusterId, 10) : null;
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -46,26 +52,28 @@ function CreateJobContent() {
   }, [router]);
 
   useEffect(() => {
-    if (isAuthenticated && clusterId) {
+    if (isAuthenticated && clusterIdNum) {
       fetchNamespaces();
       fetchTemplates();
     }
-  }, [isAuthenticated, clusterId]);
+  }, [isAuthenticated, clusterIdNum]);
 
   const fetchNamespaces = async () => {
+    if (!clusterIdNum) return;
+
     try {
-      const response = await namespaceApi.getNamespaces(parseInt(clusterId!));
+      const response = await namespaceApi.getNamespaces(clusterIdNum);
       if (response.data) {
         setNamespaces(response.data);
         if (response.data.length > 0 && !selectedNamespace) {
           setSelectedNamespace(response.data[0].name);
         }
       } else if (response.error) {
-        toast.error('获取命名空间失败: ' + response.error);
+        toast.error(t("namespacesLoadErrorWithMessage", { message: response.error }));
       }
     } catch (error) {
-      console.error('获取命名空间失败:', error);
-      toast.error('获取命名空间失败');
+      console.error("load namespaces failed:", error);
+      toast.error(t("namespacesLoadError"));
     }
   };
 
@@ -75,11 +83,11 @@ function CreateJobContent() {
       if (response.data) {
         setTemplates(response.data);
       } else if (response.error) {
-        toast.error(response.error);
+        toast.error(t("templatesLoadErrorWithMessage", { message: response.error }));
       }
     } catch (error) {
-      console.error('获取模板失败:', error);
-      toast.error('获取模板失败');
+      console.error("load templates failed:", error);
+      toast.error(t("templatesLoadError"));
     }
   };
 
@@ -92,45 +100,57 @@ function CreateJobContent() {
       if (response.data) {
         setYamlContent(response.data.yaml_content);
       } else if (response.error) {
-        toast.error(response.error);
+        toast.error(t("templateDetailsLoadErrorWithMessage", { message: response.error }));
       }
     } catch (error) {
-      console.error('获取模板详情失败:', error);
-      toast.error('获取模板详情失败');
+      console.error("load template details failed:", error);
+      toast.error(t("templateDetailsLoadError"));
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleCreateJob = async () => {
+    if (!clusterIdNum) {
+      toast.error(t("selectClusterFirst"));
+      return;
+    }
+
     if (!selectedNamespace) {
-      toast.error('请选择命名空间');
+      toast.error(t("selectNamespaceRequired"));
       return;
     }
 
     if (!yamlContent.trim()) {
-      toast.error('请输入YAML配置');
+      toast.error(t("yamlRequired"));
       return;
     }
 
     setIsOperationLoading(true);
     try {
-      const response = await jobApi.createJob(
-        parseInt(clusterId!),
-        selectedNamespace,
-        yamlContent,
-        selectedTemplate?.id
-      );
+      await runWithFeedback(
+        async () => {
+          const response = await jobApi.createJob(
+            clusterIdNum,
+            selectedNamespace,
+            yamlContent,
+            selectedTemplate?.id
+          );
 
-      if (response.data) {
-        toast.success('Job创建成功');
-        router.push(`/jobs?cluster_id=${clusterId}`);
-      } else if (response.error) {
-        toast.error(response.error);
-      }
+          if (!response.data) {
+            throw new Error(response.error || t("createErrorUnknown"));
+          }
+
+          router.push(`/jobs?cluster_id=${clusterIdNum}`);
+        },
+        {
+          loading: t("createLoading"),
+          success: t("createSuccess"),
+          error: t("createError"),
+        }
+      );
     } catch (error) {
-      console.error('创建Job失败:', error);
-      toast.error('创建Job失败');
+      console.error("create job failed:", error);
     } finally {
       setIsOperationLoading(false);
     }
@@ -143,7 +163,7 @@ function CreateJobContent() {
   );
 
   if (!isAuthenticated) {
-    return <div>验证中...</div>;
+    return <div>{t("authVerifying")}</div>;
   }
 
   return (
@@ -153,12 +173,12 @@ function CreateJobContent() {
           <Link href={`/jobs?cluster_id=${clusterId}`}>
             <Button variant="outline" size="sm">
               <ArrowLeft className="h-4 w-4 mr-2" />
-              返回Jobs
+              {t("backToJobs")}
             </Button>
           </Link>
           <div>
-            <h1 className="text-3xl font-bold">创建Job</h1>
-            <p className="text-muted-foreground">选择模板或直接输入YAML配置来创建Job</p>
+            <h1 className="text-3xl font-bold">{t("createJobTitle")}</h1>
+            <p className="text-muted-foreground">{t("createPageDescription")}</p>
           </div>
         </div>
       </div>
@@ -168,18 +188,18 @@ function CreateJobContent() {
         <div className="lg:col-span-1">
           <Card>
             <CardHeader>
-              <CardTitle>选择模板</CardTitle>
+              <CardTitle>{t("selectTemplate")}</CardTitle>
               <CardDescription>
-                从预设模板开始，或直接输入YAML配置
+                {t("selectTemplateDescription")}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {/* 命名空间选择 */}
               <div>
-                <Label htmlFor="namespace">命名空间</Label>
+                <Label htmlFor="namespace">{t("namespaceLabel")}</Label>
                 <Select value={selectedNamespace} onValueChange={setSelectedNamespace}>
                   <SelectTrigger>
-                    <SelectValue placeholder="选择命名空间" />
+                    <SelectValue placeholder={t("selectNamespacePlaceholder")} />
                   </SelectTrigger>
                   <SelectContent>
                     {namespaces.map((ns) => (
@@ -193,12 +213,12 @@ function CreateJobContent() {
 
               {/* 模板搜索 */}
               <div>
-                <Label htmlFor="template-search">搜索模板</Label>
+                <Label htmlFor="template-search">{t("searchTemplate")}</Label>
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                   <Input
                     id="template-search"
-                    placeholder="搜索模板名称、描述或分类..."
+                    placeholder={t("searchTemplatePlaceholder")}
                     value={templateSearch}
                     onChange={(e) => setTemplateSearch(e.target.value)}
                     className="pl-10"
@@ -219,10 +239,10 @@ function CreateJobContent() {
                 >
                   <div className="flex items-center space-x-2">
                     <FileText className="h-4 w-4" />
-                    <span className="font-medium">自定义YAML</span>
+                    <span className="font-medium">{t("customYaml")}</span>
                   </div>
                   <p className="text-sm text-muted-foreground mt-1">
-                    直接输入或粘贴YAML配置
+                    {t("customYamlDescription")}
                   </p>
                 </div>
 
@@ -240,7 +260,7 @@ function CreateJobContent() {
                         <span className="font-medium">{template.name}</span>
                       </div>
                       {template.is_public && (
-                        <Badge variant="outline" className="text-xs">公开</Badge>
+                        <Badge variant="outline" className="text-xs">{t("publicTemplate")}</Badge>
                       )}
                     </div>
                     {template.category && (
@@ -262,7 +282,7 @@ function CreateJobContent() {
                 <Link href="/jobs/templates">
                   <Button variant="outline" className="w-full">
                     <Plus className="h-4 w-4 mr-2" />
-                    管理模板
+                    {t("manageTemplates")}
                   </Button>
                 </Link>
               </div>
@@ -275,17 +295,17 @@ function CreateJobContent() {
           <Card>
             <CardHeader>
               <CardTitle>
-                YAML配置
+                {t("yamlConfig")}
                 {selectedTemplate && (
                   <Badge variant="outline" className="ml-2">
-                    模板: {selectedTemplate.name}
+                    {t("templateBadge", { name: selectedTemplate.name })}
                   </Badge>
                 )}
               </CardTitle>
               <CardDescription>
                 {selectedTemplate
-                  ? `基于模板 "${selectedTemplate.name}" 进行配置`
-                  : "输入或粘贴Job的YAML配置"
+                  ? t("templateBasedConfig", { name: selectedTemplate.name })
+                  : t("yamlInputDescription")
                 }
               </CardDescription>
             </CardHeader>
@@ -293,11 +313,11 @@ function CreateJobContent() {
               {isLoading ? (
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="h-6 w-6 animate-spin" />
-                  <span className="ml-2">加载模板中...</span>
+                  <span className="ml-2">{t("loadingTemplate")}</span>
                 </div>
               ) : (
                 <Textarea
-                  placeholder="粘贴Job的YAML配置..."
+                  placeholder={t("yamlPlaceholder")}
                   value={yamlContent}
                   onChange={(e) => setYamlContent(e.target.value)}
                   className="min-h-[500px] font-mono text-sm"
@@ -306,11 +326,11 @@ function CreateJobContent() {
 
               <div className="flex justify-end space-x-2">
                 <Button variant="outline" onClick={() => setYamlContent("")}>
-                  清空
+                  {t("clear")}
                 </Button>
                 <Button onClick={handleCreateJob} disabled={isOperationLoading || !selectedNamespace}>
                   {isOperationLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  创建Job
+                  {t("createJob")}
                 </Button>
               </div>
             </CardContent>

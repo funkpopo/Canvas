@@ -15,10 +15,15 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { ArrowLeft, Loader2, RefreshCw, Plus, Search, Edit, Trash2, Eye, EyeOff } from "lucide-react";
 import { jobApi, JobTemplate } from "@/lib/api";
+import { useTranslations } from "@/hooks/use-translations";
+import { useAsyncActionFeedback } from "@/hooks/use-async-action-feedback";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 export default function JobTemplatesPage() {
+  const t = useTranslations("jobs");
+  const tCommon = useTranslations("common");
+  const { runWithFeedback } = useAsyncActionFeedback();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [templates, setTemplates] = useState<JobTemplate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -35,6 +40,7 @@ export default function JobTemplatesPage() {
     is_public: true,
   });
   const [isOperationLoading, setIsOperationLoading] = useState(false);
+  const [isEditTemplateLoading, setIsEditTemplateLoading] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState({
     open: false,
     title: "",
@@ -67,11 +73,11 @@ export default function JobTemplatesPage() {
       if (response.data) {
         setTemplates(response.data);
       } else if (response.error) {
-        toast.error(response.error);
+        toast.error(t("templatesLoadErrorWithMessage", { message: response.error }));
       }
     } catch (error) {
-      console.error('获取模板失败:', error);
-      toast.error('获取模板失败');
+      console.error("load templates failed:", error);
+      toast.error(t("templatesLoadError"));
     } finally {
       setIsLoading(false);
     }
@@ -79,24 +85,31 @@ export default function JobTemplatesPage() {
 
   const handleCreateTemplate = async () => {
     if (!formData.name.trim() || !formData.yaml_content.trim()) {
-      toast.error('请填写模板名称和YAML内容');
+      toast.error(t("templateNameAndYamlRequired"));
       return;
     }
 
     setIsOperationLoading(true);
     try {
-      const response = await jobApi.createJobTemplate(formData);
-      if (response.data) {
-        toast.success('模板创建成功');
-        setIsCreateDialogOpen(false);
-        resetForm();
-        fetchTemplates();
-      } else if (response.error) {
-        toast.error(response.error);
-      }
+      await runWithFeedback(
+        async () => {
+          const response = await jobApi.createJobTemplate(formData);
+          if (!response.data) {
+            throw new Error(response.error || t("templateCreateErrorUnknown"));
+          }
+
+          setIsCreateDialogOpen(false);
+          resetForm();
+          await fetchTemplates();
+        },
+        {
+          loading: t("templateCreateLoading"),
+          success: t("templateCreateSuccess"),
+          error: t("templateCreateError"),
+        }
+      );
     } catch (error) {
-      console.error('创建模板失败:', error);
-      toast.error('创建模板失败');
+      console.error("create template failed:", error);
     } finally {
       setIsOperationLoading(false);
     }
@@ -104,24 +117,31 @@ export default function JobTemplatesPage() {
 
   const handleEditTemplate = async () => {
     if (!selectedTemplate || !formData.name.trim() || !formData.yaml_content.trim()) {
-      toast.error('请填写模板名称和YAML内容');
+      toast.error(t("templateNameAndYamlRequired"));
       return;
     }
 
     setIsOperationLoading(true);
     try {
-      const response = await jobApi.updateJobTemplate(selectedTemplate.id, formData);
-      if (response.data) {
-        toast.success('模板更新成功');
-        setIsEditDialogOpen(false);
-        resetForm();
-        fetchTemplates();
-      } else if (response.error) {
-        toast.error(response.error);
-      }
+      await runWithFeedback(
+        async () => {
+          const response = await jobApi.updateJobTemplate(selectedTemplate.id, formData);
+          if (!response.data) {
+            throw new Error(response.error || t("templateUpdateErrorUnknown"));
+          }
+
+          setIsEditDialogOpen(false);
+          resetForm();
+          await fetchTemplates();
+        },
+        {
+          loading: t("templateUpdateLoading"),
+          success: t("templateUpdateSuccess"),
+          error: t("templateUpdateError"),
+        }
+      );
     } catch (error) {
-      console.error('更新模板失败:', error);
-      toast.error('更新模板失败');
+      console.error("update template failed:", error);
     } finally {
       setIsOperationLoading(false);
     }
@@ -130,22 +150,28 @@ export default function JobTemplatesPage() {
   const handleDeleteTemplate = async (templateId: number) => {
     setIsOperationLoading(true);
     try {
-      const response = await jobApi.deleteJobTemplate(templateId);
-      if (response.data) {
-        toast.success('模板删除成功');
-        fetchTemplates();
-      } else if (response.error) {
-        toast.error(response.error);
-      }
+      await runWithFeedback(
+        async () => {
+          const response = await jobApi.deleteJobTemplate(templateId);
+          if (!response.data) {
+            throw new Error(response.error || t("templateDeleteErrorUnknown"));
+          }
+          await fetchTemplates();
+        },
+        {
+          loading: t("templateDeleteLoading"),
+          success: t("templateDeleteSuccess"),
+          error: t("templateDeleteError"),
+        }
+      );
     } catch (error) {
-      console.error('删除模板失败:', error);
-      toast.error('删除模板失败');
+      console.error("delete template failed:", error);
     } finally {
       setIsOperationLoading(false);
     }
   };
 
-  const openEditDialog = (template: JobTemplate) => {
+  const openEditDialog = async (template: JobTemplate) => {
     setSelectedTemplate(template);
     setFormData({
       name: template.name,
@@ -155,16 +181,32 @@ export default function JobTemplatesPage() {
       is_public: template.is_public,
     });
     setIsEditDialogOpen(true);
+    setIsEditTemplateLoading(true);
 
-    // 获取模板的YAML内容
-    jobApi.getJobTemplate(template.id).then(response => {
-      if (response.data) {
-        setFormData(prev => ({
-          ...prev,
-          yaml_content: response.data.yaml_content,
-        }));
-      }
-    });
+    try {
+      await runWithFeedback(
+        async () => {
+          const response = await jobApi.getJobTemplate(template.id);
+          if (!response.data) {
+            throw new Error(response.error || t("templateDetailsLoadErrorUnknown"));
+          }
+
+          setFormData(prev => ({
+            ...prev,
+            yaml_content: response.data.yaml_content,
+          }));
+        },
+        {
+          loading: t("templateDetailsLoadLoading", { name: template.name }),
+          success: t("templateDetailsLoadSuccess", { name: template.name }),
+          error: t("templateDetailsLoadError"),
+        }
+      );
+    } catch (error) {
+      console.error("load template details failed:", error);
+    } finally {
+      setIsEditTemplateLoading(false);
+    }
   };
 
   const resetForm = () => {
@@ -189,7 +231,7 @@ export default function JobTemplatesPage() {
   const categories = Array.from(new Set(templates.map(t => t.category).filter(Boolean))) as string[];
 
   if (!isAuthenticated) {
-    return <div>验证中...</div>;
+    return <div>{t("authVerifying")}</div>;
   }
 
   return (
@@ -199,68 +241,68 @@ export default function JobTemplatesPage() {
           <Link href="/jobs">
             <Button variant="outline" size="sm">
               <ArrowLeft className="h-4 w-4 mr-2" />
-              返回Jobs
+              {t("backToJobs")}
             </Button>
           </Link>
           <div>
-            <h1 className="text-3xl font-bold">Job模板管理</h1>
-            <p className="text-muted-foreground">管理和重用常用的Job配置模板</p>
+            <h1 className="text-3xl font-bold">{t("templatesTitle")}</h1>
+            <p className="text-muted-foreground">{t("templatesDescription")}</p>
           </div>
         </div>
         <div className="flex space-x-2">
           <Button onClick={fetchTemplates} disabled={isLoading}>
             <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-            刷新
+            {t("refresh")}
           </Button>
           <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
             <DialogTrigger asChild>
               <Button>
                 <Plus className="h-4 w-4 mr-2" />
-                创建模板
+                {t("createTemplate")}
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-4xl">
               <DialogHeader>
-                <DialogTitle>创建Job模板</DialogTitle>
+                <DialogTitle>{t("createTemplateTitle")}</DialogTitle>
                 <DialogDescription>
-                  创建可重用的Job配置模板
+                  {t("createTemplateDescription")}
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="template-name">模板名称 *</Label>
+                    <Label htmlFor="template-name">{t("templateNameRequired")}</Label>
                     <Input
                       id="template-name"
                       value={formData.name}
                       onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                      placeholder="输入模板名称"
+                      placeholder={t("templateNamePlaceholder")}
                     />
                   </div>
                   <div>
-                    <Label htmlFor="template-category">分类</Label>
+                    <Label htmlFor="template-category">{t("categoryLabel")}</Label>
                     <Input
                       id="template-category"
                       value={formData.category}
                       onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
-                      placeholder="如：数据处理、备份、测试"
+                      placeholder={t("categoryPlaceholder")}
                     />
                   </div>
                 </div>
                 <div>
-                  <Label htmlFor="template-description">描述</Label>
+                  <Label htmlFor="template-description">{t("descriptionLabel")}</Label>
                   <Input
                     id="template-description"
                     value={formData.description}
                     onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                    placeholder="模板描述"
+                    placeholder={t("descriptionPlaceholder")}
                   />
                 </div>
                 <div>
-                  <Label htmlFor="template-yaml">YAML配置 *</Label>
+                  <Label htmlFor="template-yaml">{t("yamlConfigRequired")}</Label>
                   <Textarea
                     id="template-yaml"
-                    placeholder="粘贴Job的YAML配置..."
+                    placeholder={t("yamlPlaceholder")}
                     value={formData.yaml_content}
                     onChange={(e) => setFormData(prev => ({ ...prev, yaml_content: e.target.value }))}
                     className="min-h-[300px] font-mono text-sm"
@@ -272,16 +314,16 @@ export default function JobTemplatesPage() {
                     checked={formData.is_public}
                     onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_public: checked as boolean }))}
                   />
-                  <Label htmlFor="template-public">公开模板（其他用户可以查看和使用）</Label>
+                  <Label htmlFor="template-public">{t("publicTemplateDescription")}</Label>
                 </div>
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
-                  取消
+                  {tCommon("cancel")}
                 </Button>
                 <Button onClick={handleCreateTemplate} disabled={isOperationLoading}>
                   {isOperationLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  创建
+                  {t("create")}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -291,9 +333,9 @@ export default function JobTemplatesPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Job模板列表</CardTitle>
+          <CardTitle>{t("templatesListTitle")}</CardTitle>
           <CardDescription>
-            查看和管理所有可用的Job模板
+            {t("templatesListDescription")}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -304,7 +346,7 @@ export default function JobTemplatesPage() {
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                   <Input
-                    placeholder="搜索模板名称或描述..."
+                    placeholder={t("searchTemplateNameOrDescription")}
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="pl-10"
@@ -314,10 +356,10 @@ export default function JobTemplatesPage() {
               <div className="min-w-[150px]">
                 <Select value={categoryFilter} onValueChange={setCategoryFilter}>
                   <SelectTrigger>
-                    <SelectValue placeholder="所有分类" />
+                    <SelectValue placeholder={t("allCategories")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">所有分类</SelectItem>
+                    <SelectItem value="all">{t("allCategories")}</SelectItem>
                     {categories.map((category) => (
                       <SelectItem key={category} value={category}>
                         {category}
@@ -332,26 +374,26 @@ export default function JobTemplatesPage() {
             {isLoading ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="h-8 w-8 animate-spin" />
-                <span className="ml-2">加载中...</span>
+                <span className="ml-2">{tCommon("loading")}</span>
               </div>
             ) : (
               <div className="border rounded-lg">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>模板名称</TableHead>
-                      <TableHead>分类</TableHead>
-                      <TableHead>描述</TableHead>
-                      <TableHead>公开</TableHead>
-                      <TableHead>创建时间</TableHead>
-                      <TableHead>操作</TableHead>
+                      <TableHead>{t("templateName")}</TableHead>
+                      <TableHead>{t("categoryLabel")}</TableHead>
+                      <TableHead>{t("descriptionLabel")}</TableHead>
+                      <TableHead>{t("publicLabel")}</TableHead>
+                      <TableHead>{t("createdAtLabel")}</TableHead>
+                      <TableHead>{tCommon("actions")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredTemplates.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                          没有找到匹配的模板
+                          {t("noMatchingTemplates")}
                         </TableCell>
                       </TableRow>
                     ) : (
@@ -361,7 +403,7 @@ export default function JobTemplatesPage() {
                             <div>
                               <div className="font-medium">{template.name}</div>
                               <div className="text-sm text-muted-foreground">
-                                ID: {template.id}
+                                {t("templateId", { id: template.id })}
                               </div>
                             </div>
                           </TableCell>
@@ -370,17 +412,17 @@ export default function JobTemplatesPage() {
                               <Badge variant="outline">{template.category}</Badge>
                             )}
                           </TableCell>
-                          <TableCell>{template.description || '-'}</TableCell>
+                          <TableCell>{template.description || t("emptyValue")}</TableCell>
                           <TableCell>
                             {template.is_public ? (
                               <Badge variant="default">
                                 <Eye className="h-3 w-3 mr-1" />
-                                公开
+                                {t("publicTemplate")}
                               </Badge>
                             ) : (
                               <Badge variant="secondary">
                                 <EyeOff className="h-3 w-3 mr-1" />
-                                私有
+                                {t("privateTemplate")}
                               </Badge>
                             )}
                           </TableCell>
@@ -393,7 +435,7 @@ export default function JobTemplatesPage() {
                                 size="sm"
                                 variant="outline"
                                 onClick={() => openEditDialog(template)}
-                                disabled={isOperationLoading}
+                                disabled={isOperationLoading || isEditTemplateLoading}
                               >
                                 <Edit className="h-3 w-3" />
                               </Button>
@@ -402,8 +444,8 @@ export default function JobTemplatesPage() {
                                 variant="outline"
                                 onClick={() => setConfirmDialog({
                                   open: true,
-                                  title: "删除模板",
-                                  description: `确定要删除模板 "${template.name}" 吗？`,
+                                  title: t("deleteTemplateTitle"),
+                                  description: t("deleteTemplateDescription", { name: template.name }),
                                   onConfirm: () => handleDeleteTemplate(template.id),
                                 })}
                                 disabled={isOperationLoading}
@@ -427,48 +469,49 @@ export default function JobTemplatesPage() {
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="max-w-4xl">
           <DialogHeader>
-            <DialogTitle>编辑Job模板</DialogTitle>
+            <DialogTitle>{t("editTemplateTitle")}</DialogTitle>
             <DialogDescription>
-              修改模板配置信息
+              {t("editTemplateDescription")}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="edit-template-name">模板名称 *</Label>
+                <Label htmlFor="edit-template-name">{t("templateNameRequired")}</Label>
                 <Input
                   id="edit-template-name"
                   value={formData.name}
                   onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder="输入模板名称"
+                  placeholder={t("templateNamePlaceholder")}
                 />
               </div>
               <div>
-                <Label htmlFor="edit-template-category">分类</Label>
+                <Label htmlFor="edit-template-category">{t("categoryLabel")}</Label>
                 <Input
                   id="edit-template-category"
                   value={formData.category}
                   onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
-                  placeholder="如：数据处理、备份、测试"
+                  placeholder={t("categoryPlaceholder")}
                 />
               </div>
             </div>
             <div>
-              <Label htmlFor="edit-template-description">描述</Label>
+              <Label htmlFor="edit-template-description">{t("descriptionLabel")}</Label>
               <Input
                 id="edit-template-description"
                 value={formData.description}
                 onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                placeholder="模板描述"
+                placeholder={t("descriptionPlaceholder")}
               />
             </div>
             <div>
-              <Label htmlFor="edit-template-yaml">YAML配置 *</Label>
+              <Label htmlFor="edit-template-yaml">{t("yamlConfigRequired")}</Label>
               <Textarea
                 id="edit-template-yaml"
-                placeholder="粘贴Job的YAML配置..."
+                placeholder={t("yamlPlaceholder")}
                 value={formData.yaml_content}
                 onChange={(e) => setFormData(prev => ({ ...prev, yaml_content: e.target.value }))}
+                disabled={isEditTemplateLoading}
                 className="min-h-[300px] font-mono text-sm"
               />
             </div>
@@ -478,16 +521,16 @@ export default function JobTemplatesPage() {
                 checked={formData.is_public}
                 onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_public: checked as boolean }))}
               />
-              <Label htmlFor="edit-template-public">公开模板（其他用户可以查看和使用）</Label>
+              <Label htmlFor="edit-template-public">{t("publicTemplateDescription")}</Label>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
-              取消
+              {tCommon("cancel")}
             </Button>
-            <Button onClick={handleEditTemplate} disabled={isOperationLoading}>
+            <Button onClick={handleEditTemplate} disabled={isOperationLoading || isEditTemplateLoading}>
               {isOperationLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              更新
+              {t("update")}
             </Button>
           </DialogFooter>
         </DialogContent>

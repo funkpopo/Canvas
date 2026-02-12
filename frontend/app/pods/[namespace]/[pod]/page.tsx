@@ -18,6 +18,7 @@ import { resolveClusterContext } from "@/lib/cluster-context-resolver";
 import { useAsyncActionFeedback } from "@/hooks/use-async-action-feedback";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { podApi } from "@/lib/api";
+import { useTranslations } from "@/hooks/use-translations";
 
 const PodMetricsCharts = dynamic(
   () => import("@/components/pods/PodMetricsCharts").then((m) => m.PodMetricsCharts),
@@ -74,6 +75,10 @@ interface MetricsData {
 }
 
 export default function PodDetailsPage({ params }: { params: Promise<{ namespace: string; pod: string }> }) {
+  const t = useTranslations("podDetails");
+  const tCommon = useTranslations("common");
+  const tAuth = useTranslations("auth");
+
   const resolvedParams = use(params);
   const { isAuthenticated, isLoading: authLoading, logout } = useAuth();
   const { runWithFeedback } = useAsyncActionFeedback();
@@ -171,8 +176,8 @@ export default function PodDetailsPage({ params }: { params: Promise<{ namespace
 
     setConfirmDialog({
       open: true,
-      title: "删除Pod",
-      description: `确定要删除Pod "${podDetails.name}" 吗？此操作不可撤销。`,
+      title: t("deleteTitle"),
+      description: t("deleteDescription", { name: podDetails.name }),
       onConfirm: () => performDeletePod(),
       showForceOption: true,
       forceOption: false,
@@ -188,7 +193,7 @@ export default function PodDetailsPage({ params }: { params: Promise<{ namespace
     const clusterForRequest = effectiveClusterId ?? podDetails.cluster_id;
 
     try {
-      const deleteType = confirmDialog.forceOption ? "强制" : "正常";
+      const deleteType = confirmDialog.forceOption ? t("deleteTypeForce") : t("deleteTypeNormal");
       await runWithFeedback(
         async () => {
           const result = await podApi.deletePod(
@@ -204,9 +209,9 @@ export default function PodDetailsPage({ params }: { params: Promise<{ namespace
           router.push("/pods");
         },
         {
-          loading: `正在${deleteType}删除 Pod...`,
-          success: `Pod${deleteType}删除成功`,
-          error: "删除Pod失败",
+          loading: t("deleteLoading", { deleteType }),
+          success: t("deleteSuccess", { deleteType }),
+          error: t("deleteError"),
         }
       );
     } catch (error) {
@@ -261,7 +266,7 @@ export default function PodDetailsPage({ params }: { params: Promise<{ namespace
               <ThemeToggle />
               <Button variant="outline" onClick={logout}>
                 <LogOut className="h-4 w-4 mr-2" />
-                退出登录
+                {tAuth("logout")}
               </Button>
             </div>
           </div>
@@ -275,21 +280,21 @@ export default function PodDetailsPage({ params }: { params: Promise<{ namespace
             <div className="flex items-center">
               <Link href="/pods" className="flex items-center">
                 <ArrowLeft className="h-5 w-5 mr-2" />
-                <span className="text-gray-600 dark:text-gray-400">返回Pod列表</span>
+                <span className="text-gray-600 dark:text-gray-400">{t("backToPods")}</span>
               </Link>
             </div>
             <div className="flex items-center space-x-4">
               <Select value={timeRange} onValueChange={handleTimeRangeChange}>
                 <SelectTrigger className="w-32">
-                  <SelectValue placeholder="时间范围" />
+                  <SelectValue placeholder={t("timeRange")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="5m">5分钟</SelectItem>
-                  <SelectItem value="10m">10分钟</SelectItem>
-                  <SelectItem value="30m">30分钟</SelectItem>
-                  <SelectItem value="1h">1小时</SelectItem>
-                  <SelectItem value="6h">6小时</SelectItem>
-                  <SelectItem value="24h">24小时</SelectItem>
+                  <SelectItem value="5m">{t("range5m")}</SelectItem>
+                  <SelectItem value="10m">{t("range10m")}</SelectItem>
+                  <SelectItem value="30m">{t("range30m")}</SelectItem>
+                  <SelectItem value="1h">{t("range1h")}</SelectItem>
+                  <SelectItem value="6h">{t("range6h")}</SelectItem>
+                  <SelectItem value="24h">{t("range24h")}</SelectItem>
                 </SelectContent>
               </Select>
               <Button variant="outline" onClick={() => { fetchPodDetails(); fetchMetrics(); }} disabled={isLoading || isMetricsLoading}>
@@ -298,11 +303,11 @@ export default function PodDetailsPage({ params }: { params: Promise<{ namespace
                 ) : (
                   <RefreshCw className="h-4 w-4 mr-2" />
                 )}
-                刷新
+                {t("refresh")}
               </Button>
               <Button variant="destructive" onClick={handleDeletePod}>
                 <Square className="h-4 w-4 mr-2" />
-                删除Pod
+                {t("deletePod")}
               </Button>
             </div>
           </div>
@@ -314,7 +319,7 @@ export default function PodDetailsPage({ params }: { params: Promise<{ namespace
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin mr-2" />
-            <span className="text-lg">加载中...</span>
+            <span className="text-lg">{tCommon("loading")}</span>
           </div>
         ) : podDetails ? (
           <div className="space-y-8">
@@ -325,7 +330,7 @@ export default function PodDetailsPage({ params }: { params: Promise<{ namespace
                   <div>
                     <CardTitle className="text-2xl">{podDetails.name}</CardTitle>
                     <CardDescription>
-                      {podDetails.namespace} • {podDetails.node_name || "未调度"} • {podDetails.age}
+                      {podDetails.namespace} • {podDetails.node_name || t("notScheduled")} • {podDetails.age}
                     </CardDescription>
                   </div>
                   <Badge variant={getStatusBadgeVariant(podDetails.status)} className="text-lg px-3 py-1">
@@ -336,19 +341,19 @@ export default function PodDetailsPage({ params }: { params: Promise<{ namespace
               <CardContent>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                   <div>
-                    <span className="text-gray-600 dark:text-gray-400">容器:</span>
+                    <span className="text-gray-600 dark:text-gray-400">{t("containersLabel")}</span>
                     <span className="ml-2">{podDetails.ready_containers}</span>
                   </div>
                   <div>
-                    <span className="text-gray-600 dark:text-gray-400">重启次数:</span>
+                    <span className="text-gray-600 dark:text-gray-400">{t("restartsLabel")}</span>
                     <span className="ml-2">{podDetails.restarts}</span>
                   </div>
                   <div>
-                    <span className="text-gray-600 dark:text-gray-400">节点:</span>
-                    <span className="ml-2">{podDetails.node_name || "未调度"}</span>
+                    <span className="text-gray-600 dark:text-gray-400">{t("nodeLabel")}</span>
+                    <span className="ml-2">{podDetails.node_name || t("notScheduled")}</span>
                   </div>
                   <div>
-                    <span className="text-gray-600 dark:text-gray-400">运行时间:</span>
+                    <span className="text-gray-600 dark:text-gray-400">{t("ageLabel")}</span>
                     <span className="ml-2">{podDetails.age}</span>
                   </div>
                 </div>
@@ -361,7 +366,7 @@ export default function PodDetailsPage({ params }: { params: Promise<{ namespace
             {/* 容器信息 */}
             <Card>
               <CardHeader>
-                <CardTitle>容器信息</CardTitle>
+                <CardTitle>{t("containersTitle")}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
@@ -378,19 +383,19 @@ export default function PodDetailsPage({ params }: { params: Promise<{ namespace
                         <div className="text-sm space-y-1">
                           {container.resources.requests && (
                             <div>
-                              <span className="text-gray-600 dark:text-gray-400">请求:</span>
+                              <span className="text-gray-600 dark:text-gray-400">{t("requestsLabel")}</span>
                               <span className="ml-2">
-                                CPU: {container.resources.requests.cpu || '未设置'},
-                                内存: {container.resources.requests.memory || '未设置'}
+                                {t("resourceCpu", { value: container.resources.requests.cpu || t("notSet") })},
+                                {t("resourceMemory", { value: container.resources.requests.memory || t("notSet") })}
                               </span>
                             </div>
                           )}
                           {container.resources.limits && (
                             <div>
-                              <span className="text-gray-600 dark:text-gray-400">限制:</span>
+                              <span className="text-gray-600 dark:text-gray-400">{t("limitsLabel")}</span>
                               <span className="ml-2">
-                                CPU: {container.resources.limits.cpu || '未设置'},
-                                内存: {container.resources.limits.memory || '未设置'}
+                                {t("resourceCpu", { value: container.resources.limits.cpu || t("notSet") })},
+                                {t("resourceMemory", { value: container.resources.limits.memory || t("notSet") })}
                               </span>
                             </div>
                           )}
@@ -406,7 +411,7 @@ export default function PodDetailsPage({ params }: { params: Promise<{ namespace
             {podDetails.events && podDetails.events.length > 0 && (
               <Card>
                 <CardHeader>
-                  <CardTitle>最近事件</CardTitle>
+                  <CardTitle>{t("recentEvents")}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-2">
@@ -438,10 +443,10 @@ export default function PodDetailsPage({ params }: { params: Promise<{ namespace
             <CardContent className="flex flex-col items-center justify-center py-12">
               <Activity className="h-12 w-12 text-gray-400 mb-4" />
               <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                未找到Pod信息
+                {t("podNotFound")}
               </h3>
               <p className="text-gray-600 dark:text-gray-400">
-                无法获取Pod详情信息
+                {t("podNotFoundDescription")}
               </p>
             </CardContent>
           </Card>

@@ -13,6 +13,7 @@ import ClusterSelector from "@/components/ClusterSelector";
 import { useAuth } from "@/lib/auth-context";
 import { useCluster } from "@/lib/cluster-context";
 import { storageApi } from "@/lib/api";
+import { useTranslations } from "@/hooks/use-translations";
 
 interface FileItem {
   name: string;
@@ -35,6 +36,10 @@ interface PersistentVolume {
 }
 
 export default function VolumeDetail() {
+  const t = useTranslations("storageVolume");
+  const tAuth = useTranslations("auth");
+  const tCommon = useTranslations("common");
+
   const params = useParams();
   const volumeName = params.name as string;
 
@@ -148,7 +153,7 @@ export default function VolumeDetail() {
               <ClusterSelector />
               <Button variant="outline" onClick={logout}>
                 <LogOut className="h-4 w-4 mr-2" />
-                登出
+                {tAuth("logout")}
               </Button>
             </div>
           </div>
@@ -163,15 +168,15 @@ export default function VolumeDetail() {
               <Button variant="outline" asChild>
                 <Link href="/storage">
                   <ArrowLeft className="h-4 w-4 mr-2" />
-                  返回存储管理
+                  {t("backToStorage")}
                 </Link>
               </Button>
               <div>
                 <h2 className="text-3xl font-bold text-gray-900 dark:text-white">
-                  持久卷详情
+                  {t("title")}
                 </h2>
                 <p className="mt-2 text-gray-600 dark:text-gray-400">
-                  查看持久卷信息和文件内容
+                  {t("description")}
                 </p>
               </div>
             </div>
@@ -186,22 +191,22 @@ export default function VolumeDetail() {
                 <HardDrive className="h-5 w-5 mr-2" />
                 {volume.name}
               </CardTitle>
-              <CardDescription>持久卷详细信息</CardDescription>
+              <CardDescription>{t("volumeDetails")}</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div>
-                  <p className="text-sm font-medium text-gray-500">容量</p>
+                  <p className="text-sm font-medium text-gray-500">{t("capacityLabel")}</p>
                   <p className="text-lg font-semibold">{volume.capacity}</p>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-gray-500">状态</p>
+                  <p className="text-sm font-medium text-gray-500">{t("statusLabel")}</p>
                   <Badge variant={volume.status === 'Available' ? 'default' : 'secondary'}>
                     {volume.status}
                   </Badge>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-gray-500">访问模式</p>
+                  <p className="text-sm font-medium text-gray-500">{t("accessModesLabel")}</p>
                   <div className="flex flex-wrap gap-1">
                     {volume.access_modes.map((mode) => (
                       <Badge key={mode} variant="outline">{mode}</Badge>
@@ -209,13 +214,13 @@ export default function VolumeDetail() {
                   </div>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-gray-500">存储类</p>
-                  <p className="text-sm">{volume.storage_class || '无'}</p>
+                  <p className="text-sm font-medium text-gray-500">{t("storageClassLabel")}</p>
+                  <p className="text-sm">{volume.storage_class || t("noneValue")}</p>
                 </div>
               </div>
               {volume.claim && (
                 <div className="mt-4">
-                  <p className="text-sm font-medium text-gray-500">绑定声明</p>
+                  <p className="text-sm font-medium text-gray-500">{t("boundClaimLabel")}</p>
                   <p className="text-sm">{volume.claim}</p>
                 </div>
               )}
@@ -228,9 +233,9 @@ export default function VolumeDetail() {
           <CardHeader>
             <CardTitle className="flex items-center">
               <FileText className="h-5 w-5 mr-2" />
-              卷内文件浏览
+              {t("fileBrowserTitle")}
             </CardTitle>
-            <CardDescription>浏览和查看持久卷中的文件</CardDescription>
+            <CardDescription>{t("fileBrowserDescription")}</CardDescription>
           </CardHeader>
           <CardContent>
             {/* 路径导航 */}
@@ -241,7 +246,7 @@ export default function VolumeDetail() {
                   className="p-0 h-auto font-normal"
                   onClick={() => handlePathNavigation("/")}
                 >
-                  根目录
+                  {t("rootDirectory")}
                 </Button>
                 {getPathSegments().map((segment, index) => {
                   const path = "/" + getPathSegments().slice(0, index + 1).join("/");
@@ -269,12 +274,12 @@ export default function VolumeDetail() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>名称</TableHead>
-                    <TableHead>类型</TableHead>
-                    <TableHead>大小</TableHead>
-                    <TableHead>修改时间</TableHead>
-                    <TableHead>权限</TableHead>
-                    <TableHead>操作</TableHead>
+                    <TableHead>{t("nameLabel")}</TableHead>
+                    <TableHead>{t("typeLabel")}</TableHead>
+                    <TableHead>{t("sizeLabel")}</TableHead>
+                    <TableHead>{t("modifiedTimeLabel")}</TableHead>
+                    <TableHead>{t("permissionsLabel")}</TableHead>
+                    <TableHead>{tCommon("actions")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -295,7 +300,7 @@ export default function VolumeDetail() {
                           </span>
                         </div>
                       </TableCell>
-                      <TableCell>{file.type === "directory" ? "目录" : "文件"}</TableCell>
+                      <TableCell>{file.type === "directory" ? t("directoryType") : t("fileType")}</TableCell>
                       <TableCell>
                         {file.size !== null ? `${(file.size / 1024).toFixed(1)} KB` : '-'}
                       </TableCell>
@@ -309,7 +314,7 @@ export default function VolumeDetail() {
                             onClick={() => handleFileClick(file.name, file.type)}
                           >
                             <Eye className="h-4 w-4 mr-1" />
-                            查看
+                            {t("viewAction")}
                           </Button>
                         )}
                       </TableCell>
@@ -318,7 +323,7 @@ export default function VolumeDetail() {
                   {files.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={6} className="text-center py-8 text-gray-500">
-                        此目录为空
+                        {t("emptyDirectory")}
                       </TableCell>
                     </TableRow>
                   )}
@@ -332,9 +337,9 @@ export default function VolumeDetail() {
         <Dialog open={isFileDialogOpen} onOpenChange={setIsFileDialogOpen}>
           <DialogContent className="max-w-4xl max-h-[80vh]">
             <DialogHeader>
-              <DialogTitle>文件内容 - {selectedFile}</DialogTitle>
+              <DialogTitle>{t("fileContentTitle", { file: selectedFile })}</DialogTitle>
               <DialogDescription>
-                路径: {currentPath === "/" ? "" : currentPath}/{selectedFile}
+                {t("pathValue", { path: `${currentPath === "/" ? "" : currentPath}/${selectedFile}` })}
               </DialogDescription>
             </DialogHeader>
             <div className="max-h-[60vh] overflow-auto">

@@ -35,8 +35,12 @@ import {
 } from "lucide-react";
 import { auditLogApi, AuditLog, AuditStats } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { useTranslations } from "@/hooks/use-translations";
+import { useLanguage } from "@/lib/language-context";
 
 export default function AuditLogsPage() {
+  const t = useTranslations("auditLogs");
+  const { locale } = useLanguage();
   const router = useRouter();
   const { user: currentUser, isLoading: authLoading } = useAuth();
   const [logs, setLogs] = useState<AuditLog[]>([]);
@@ -59,7 +63,7 @@ export default function AuditLogsPage() {
     if (!authLoading) {
       if (!currentUser || currentUser.role !== "admin") {
         if (!permissionErrorShown) {
-          toast.error("需要管理员权限");
+          toast.error(t("adminRequired"));
           setPermissionErrorShown(true);
         }
         router.push("/");
@@ -86,10 +90,10 @@ export default function AuditLogsPage() {
         setLogs(response.data.logs);
         setTotal(response.data.total);
       } else {
-        toast.error(response.error || "获取审计日志失败");
+        toast.error(response.error || t("loadLogsError"));
       }
     } catch (error) {
-      toast.error("获取审计日志失败");
+      toast.error(t("loadLogsError"));
     } finally {
       setIsLoading(false);
     }
@@ -134,71 +138,71 @@ export default function AuditLogsPage() {
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center space-x-4">
-            <Button variant="ghost" onClick={() => router.push("/")}>
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-            <div>
-              <h1 className="text-3xl font-bold">审计日志</h1>
-              <p className="text-muted-foreground">查看系统操作记录和统计</p>
-            </div>
-          </div>
-          <Button variant="outline" onClick={() => setShowStats(!showStats)}>
-            {showStats ? "隐藏统计" : "显示统计"}
+        <div className="flex items-center space-x-4">
+          <Button variant="ghost" onClick={() => router.push("/")}>
+            <ArrowLeft className="h-4 w-4" />
           </Button>
+          <div>
+              <h1 className="text-3xl font-bold">{t("title")}</h1>
+              <p className="text-muted-foreground">{t("description")}</p>
+          </div>
         </div>
+        <Button variant="outline" onClick={() => setShowStats(!showStats)}>
+            {showStats ? t("hideStats") : t("showStats")}
+        </Button>
+      </div>
 
         {/* Statistics */}
         {showStats && stats && (
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">总操作数</CardTitle>
+                <CardTitle className="text-sm font-medium">{t("totalOperations")}</CardTitle>
                 <Activity className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{stats.total_operations}</div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  成功 {stats.success_count} | 失败 {stats.failed_count}
+                  {t("successFailedSummary", { success: stats.success_count, failed: stats.failed_count })}
                 </p>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">成功率</CardTitle>
+                <CardTitle className="text-sm font-medium">{t("successRate")}</CardTitle>
                 <TrendingUp className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{stats.success_rate}%</div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  操作成功比率
+                  {t("successRateDescription")}
                 </p>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">活跃用户</CardTitle>
+                <CardTitle className="text-sm font-medium">{t("activeUsers")}</CardTitle>
                 <Users className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{stats.user_stats.length}</div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  有操作记录的用户
+                  {t("activeUsersDescription")}
                 </p>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">资源类型</CardTitle>
+                <CardTitle className="text-sm font-medium">{t("resourceTypes")}</CardTitle>
                 <Filter className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{stats.resource_stats.length}</div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  涉及的资源类型数
+                  {t("resourceTypesDescription")}
                 </p>
               </CardContent>
             </Card>
@@ -211,7 +215,7 @@ export default function AuditLogsPage() {
             {/* Action Stats */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-sm">操作类型统计</CardTitle>
+                <CardTitle className="text-sm">{t("actionStatsTitle")}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-2 max-h-48 overflow-y-auto">
@@ -228,7 +232,7 @@ export default function AuditLogsPage() {
             {/* Resource Stats */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-sm">资源类型统计</CardTitle>
+                <CardTitle className="text-sm">{t("resourceStatsTitle")}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-2 max-h-48 overflow-y-auto">
@@ -245,7 +249,7 @@ export default function AuditLogsPage() {
             {/* User Stats */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-sm">用户活动统计</CardTitle>
+                <CardTitle className="text-sm">{t("userStatsTitle")}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-2 max-h-48 overflow-y-auto">
@@ -264,50 +268,50 @@ export default function AuditLogsPage() {
         {/* Filters */}
         <Card className="mb-6">
           <CardHeader>
-            <CardTitle>筛选条件</CardTitle>
+            <CardTitle>{t("filtersTitle")}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
               <div className="relative">
                 <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="搜索操作类型..."
+                  placeholder={t("searchActionPlaceholder")}
                   value={searchAction}
                   onChange={(e) => setSearchAction(e.target.value)}
                   className="pl-9"
                 />
               </div>
               <Input
-                placeholder="资源类型"
+                placeholder={t("resourceTypePlaceholder")}
                 value={resourceTypeFilter}
                 onChange={(e) => setResourceTypeFilter(e.target.value)}
               />
               <Select value={successFilter} onValueChange={setSuccessFilter}>
                 <SelectTrigger>
-                  <SelectValue placeholder="所有状态" />
+                  <SelectValue placeholder={t("allStatuses")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">所有状态</SelectItem>
-                  <SelectItem value="true">成功</SelectItem>
-                  <SelectItem value="false">失败</SelectItem>
+                  <SelectItem value="all">{t("allStatuses")}</SelectItem>
+                  <SelectItem value="true">{t("statusSuccess")}</SelectItem>
+                  <SelectItem value="false">{t("statusFailed")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <Input
                 type="datetime-local"
-                placeholder="开始时间"
+                placeholder={t("startTimePlaceholder")}
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
               />
               <Input
                 type="datetime-local"
-                placeholder="结束时间"
+                placeholder={t("endTimePlaceholder")}
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
               />
               <Button variant="outline" onClick={resetFilters}>
-                重置筛选
+                {t("resetFilters")}
               </Button>
             </div>
           </CardContent>
@@ -316,8 +320,8 @@ export default function AuditLogsPage() {
         {/* Logs Table */}
         <Card>
           <CardHeader>
-            <CardTitle>操作日志</CardTitle>
-            <CardDescription>共 {total} 条记录</CardDescription>
+            <CardTitle>{t("logsTitle")}</CardTitle>
+            <CardDescription>{t("totalRecords", { total })}</CardDescription>
           </CardHeader>
           <CardContent>
             {isLoading ? (
@@ -326,7 +330,7 @@ export default function AuditLogsPage() {
               </div>
             ) : logs.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
-                暂无审计日志
+                {t("noLogs")}
               </div>
             ) : (
               <>
@@ -334,24 +338,24 @@ export default function AuditLogsPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>时间</TableHead>
-                        <TableHead>用户</TableHead>
-                        <TableHead>操作</TableHead>
-                        <TableHead>资源类型</TableHead>
-                        <TableHead>资源名称</TableHead>
-                        <TableHead>集群</TableHead>
-                        <TableHead>状态</TableHead>
-                        <TableHead>IP地址</TableHead>
+                        <TableHead>{t("timeLabel")}</TableHead>
+                        <TableHead>{t("userLabel")}</TableHead>
+                        <TableHead>{t("actionLabel")}</TableHead>
+                        <TableHead>{t("resourceTypeLabel")}</TableHead>
+                        <TableHead>{t("resourceNameLabel")}</TableHead>
+                        <TableHead>{t("clusterLabel")}</TableHead>
+                        <TableHead>{t("statusLabel")}</TableHead>
+                        <TableHead>{t("ipAddressLabel")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {logs.map((log) => (
                         <TableRow key={log.id}>
                           <TableCell className="text-xs">
-                            {new Date(log.created_at).toLocaleString("zh-CN")}
+                            {new Date(log.created_at).toLocaleString(locale === "zh" ? "zh-CN" : "en-US")}
                           </TableCell>
                           <TableCell className="font-medium">
-                            {log.username || `用户${log.user_id}`}
+                            {log.username || t("userFallback", { id: log.user_id })}
                           </TableCell>
                           <TableCell>
                             <Badge variant="outline">{log.action}</Badge>
@@ -363,18 +367,18 @@ export default function AuditLogsPage() {
                             {log.resource_name}
                           </TableCell>
                           <TableCell>
-                            {log.cluster_name || `集群${log.cluster_id}`}
+                            {log.cluster_name || t("clusterFallback", { id: log.cluster_id })}
                           </TableCell>
                           <TableCell>
                             {log.success ? (
                               <Badge variant="outline" className="text-green-600">
                                 <CheckCircle className="h-3 w-3 mr-1" />
-                                成功
+                                {t("statusSuccess")}
                               </Badge>
                             ) : (
                               <Badge variant="outline" className="text-red-600">
                                 <XCircle className="h-3 w-3 mr-1" />
-                                失败
+                                {t("statusFailed")}
                               </Badge>
                             )}
                           </TableCell>
@@ -391,7 +395,7 @@ export default function AuditLogsPage() {
                 {totalPages > 1 && (
                   <div className="flex items-center justify-between mt-4">
                     <p className="text-sm text-muted-foreground">
-                      第 {page} 页，共 {totalPages} 页
+                      {t("pageSummary", { page, totalPages })}
                     </p>
                     <div className="flex space-x-2">
                       <Button
@@ -400,7 +404,7 @@ export default function AuditLogsPage() {
                         onClick={() => setPage(page - 1)}
                         disabled={page === 1}
                       >
-                        上一页
+                        {t("previousPage")}
                       </Button>
                       <Button
                         variant="outline"
@@ -408,7 +412,7 @@ export default function AuditLogsPage() {
                         onClick={() => setPage(page + 1)}
                         disabled={page === totalPages}
                       >
-                        下一页
+                        {t("nextPage")}
                       </Button>
                     </div>
                   </div>

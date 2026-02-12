@@ -17,6 +17,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useCluster } from "@/lib/cluster-context";
 import { networkPolicyApi, namespaceApi } from "@/lib/api";
 import { toast } from "sonner";
+import { useTranslations } from "@/hooks/use-translations";
 
 interface NetworkPolicy {
   name: string;
@@ -31,6 +32,9 @@ interface NetworkPolicy {
 }
 
 export default function NetworkPoliciesManagement() {
+  const t = useTranslations("networkPoliciesPage");
+  const tCommon = useTranslations("common");
+
   const [policies, setPolicies] = useState<NetworkPolicy[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedClusterId, setSelectedClusterId] = useState<number | null>(null);
@@ -60,10 +64,10 @@ export default function NetworkPoliciesManagement() {
       if (response.data) {
         setPolicies(response.data);
       } else if (response.error) {
-        toast.error(`获取Network Policy列表失败: ${response.error}`);
+        toast.error(t("loadPoliciesErrorWithMessage", { message: response.error }));
       }
     } catch {
-      toast.error("获取Network Policy列表失败");
+      toast.error(t("loadPoliciesError"));
     } finally {
       setIsLoading(false);
     }
@@ -109,13 +113,13 @@ export default function NetworkPoliciesManagement() {
     try {
       const response = await networkPolicyApi.deleteNetworkPolicy(policy.cluster_id, policy.namespace, policy.name);
       if (!response.error) {
-        toast.success("Network Policy删除成功");
+        toast.success(t("deleteSuccess"));
         fetchNetworkPolicies();
       } else {
-        toast.error(`删除Network Policy失败: ${response.error}`);
+        toast.error(t("deleteErrorWithMessage", { message: response.error }));
       }
     } catch {
-      toast.error("删除Network Policy失败");
+      toast.error(t("deleteError"));
     }
   };
 
@@ -128,10 +132,10 @@ export default function NetworkPoliciesManagement() {
         setSelectedPolicy(response.data);
         setIsPreviewOpen(true);
       } else {
-        toast.error(`获取Network Policy详情失败: ${response.error}`);
+        toast.error(t("loadDetailsErrorWithMessage", { message: response.error }));
       }
     } catch {
-      toast.error("获取Network Policy详情失败");
+      toast.error(t("loadDetailsError"));
     } finally {
       setIsPreviewLoading(false);
     }
@@ -143,11 +147,11 @@ export default function NetworkPoliciesManagement() {
 
     const response = await networkPolicyApi.createNetworkPolicy(selectedClusterId, policyData);
     if (!response.error) {
-      toast.success("Network Policy创建成功");
+      toast.success(t("createSuccess"));
       setIsCreateOpen(false);
       fetchNetworkPolicies();
     } else {
-      toast.error(`创建Network Policy失败: ${response.error}`);
+      toast.error(t("createErrorWithMessage", { message: response.error }));
     }
   };
 
@@ -160,10 +164,10 @@ export default function NetworkPoliciesManagement() {
         setEditingPolicy(response.data);
         setIsEditOpen(true);
       } else {
-        toast.error(`获取Network Policy详情失败: ${response.error}`);
+        toast.error(t("loadDetailsErrorWithMessage", { message: response.error }));
       }
     } catch {
-      toast.error("获取Network Policy详情失败");
+      toast.error(t("loadDetailsError"));
     } finally {
       setIsPreviewLoading(false);
     }
@@ -180,12 +184,12 @@ export default function NetworkPoliciesManagement() {
       policyData
     );
     if (!response.error) {
-      toast.success("Network Policy更新成功");
+      toast.success(t("updateSuccess"));
       setIsEditOpen(false);
       setEditingPolicy(null);
       fetchNetworkPolicies();
     } else {
-      toast.error(`更新Network Policy失败: ${response.error}`);
+      toast.error(t("updateErrorWithMessage", { message: response.error }));
     }
   };
 
@@ -193,8 +197,8 @@ export default function NetworkPoliciesManagement() {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
-          <h2 className="text-2xl font-bold mb-4">请先登录</h2>
-          <Button onClick={() => router.push('/login')}>前往登录</Button>
+          <h2 className="text-2xl font-bold mb-4">{t("pleaseLogin")}</h2>
+          <Button onClick={() => router.push('/login')}>{t("goToLogin")}</Button>
         </div>
       </div>
     );
@@ -209,7 +213,7 @@ export default function NetworkPoliciesManagement() {
             <div className="flex items-center">
               <Link href="/" className="flex items-center">
                 <ArrowLeft className="h-5 w-5 mr-2" />
-                <span className="text-gray-600 dark:text-gray-400">返回仪表板</span>
+                <span className="text-gray-600 dark:text-gray-400">{tCommon("backToDashboard")}</span>
               </Link>
             </div>
             <div className="flex items-center space-x-4">
@@ -219,7 +223,7 @@ export default function NetworkPoliciesManagement() {
               />
               <Select value={selectedNamespace} onValueChange={setSelectedNamespace}>
                 <SelectTrigger className="w-[200px]">
-                  <SelectValue placeholder="选择命名空间" />
+                  <SelectValue placeholder={t("selectNamespace")} />
                 </SelectTrigger>
                 <SelectContent>
                   {namespaces.map(ns => (
@@ -237,10 +241,10 @@ export default function NetworkPoliciesManagement() {
         <div className="mb-8">
           <h2 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
             <Shield className="w-8 h-8" />
-            Network Policies管理
+            {t("title")}
           </h2>
           <p className="mt-2 text-gray-600 dark:text-gray-400">
-            管理Kubernetes集群中的网络策略
+            {t("description")}
           </p>
         </div>
 
@@ -248,14 +252,14 @@ export default function NetworkPoliciesManagement() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>Network Policy列表</CardTitle>
+              <CardTitle>{t("listTitle")}</CardTitle>
               <CardDescription>
-                {selectedNamespace ? `命名空间: ${selectedNamespace}` : "请选择命名空间"}
+                {selectedNamespace ? t("namespaceValue", { namespace: selectedNamespace }) : t("selectNamespaceHint")}
               </CardDescription>
             </div>
             <Button onClick={() => setIsCreateOpen(true)}>
               <Plus className="w-4 h-4 mr-2" />
-              创建Network Policy
+              {t("createPolicy")}
             </Button>
           </div>
         </CardHeader>
@@ -263,21 +267,21 @@ export default function NetworkPoliciesManagement() {
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="w-8 h-8 animate-spin" />
-              <span className="ml-2">加载中...</span>
+              <span className="ml-2">{tCommon("loading")}</span>
             </div>
           ) : policies.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              {selectedNamespace ? "该命名空间下没有Network Policies" : "请选择命名空间查看Network Policies"}
+              {selectedNamespace ? t("noPoliciesInNamespace") : t("selectNamespaceToView")}
             </div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>名称</TableHead>
-                  <TableHead>Pod选择器</TableHead>
-                  <TableHead>策略类型</TableHead>
-                  <TableHead>年龄</TableHead>
-                  <TableHead>操作</TableHead>
+                  <TableHead>{t("nameLabel")}</TableHead>
+                  <TableHead>{t("podSelectorLabel")}</TableHead>
+                  <TableHead>{t("policyTypesLabel")}</TableHead>
+                  <TableHead>{t("ageLabel")}</TableHead>
+                  <TableHead>{tCommon("actions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -292,7 +296,7 @@ export default function NetworkPoliciesManagement() {
                           ))}
                         </div>
                       ) : (
-                        <span className="text-muted-foreground">无选择器</span>
+                        <span className="text-muted-foreground">{t("noSelector")}</span>
                       )}
                     </TableCell>
                     <TableCell>
@@ -310,7 +314,7 @@ export default function NetworkPoliciesManagement() {
                           size="sm"
                           onClick={() => handleViewNetworkPolicy(policy)}
                           disabled={isPreviewLoading}
-                          title="查看详情"
+                          title={t("viewDetails")}
                         >
                           <Eye className="w-4 h-4" />
                         </Button>
@@ -319,7 +323,7 @@ export default function NetworkPoliciesManagement() {
                           size="sm"
                           onClick={() => handleEditNetworkPolicy(policy)}
                           disabled={isPreviewLoading}
-                          title="编辑"
+                          title={tCommon("edit")}
                         >
                           <Edit className="w-4 h-4" />
                         </Button>
@@ -328,7 +332,7 @@ export default function NetworkPoliciesManagement() {
                           size="sm"
                           onClick={() => handleDeleteNetworkPolicy(policy)}
                           className="text-red-600 hover:text-red-700"
-                          title="删除"
+                          title={tCommon("delete")}
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>
@@ -348,41 +352,41 @@ export default function NetworkPoliciesManagement() {
         <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              {selectedPolicy ? `${selectedPolicy.namespace}/${selectedPolicy.name} - Network Policy详情` : "Network Policy详情"}
+              {selectedPolicy ? t("detailsTitleWithName", { namespace: selectedPolicy.namespace, name: selectedPolicy.name }) : t("detailsTitle")}
             </DialogTitle>
           </DialogHeader>
           {selectedPolicy && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label className="font-medium">名称</Label>
+                  <Label className="font-medium">{t("nameLabel")}</Label>
                   <p className="text-sm text-muted-foreground">{selectedPolicy.name}</p>
                 </div>
                 <div>
-                  <Label className="font-medium">命名空间</Label>
+                  <Label className="font-medium">{t("namespaceLabel")}</Label>
                   <p className="text-sm text-muted-foreground">{selectedPolicy.namespace}</p>
                 </div>
                 <div>
-                  <Label className="font-medium">年龄</Label>
+                  <Label className="font-medium">{t("ageLabel")}</Label>
                   <p className="text-sm text-muted-foreground">{selectedPolicy.age}</p>
                 </div>
               </div>
 
               <div>
-                <Label className="font-medium">Pod选择器</Label>
+                <Label className="font-medium">{t("podSelectorLabel")}</Label>
                 <div className="mt-1">
                   {selectedPolicy.pod_selector && Object.keys(selectedPolicy.pod_selector).length > 0 ? (
                     <div className="bg-muted p-2 rounded text-sm font-mono">
                       {JSON.stringify(selectedPolicy.pod_selector, null, 2)}
                     </div>
                   ) : (
-                    <p className="text-sm text-muted-foreground">无Pod选择器（适用于所有Pod）</p>
+                    <p className="text-sm text-muted-foreground">{t("noPodSelector")}</p>
                   )}
                 </div>
               </div>
 
               <div>
-                <Label className="font-medium">策略类型</Label>
+                <Label className="font-medium">{t("policyTypesLabel")}</Label>
                 <div className="mt-1">
                   {selectedPolicy.policy_types && selectedPolicy.policy_types.length > 0 ? (
                     <div className="flex flex-wrap gap-2">
@@ -391,59 +395,59 @@ export default function NetworkPoliciesManagement() {
                       ))}
                     </div>
                   ) : (
-                    <p className="text-sm text-muted-foreground">无策略类型</p>
+                    <p className="text-sm text-muted-foreground">{t("noPolicyTypes")}</p>
                   )}
                 </div>
               </div>
 
               <div>
-                <Label className="font-medium">标签</Label>
+                <Label className="font-medium">{t("labelsLabel")}</Label>
                 <div className="mt-1">
                   {selectedPolicy.labels && Object.keys(selectedPolicy.labels).length > 0 ? (
                     <div className="bg-muted p-2 rounded text-sm font-mono">
                       {JSON.stringify(selectedPolicy.labels, null, 2)}
                     </div>
                   ) : (
-                    <p className="text-sm text-muted-foreground">无标签</p>
+                    <p className="text-sm text-muted-foreground">{t("noLabels")}</p>
                   )}
                 </div>
               </div>
 
               <div>
-                <Label className="font-medium">注解</Label>
+                <Label className="font-medium">{t("annotationsLabel")}</Label>
                 <div className="mt-1">
                   {selectedPolicy.annotations && Object.keys(selectedPolicy.annotations).length > 0 ? (
                     <div className="bg-muted p-2 rounded text-sm font-mono">
                       {JSON.stringify(selectedPolicy.annotations, null, 2)}
                     </div>
                   ) : (
-                    <p className="text-sm text-muted-foreground">无注解</p>
+                    <p className="text-sm text-muted-foreground">{t("noAnnotations")}</p>
                   )}
                 </div>
               </div>
 
               {selectedPolicy.ingress && selectedPolicy.ingress.length > 0 && (
                 <div>
-                  <Label className="font-medium">入站规则</Label>
+                  <Label className="font-medium">{t("ingressRulesLabel")}</Label>
                   <div className="mt-1 space-y-2">
                     {selectedPolicy.ingress.map((rule: any, index: number) => (
                       <div key={index} className="bg-muted p-3 rounded">
-                        <p className="text-sm font-medium">规则 {index + 1}</p>
+                        <p className="text-sm font-medium">{t("ruleLabel", { index: index + 1 })}</p>
                         {rule.from && rule.from.length > 0 && (
                           <div className="mt-2">
-                            <p className="text-xs font-medium text-muted-foreground">来源:</p>
+                            <p className="text-xs font-medium text-muted-foreground">{t("fromLabel")}</p>
                             {rule.from.map((from: any, fromIndex: number) => (
                               <div key={fromIndex} className="text-xs text-muted-foreground mt-1">
-                                {from.podSelector && `Pod选择器: ${JSON.stringify(from.podSelector)}`}
-                                {from.namespaceSelector && `命名空间选择器: ${JSON.stringify(from.namespaceSelector)}`}
-                                {from.ipBlock && `IP块: ${from.ipBlock.cidr}`}
+                                {from.podSelector && t("podSelectorValue", { value: JSON.stringify(from.podSelector) })}
+                                {from.namespaceSelector && t("namespaceSelectorValue", { value: JSON.stringify(from.namespaceSelector) })}
+                                {from.ipBlock && t("ipBlockValue", { value: from.ipBlock.cidr })}
                               </div>
                             ))}
                           </div>
                         )}
                         {rule.ports && rule.ports.length > 0 && (
                           <div className="mt-2">
-                            <p className="text-xs font-medium text-muted-foreground">端口:</p>
+                            <p className="text-xs font-medium text-muted-foreground">{t("portsLabel")}</p>
                             {rule.ports.map((port: any, portIndex: number) => (
                               <div key={portIndex} className="text-xs text-muted-foreground mt-1">
                                 {port.port} ({port.protocol})
@@ -459,26 +463,26 @@ export default function NetworkPoliciesManagement() {
 
               {selectedPolicy.egress && selectedPolicy.egress.length > 0 && (
                 <div>
-                  <Label className="font-medium">出站规则</Label>
+                  <Label className="font-medium">{t("egressRulesLabel")}</Label>
                   <div className="mt-1 space-y-2">
                     {selectedPolicy.egress.map((rule: any, index: number) => (
                       <div key={index} className="bg-muted p-3 rounded">
-                        <p className="text-sm font-medium">规则 {index + 1}</p>
+                        <p className="text-sm font-medium">{t("ruleLabel", { index: index + 1 })}</p>
                         {rule.to && rule.to.length > 0 && (
                           <div className="mt-2">
-                            <p className="text-xs font-medium text-muted-foreground">目标:</p>
+                            <p className="text-xs font-medium text-muted-foreground">{t("toLabel")}</p>
                             {rule.to.map((to: any, toIndex: number) => (
                               <div key={toIndex} className="text-xs text-muted-foreground mt-1">
-                                {to.podSelector && `Pod选择器: ${JSON.stringify(to.podSelector)}`}
-                                {to.namespaceSelector && `命名空间选择器: ${JSON.stringify(to.namespaceSelector)}`}
-                                {to.ipBlock && `IP块: ${to.ipBlock.cidr}`}
+                                {to.podSelector && t("podSelectorValue", { value: JSON.stringify(to.podSelector) })}
+                                {to.namespaceSelector && t("namespaceSelectorValue", { value: JSON.stringify(to.namespaceSelector) })}
+                                {to.ipBlock && t("ipBlockValue", { value: to.ipBlock.cidr })}
                               </div>
                             ))}
                           </div>
                         )}
                         {rule.ports && rule.ports.length > 0 && (
                           <div className="mt-2">
-                            <p className="text-xs font-medium text-muted-foreground">端口:</p>
+                            <p className="text-xs font-medium text-muted-foreground">{t("portsLabel")}</p>
                             {rule.ports.map((port: any, portIndex: number) => (
                               <div key={portIndex} className="text-xs text-muted-foreground mt-1">
                                 {port.port} ({port.protocol})
@@ -494,7 +498,7 @@ export default function NetworkPoliciesManagement() {
             </div>
           )}
           <DialogFooter>
-            <Button onClick={() => setIsPreviewOpen(false)}>关闭</Button>
+            <Button onClick={() => setIsPreviewOpen(false)}>{tCommon("close")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -502,7 +506,7 @@ export default function NetworkPoliciesManagement() {
       {/* 创建Network Policy对话框 */}
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
         <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
-          <DialogTitle className="sr-only">创建Network Policy</DialogTitle>
+          <DialogTitle className="sr-only">{t("createPolicy")}</DialogTitle>
           <NetworkPolicyForm
             onSubmit={handleCreateNetworkPolicy}
             onCancel={() => setIsCreateOpen(false)}
@@ -514,7 +518,7 @@ export default function NetworkPoliciesManagement() {
       {/* 编辑Network Policy对话框 */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
         <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
-          <DialogTitle className="sr-only">编辑Network Policy</DialogTitle>
+          <DialogTitle className="sr-only">{t("editPolicy")}</DialogTitle>
           <NetworkPolicyForm
             onSubmit={handleUpdateNetworkPolicy}
             onCancel={() => setIsEditOpen(false)}
