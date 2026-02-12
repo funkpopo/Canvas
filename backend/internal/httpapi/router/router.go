@@ -79,10 +79,8 @@ func New(db *gorm.DB, cfg config.Settings) http.Handler {
 		api.Route("/users", func(users chi.Router) {
 			users.Use(authMiddleware.RequireAuth)
 			users.With(appmw.RequireAdmin).Get("/", userHandler.List)
-			users.With(appmw.RequireAdmin).Get("", userHandler.List)
 			users.With(appmw.RequireAdmin).Get("/{userID}", userHandler.Get)
 			users.With(appmw.RequireAdmin).Post("/", userHandler.Create)
-			users.With(appmw.RequireAdmin).Post("", userHandler.Create)
 			users.With(appmw.RequireAdmin).Put("/{userID}", userHandler.Update)
 			users.With(appmw.RequireAdmin).Delete("/{userID}", userHandler.Delete)
 			users.Put("/{userID}/password", userHandler.ChangePassword)
@@ -91,11 +89,9 @@ func New(db *gorm.DB, cfg config.Settings) http.Handler {
 		api.Route("/clusters", func(clusters chi.Router) {
 			clusters.Use(authMiddleware.RequireAuth)
 			clusters.Get("/", clusterHandler.List)
-			clusters.Get("", clusterHandler.List)
 			clusters.Get("/{clusterID}", clusterHandler.Get)
 			clusters.Post("/{clusterID}/test-connection", clusterHandler.TestConnection)
 			clusters.With(appmw.RequireAdmin).Post("/", clusterHandler.Create)
-			clusters.With(appmw.RequireAdmin).Post("", clusterHandler.Create)
 			clusters.With(appmw.RequireAdmin).Put("/{clusterID}", clusterHandler.Update)
 			clusters.With(appmw.RequireAdmin).Delete("/{clusterID}", clusterHandler.Delete)
 			clusters.With(appmw.RequireAdmin).Post("/{clusterID}/activate", clusterHandler.Activate)
@@ -122,7 +118,6 @@ func New(db *gorm.DB, cfg config.Settings) http.Handler {
 			audit.Use(authMiddleware.RequireAuth)
 			audit.Use(appmw.RequireAdmin)
 			audit.Get("/", auditLogHandler.List)
-			audit.Get("", auditLogHandler.List)
 			audit.Get("/stats/summary", auditLogHandler.StatsSummary)
 		})
 
@@ -147,17 +142,14 @@ func New(db *gorm.DB, cfg config.Settings) http.Handler {
 		api.Route("/nodes", func(nodes chi.Router) {
 			nodes.Use(authMiddleware.RequireAuth)
 			nodes.Get("/", nodeHandler.List)
-			nodes.Get("", nodeHandler.List)
 			nodes.Get("/{nodeName}", nodeHandler.Get)
 		})
 
 		api.Route("/namespaces", func(namespaces chi.Router) {
 			namespaces.Use(authMiddleware.RequireAuth)
 			namespaces.Get("/", namespaceHandler.List)
-			namespaces.Get("", namespaceHandler.List)
 			namespaces.Get("/{namespace}", namespaceHandler.Get)
 			namespaces.With(appmw.RequireAdmin).Post("/", namespaceHandler.Create)
-			namespaces.With(appmw.RequireAdmin).Post("", namespaceHandler.Create)
 			namespaces.With(appmw.RequireAdmin).Delete("/{namespace}", namespaceHandler.Delete)
 			namespaces.Get("/{namespace}/resources", namespaceHandler.Resources)
 			namespaces.Get("/{namespace}/deployments", namespaceHandler.Deployments)
@@ -168,7 +160,6 @@ func New(db *gorm.DB, cfg config.Settings) http.Handler {
 		api.Route("/pods", func(pods chi.Router) {
 			pods.Use(authMiddleware.RequireAuth)
 			pods.Get("/", podHandler.List)
-			pods.Get("", podHandler.List)
 			pods.Get("/{namespace}/{podName}", podHandler.Get)
 			pods.With(appmw.RequireAdmin).Delete("/{namespace}/{podName}", podHandler.Delete)
 			pods.With(appmw.RequireAdmin).Post("/batch-delete", podHandler.BatchDelete)
@@ -178,7 +169,6 @@ func New(db *gorm.DB, cfg config.Settings) http.Handler {
 		api.Route("/deployments", func(deployments chi.Router) {
 			deployments.Use(authMiddleware.RequireAuth)
 			deployments.Get("/", deploymentHandler.List)
-			deployments.Get("", deploymentHandler.List)
 			deployments.Get("/page", deploymentHandler.ListPage)
 			deployments.Get("/{namespace}/{deploymentName}", deploymentHandler.Get)
 			deployments.Get("/{namespace}/{deploymentName}/pods", deploymentHandler.Pods)
@@ -197,12 +187,10 @@ func New(db *gorm.DB, cfg config.Settings) http.Handler {
 		api.Route("/services", func(services chi.Router) {
 			services.Use(authMiddleware.RequireAuth)
 			services.Get("/", serviceHandler.List)
-			services.Get("", serviceHandler.List)
 			services.Get("/page", serviceHandler.ListPage)
 			services.Get("/{namespace}/{serviceName}", serviceHandler.Get)
 			services.Get("/{namespace}/{serviceName}/yaml", serviceHandler.GetYAML)
 			services.With(appmw.RequireAdmin).Post("/", serviceHandler.Create)
-			services.With(appmw.RequireAdmin).Post("", serviceHandler.Create)
 			services.With(appmw.RequireAdmin).Put("/{namespace}/{serviceName}", serviceHandler.Update)
 			services.With(appmw.RequireAdmin).Put("/{namespace}/{serviceName}/yaml", serviceHandler.UpdateYAML)
 			services.With(appmw.RequireAdmin).Delete("/{namespace}/{serviceName}", serviceHandler.Delete)
@@ -211,12 +199,10 @@ func New(db *gorm.DB, cfg config.Settings) http.Handler {
 		api.Route("/configmaps", func(configmaps chi.Router) {
 			configmaps.Use(authMiddleware.RequireAuth)
 			configmaps.Get("/", configMapHandler.List)
-			configmaps.Get("", configMapHandler.List)
 			configmaps.Get("/page", configMapHandler.ListPage)
 			configmaps.Get("/{namespace}/{configmapName}", configMapHandler.Get)
 			configmaps.Get("/{namespace}/{configmapName}/yaml", configMapHandler.GetYAML)
 			configmaps.With(appmw.RequireAdmin).Post("/", configMapHandler.Create)
-			configmaps.With(appmw.RequireAdmin).Post("", configMapHandler.Create)
 			configmaps.With(appmw.RequireAdmin).Post("/yaml", configMapHandler.CreateYAML)
 			configmaps.With(appmw.RequireAdmin).Put("/{namespace}/{configmapName}", configMapHandler.Update)
 			configmaps.With(appmw.RequireAdmin).Put("/{namespace}/{configmapName}/yaml", configMapHandler.UpdateYAML)
@@ -226,12 +212,10 @@ func New(db *gorm.DB, cfg config.Settings) http.Handler {
 		api.Route("/secrets", func(secrets chi.Router) {
 			secrets.Use(authMiddleware.RequireAuth)
 			secrets.Get("/", secretHandler.List)
-			secrets.Get("", secretHandler.List)
 			secrets.Get("/page", secretHandler.ListPage)
 			secrets.Get("/{namespace}/{secretName}", secretHandler.Get)
 			secrets.Get("/{namespace}/{secretName}/yaml", secretHandler.GetYAML)
 			secrets.With(appmw.RequireAdmin).Post("/", secretHandler.Create)
-			secrets.With(appmw.RequireAdmin).Post("", secretHandler.Create)
 			secrets.With(appmw.RequireAdmin).Post("/yaml", secretHandler.CreateYAML)
 			secrets.With(appmw.RequireAdmin).Put("/{namespace}/{secretName}", secretHandler.Update)
 			secrets.With(appmw.RequireAdmin).Put("/{namespace}/{secretName}/yaml", secretHandler.UpdateYAML)
@@ -241,10 +225,8 @@ func New(db *gorm.DB, cfg config.Settings) http.Handler {
 		api.Route("/resource-quotas", func(quotas chi.Router) {
 			quotas.Use(authMiddleware.RequireAuth)
 			quotas.Get("/", resourceQuotaHandler.List)
-			quotas.Get("", resourceQuotaHandler.List)
 			quotas.Get("/{namespace}/{quotaName}", resourceQuotaHandler.Get)
 			quotas.With(appmw.RequireAdmin).Post("/", resourceQuotaHandler.Create)
-			quotas.With(appmw.RequireAdmin).Post("", resourceQuotaHandler.Create)
 			quotas.With(appmw.RequireAdmin).Put("/{namespace}/{quotaName}", resourceQuotaHandler.Update)
 			quotas.With(appmw.RequireAdmin).Delete("/{namespace}/{quotaName}", resourceQuotaHandler.Delete)
 		})
@@ -252,10 +234,8 @@ func New(db *gorm.DB, cfg config.Settings) http.Handler {
 		api.Route("/network-policies", func(policies chi.Router) {
 			policies.Use(authMiddleware.RequireAuth)
 			policies.Get("/", networkPolicyHandler.List)
-			policies.Get("", networkPolicyHandler.List)
 			policies.Get("/{namespace}/{policyName}", networkPolicyHandler.Get)
 			policies.With(appmw.RequireAdmin).Post("/", networkPolicyHandler.Create)
-			policies.With(appmw.RequireAdmin).Post("", networkPolicyHandler.Create)
 			policies.With(appmw.RequireAdmin).Put("/{namespace}/{policyName}", networkPolicyHandler.Update)
 			policies.With(appmw.RequireAdmin).Delete("/{namespace}/{policyName}", networkPolicyHandler.Delete)
 		})
@@ -263,7 +243,6 @@ func New(db *gorm.DB, cfg config.Settings) http.Handler {
 		api.Route("/events", func(events chi.Router) {
 			events.Use(authMiddleware.RequireAuth)
 			events.Get("/", eventHandler.List)
-			events.Get("", eventHandler.List)
 		})
 
 		api.Route("/jobs", func(jobs chi.Router) {
