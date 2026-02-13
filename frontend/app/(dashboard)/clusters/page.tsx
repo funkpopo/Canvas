@@ -4,9 +4,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ThemeToggle } from "@/components/ui/theme-toggle";
-import { LanguageToggle } from "@/components/ui/language-toggle";
-import { Plus, Edit, Trash2, TestTube, ArrowLeft, Loader2, Power, PowerOff, Activity } from "lucide-react";
+import { Plus, Edit, Trash2, TestTube, Loader2, Power, PowerOff, Activity } from "lucide-react";
 import Link from "next/link";
 
 import { clusterApi, metricsApi } from "@/lib/api";
@@ -190,32 +188,8 @@ function ClustersPageContent() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="bg-card shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
-              <Link href="/" className="flex items-center">
-                <ArrowLeft className="h-5 w-5 mr-2" />
-                <span className="text-gray-600 dark:text-gray-400">{tCommon("backToDashboard")}</span>
-              </Link>
-            </div>
-            <div className="flex items-center space-x-4">
-              <LanguageToggle />
-              <ThemeToggle />
-              <Button asChild>
-                <Link href="/clusters/new">
-                  <Plus className="h-4 w-4 mr-2" />
-                  {t("addCluster")}
-                </Link>
-              </Button>
-            </div>
-          </div>
-        </div>
-      </header>
-
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="py-8">
         <div className="mb-8">
           <h2 className="text-3xl font-bold text-gray-900 dark:text-white">
             {t("title")}

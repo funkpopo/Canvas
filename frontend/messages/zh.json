@@ -664,6 +664,8 @@
     "clusterPodCount": "Pod数量",
     "metricsUnavailable": "当前集群未安装或未启用 metrics-server。",
     "nodeResourceUsage": "节点资源使用",
+    "allClusters": "所有集群",
+    "noNodeMetrics": "暂无节点指标数据",
     "cpuUsageRate": "CPU使用率",
     "memoryUsageRate": "内存使用率",
     "quickActions": "快速操作",

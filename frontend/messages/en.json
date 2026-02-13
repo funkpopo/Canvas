@@ -664,6 +664,8 @@
     "clusterPodCount": "Pod Count",
     "metricsUnavailable": "Metrics server is unavailable for this cluster.",
     "nodeResourceUsage": "Node Resource Usage",
+    "allClusters": "All Clusters",
+    "noNodeMetrics": "No node metrics available",
     "cpuUsageRate": "CPU Usage",
     "memoryUsageRate": "Memory Usage",
     "quickActions": "Quick Actions",
