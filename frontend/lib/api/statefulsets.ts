@@ -41,6 +41,13 @@ export const statefulsetApi = {
   async deleteStatefulSet(clusterId: number, namespace: string, statefulsetName: string): Promise<ApiResponse<null>> {
     return apiClient.delete<null>(`/statefulsets/clusters/${clusterId}/namespaces/${namespace}/statefulsets/${statefulsetName}`);
   },
+
+  async createStatefulSet(clusterId: number, namespace: string, yamlContent: string): Promise<ApiResponse<any>> {
+    return apiClient.post<any>(
+      `/statefulsets/clusters/${clusterId}/namespaces/${namespace}/statefulsets`,
+      { yaml_content: yamlContent }
+    );
+  },
 };
 
 

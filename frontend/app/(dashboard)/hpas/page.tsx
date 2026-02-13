@@ -2,20 +2,28 @@
 
 import { useEffect, useState, Suspense } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowLeft, Loader2, RefreshCw, Search, Trash2, TrendingUp, Server, LogOut } from "lucide-react";
-import { ThemeToggle } from "@/components/ui/theme-toggle";
-import { LanguageToggle } from "@/components/ui/language-toggle";
-import ClusterSelector from "@/components/ClusterSelector";
+import { Loader2, RefreshCw, Search, Trash2, TrendingUp, Plus } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useCluster } from "@/lib/cluster-context";
 import { toast } from "sonner";
+import dynamic from "next/dynamic";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+
+const YamlEditor = dynamic(() => import("@/components/YamlEditor"), { ssr: false });
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { hpaApi, namespaceApi } from "@/lib/api";
 import { useTranslations } from "@/hooks/use-translations";
@@ -43,9 +51,8 @@ interface Namespace {
 function HPAsContent() {
   const t = useTranslations("hpas");
   const tCommon = useTranslations("common");
-  const tAuth = useTranslations("auth");
   const { runWithFeedback } = useAsyncActionFeedback();
-  const { isAuthenticated, isLoading: authLoading, logout } = useAuth();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const { activeCluster } = useCluster();
   const [hpas, setHPAs] = useState<HPA[]>([]);
   const [namespaces, setNamespaces] = useState<Namespace[]>([]);
@@ -59,6 +66,11 @@ function HPAsContent() {
     description: "",
     onConfirm: () => {},
   });
+
+  // 创建对话框状态
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [createYamlContent, setCreateYamlContent] = useState("");
+  const [createYamlError, setCreateYamlError] = useState("");
 
   const router = useRouter();
   const clusterId = activeCluster?.id.toString();
@@ -151,6 +163,62 @@ function HPAsContent() {
     hpa.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const hpaYamlTemplate = `apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: my-hpa
+  namespace: ${selectedNamespace || "default"}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: my-deployment
+  minReplicas: 1
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 80
+`;
+
+  const handleCreateHPA = async () => {
+    if (!clusterIdNum) {
+      toast.error(t("selectClusterFirst"));
+      return;
+    }
+    if (!createYamlContent.trim()) {
+      toast.error(t("yamlRequired"));
+      return;
+    }
+    try {
+      await runWithFeedback(
+        async () => {
+          const response = await hpaApi.createHPA(
+            clusterIdNum,
+            selectedNamespace || "default",
+            createYamlContent
+          );
+          if (!response.data) {
+            throw new Error(response.error || t("createErrorUnknown"));
+          }
+          setIsCreateOpen(false);
+          setCreateYamlContent("");
+          await fetchHPAs();
+        },
+        {
+          loading: t("createLoading"),
+          success: t("createSuccess"),
+          error: t("createError"),
+        }
+      );
+    } catch (error) {
+      console.error("create hpa failed:", error);
+    }
+  };
+
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -165,81 +233,57 @@ function HPAsContent() {
 
   if (!clusterIdNum) {
     return (
-      <div className="min-h-screen bg-background">
-        <header className="bg-card shadow-sm border-b">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center h-16">
-              <div className="flex items-center">
-                <Server className="h-8 w-8 text-zinc-600" />
-                <h1 className="ml-2 text-xl font-semibold text-gray-900 dark:text-white">Canvas</h1>
-              </div>
-              <div className="flex items-center space-x-4">
-                <ClusterSelector />
-                <LanguageToggle />
-                <ThemeToggle />
-                <Button variant="outline" onClick={logout}>
-                  <LogOut className="h-4 w-4 mr-2" />
-                  {tAuth("logout")}
-                </Button>
-              </div>
-            </div>
-          </div>
-        </header>
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <Card>
-            <CardContent className="flex flex-col items-center justify-center py-12">
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">{t("clusterRequiredTitle")}</h3>
-              <p className="text-gray-600 dark:text-gray-400 mb-4">{t("clusterRequiredDescription")}</p>
-            </CardContent>
-          </Card>
-        </main>
+      <div className="p-6">
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <h3 className="text-lg font-medium mb-2">{t("clusterRequiredTitle")}</h3>
+            <p className="text-muted-foreground mb-4">{t("clusterRequiredDescription")}</p>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="bg-card shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
-              <Server className="h-8 w-8 text-zinc-600" />
-              <h1 className="ml-2 text-xl font-semibold text-gray-900 dark:text-white">Canvas</h1>
-            </div>
-            <div className="flex items-center space-x-4">
-              <ClusterSelector />
-              <LanguageToggle />
-              <ThemeToggle />
-              <Button variant="outline" onClick={logout}>
-                <LogOut className="h-4 w-4 mr-2" />
-                {tAuth("logout")}
+    <div className="p-6 space-y-6">
+      <div className="flex items-center justify-end gap-2">
+        <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+          <DialogTrigger asChild>
+            <Button onClick={() => { setCreateYamlContent(hpaYamlTemplate); setCreateYamlError(""); }}>
+              <Plus className="h-4 w-4 mr-2" />
+              {t("createHPA")}
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>{t("createTitle")}</DialogTitle>
+              <DialogDescription>{t("createDescription")}</DialogDescription>
+            </DialogHeader>
+            <YamlEditor
+              value={createYamlContent}
+              onChange={(value) => { setCreateYamlContent(value); setCreateYamlError(""); }}
+              error={createYamlError}
+              label={t("yamlEditorLabel")}
+              template={hpaYamlTemplate}
+              onApplyTemplate={() => setCreateYamlContent(hpaYamlTemplate)}
+            />
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
+                {tCommon("cancel")}
               </Button>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <Link href="/">
-              <Button variant="outline" size="sm">
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                {t("back")}
+              <Button onClick={handleCreateHPA} disabled={!createYamlContent.trim() || !!createYamlError}>
+                {t("createHPA")}
               </Button>
-            </Link>
-            <div>
-              <h1 className="text-3xl font-bold">{t("title")}</h1>
-              <p className="text-muted-foreground">{t("description")}</p>
-            </div>
-          </div>
-          <Button onClick={fetchHPAs} disabled={isLoading}>
-            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
-            {t("refresh")}
-          </Button>
-        </div>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        <Button onClick={fetchHPAs} disabled={isLoading}>
+          <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
+          {t("refresh")}
+        </Button>
+      </div>
 
-        <Card>
+      <Card>
           <CardHeader>
             <CardTitle>{t("listTitle")}</CardTitle>
             <CardDescription>{t("listDescription")}</CardDescription>
@@ -355,7 +399,6 @@ function HPAsContent() {
           description={confirmDialog.description}
           onConfirm={confirmDialog.onConfirm}
         />
-      </main>
     </div>
   );
 }

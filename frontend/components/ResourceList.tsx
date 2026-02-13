@@ -420,22 +420,6 @@ export function ResourceList<T extends BaseResource>({
 
   return (
     <div>
-      {/* Page Title */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-semibold flex items-center">
-              {Icon && <Icon className="h-6 w-6 mr-2" />}
-              {title}
-            </h2>
-            <p className="mt-1 text-sm text-muted-foreground">{description}</p>
-          </div>
-          <div className="flex items-center space-x-2">
-            {statusBadge}
-          </div>
-        </div>
-      </div>
-
       {/* 加载状态 */}
       {isLoading ? (
         <div className="flex items-center justify-center py-12">

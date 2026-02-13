@@ -10,8 +10,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { Activity, Eye, Code, RotateCcw } from "lucide-react";
+import { Activity, Eye, Code, RotateCcw, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useState } from "react";
 import {
   ResourceList,
@@ -208,6 +209,16 @@ export default function DeploymentsPage() {
     },
   ];
 
+  // 创建按钮
+  const createButton = canManageResources(user) ? (
+    <Link href="/deployments/new">
+      <Button>
+        <Plus className="w-4 h-4 mr-2" />
+        {t("createDeploymentTitle")}
+      </Button>
+    </Link>
+  ) : null;
+
   return (
     <>
       <ResourceList<Deployment>
@@ -237,6 +248,7 @@ export default function DeploymentsPage() {
         }}
         requireNamespace={false}
         searchPlaceholder={t("searchPlaceholder")}
+        headerActions={createButton}
         detailLink={(item) =>
           `/deployments/${item.namespace}/${item.name}?cluster_id=${item.cluster_id}`
         }

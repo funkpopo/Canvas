@@ -37,6 +37,13 @@ export const hpaApi = {
   async deleteHPA(clusterId: number, namespace: string, hpaName: string): Promise<ApiResponse<null>> {
     return apiClient.delete<null>(`/hpas/clusters/${clusterId}/namespaces/${namespace}/hpas/${hpaName}`);
   },
+
+  async createHPA(clusterId: number, namespace: string, yamlContent: string): Promise<ApiResponse<any>> {
+    return apiClient.post<any>(
+      `/hpas/clusters/${clusterId}/namespaces/${namespace}/hpas`,
+      { yaml_content: yamlContent }
+    );
+  },
 };
 
 

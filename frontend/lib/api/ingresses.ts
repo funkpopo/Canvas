@@ -41,6 +41,13 @@ export const ingressApi = {
   async deleteIngress(clusterId: number, namespace: string, ingressName: string): Promise<ApiResponse<null>> {
     return apiClient.delete<null>(`/ingresses/clusters/${clusterId}/namespaces/${namespace}/ingresses/${ingressName}`);
   },
+
+  async createIngress(clusterId: number, namespace: string, yamlContent: string): Promise<ApiResponse<any>> {
+    return apiClient.post<any>(
+      `/ingresses/clusters/${clusterId}/namespaces/${namespace}/ingresses`,
+      { yaml_content: yamlContent }
+    );
+  },
 };
 
 

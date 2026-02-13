@@ -2,8 +2,21 @@
 
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import dynamic from "next/dynamic";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Layers, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Loader2, Layers, Trash2, Plus } from "lucide-react";
+
+const YamlEditor = dynamic(() => import("@/components/YamlEditor"), { ssr: false });
 import {
   ResourceList,
   ColumnDef,
@@ -14,6 +27,8 @@ import {
 } from "@/components/ResourceList";
 import { daemonsetApi } from "@/lib/api";
 import { useTranslations } from "@/hooks/use-translations";
+import { useAsyncActionFeedback } from "@/hooks/use-async-action-feedback";
+import { toast } from "sonner";
 
 // ============ 类型定义 ============
 
@@ -29,12 +44,109 @@ interface DaemonSet extends BaseResource {
 
 function DaemonSetsContent() {
   const t = useTranslations("daemonsets");
+  const tCommon = useTranslations("common");
+  const { runWithFeedback } = useAsyncActionFeedback();
   const searchParams = useSearchParams();
   const clusterIdFromUrl = searchParams.get("cluster_id");
 
   const [selectedNamespace, setSelectedNamespace] = useState("");
   const [selectedClusterId, setSelectedClusterId] = useState<number | null>(
     clusterIdFromUrl ? parseInt(clusterIdFromUrl) : null
+  );
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  // 创建对话框状态
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [yamlContent, setYamlContent] = useState("");
+  const [yamlError, setYamlError] = useState("");
+
+  const yamlTemplate = `apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: my-daemonset
+  namespace: ${selectedNamespace || "default"}
+spec:
+  selector:
+    matchLabels:
+      app: my-app
+  template:
+    metadata:
+      labels:
+        app: my-app
+    spec:
+      containers:
+      - name: my-container
+        image: nginx:latest
+        ports:
+        - containerPort: 80
+`;
+
+  const handleCreateDaemonSet = async () => {
+    if (!selectedClusterId) {
+      toast.error(t("selectClusterFirst"));
+      return;
+    }
+    if (!yamlContent.trim()) {
+      toast.error(t("yamlRequired"));
+      return;
+    }
+    try {
+      await runWithFeedback(
+        async () => {
+          const response = await daemonsetApi.createDaemonSet(
+            selectedClusterId,
+            selectedNamespace || "default",
+            yamlContent
+          );
+          if (!response.data) {
+            throw new Error(response.error || t("createErrorUnknown"));
+          }
+          setIsCreateOpen(false);
+          setYamlContent("");
+          setRefreshKey((k) => k + 1);
+        },
+        {
+          loading: t("createLoading"),
+          success: t("createSuccess"),
+          error: t("createError"),
+        }
+      );
+    } catch (error) {
+      console.error("create daemonset failed:", error);
+    }
+  };
+
+  const createButton = (
+    <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+      <DialogTrigger asChild>
+        <Button onClick={() => { setYamlContent(yamlTemplate); setYamlError(""); }}>
+          <Plus className="w-4 h-4 mr-2" />
+          {t("createDaemonSet")}
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{t("createTitle")}</DialogTitle>
+          <DialogDescription>{t("createDescription")}</DialogDescription>
+        </DialogHeader>
+        <YamlEditor
+          value={yamlContent}
+          onChange={(value) => { setYamlContent(value); setYamlError(""); }}
+          error={yamlError}
+          label={t("yamlEditorLabel")}
+          template={yamlTemplate}
+          onApplyTemplate={() => setYamlContent(yamlTemplate)}
+        />
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
+            {tCommon("cancel")}
+          </Button>
+          <Button onClick={handleCreateDaemonSet} disabled={!yamlContent.trim() || !!yamlError}>
+            {t("createDaemonSet")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 
   // ============ 列定义 ============
@@ -80,6 +192,7 @@ function DaemonSetsContent() {
 
   return (
     <ResourceList<DaemonSet>
+      key={refreshKey}
       resourceType="DaemonSet"
       title={t("title")}
       description={t("description")}
@@ -108,6 +221,7 @@ function DaemonSetsContent() {
       allowAllNamespaces={true}
       defaultNamespace=""
       searchPlaceholder={t("searchPlaceholder")}
+      headerActions={createButton}
       deleteConfirm={{
         title: t("deleteTitle"),
         description: (item) =>

@@ -31,6 +31,13 @@ export const daemonsetApi = {
   async deleteDaemonSet(clusterId: number, namespace: string, daemonsetName: string): Promise<ApiResponse<null>> {
     return apiClient.delete<null>(`/daemonsets/clusters/${clusterId}/namespaces/${namespace}/daemonsets/${daemonsetName}`);
   },
+
+  async createDaemonSet(clusterId: number, namespace: string, yamlContent: string): Promise<ApiResponse<any>> {
+    return apiClient.post<any>(
+      `/daemonsets/clusters/${clusterId}/namespaces/${namespace}/daemonsets`,
+      { yaml_content: yamlContent }
+    );
+  },
 };
 
 

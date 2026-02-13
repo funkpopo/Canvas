@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Plus, Trash2, Eye, Edit, Loader2, Shield, ArrowLeft } from "lucide-react";
+import { Plus, Trash2, Eye, Edit, Loader2 } from "lucide-react";
 import ClusterSelector from "@/components/ClusterSelector";
 import NetworkPolicyForm from "@/components/NetworkPolicyForm";
 import { useAuth } from "@/lib/auth-context";
@@ -205,63 +204,37 @@ export default function NetworkPoliciesManagement() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="bg-card shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
-              <Link href="/" className="flex items-center">
-                <ArrowLeft className="h-5 w-5 mr-2" />
-                <span className="text-gray-600 dark:text-gray-400">{tCommon("backToDashboard")}</span>
-              </Link>
-            </div>
-            <div className="flex items-center space-x-4">
-              <ClusterSelector
-                value={selectedClusterId?.toString() || ""}
-                onValueChange={(value) => setSelectedClusterId(value ? parseInt(value) : null)}
-              />
-              <Select value={selectedNamespace} onValueChange={setSelectedNamespace}>
-                <SelectTrigger className="w-[200px]">
-                  <SelectValue placeholder={t("selectNamespace")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {namespaces.map(ns => (
-                    <SelectItem key={ns} value={ns}>{ns}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+    <div className="p-6 space-y-6">
+      {/* Toolbar: cluster/namespace selectors + create button */}
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <ClusterSelector
+            value={selectedClusterId?.toString() || ""}
+            onValueChange={(value) => setSelectedClusterId(value ? parseInt(value) : null)}
+          />
+          <Select value={selectedNamespace} onValueChange={setSelectedNamespace}>
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder={t("selectNamespace")} />
+            </SelectTrigger>
+            <SelectContent>
+              {namespaces.map(ns => (
+                <SelectItem key={ns} value={ns}>{ns}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <h2 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            <Shield className="w-8 h-8" />
-            {t("title")}
-          </h2>
-          <p className="mt-2 text-gray-600 dark:text-gray-400">
-            {t("description")}
-          </p>
-        </div>
+        <Button onClick={() => setIsCreateOpen(true)}>
+          <Plus className="w-4 h-4 mr-2" />
+          {t("createPolicy")}
+        </Button>
+      </div>
 
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>{t("listTitle")}</CardTitle>
-              <CardDescription>
-                {selectedNamespace ? t("namespaceValue", { namespace: selectedNamespace }) : t("selectNamespaceHint")}
-              </CardDescription>
-            </div>
-            <Button onClick={() => setIsCreateOpen(true)}>
-              <Plus className="w-4 h-4 mr-2" />
-              {t("createPolicy")}
-            </Button>
-          </div>
+          <CardTitle>{t("listTitle")}</CardTitle>
+          <CardDescription>
+            {selectedNamespace ? t("namespaceValue", { namespace: selectedNamespace }) : t("selectNamespaceHint")}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -345,7 +318,6 @@ export default function NetworkPoliciesManagement() {
           )}
         </CardContent>
       </Card>
-      </main>
 
       {/* Network Policy详情预览对话框 */}
       <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>

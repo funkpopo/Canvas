@@ -2,6 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import dynamic from "next/dynamic";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,10 +12,13 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Server, Settings, Trash2, Loader2 } from "lucide-react";
+import { Server, Settings, Trash2, Loader2, Plus } from "lucide-react";
+
+const YamlEditor = dynamic(() => import("@/components/YamlEditor"), { ssr: false });
 import {
   ResourceList,
   ColumnDef,
@@ -26,6 +30,7 @@ import {
 import { statefulsetApi } from "@/lib/api";
 import { useTranslations } from "@/hooks/use-translations";
 import { useAsyncActionFeedback } from "@/hooks/use-async-action-feedback";
+import { toast } from "sonner";
 
 interface StatefulSet extends BaseResource {
   replicas: number;
@@ -51,6 +56,102 @@ function StatefulSetsContent() {
   );
 
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // 创建对话框状态
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [yamlContent, setYamlContent] = useState("");
+  const [yamlError, setYamlError] = useState("");
+
+  const yamlTemplate = `apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: my-statefulset
+  namespace: ${selectedNamespace || "default"}
+spec:
+  serviceName: my-service
+  replicas: 1
+  selector:
+    matchLabels:
+      app: my-app
+  template:
+    metadata:
+      labels:
+        app: my-app
+    spec:
+      containers:
+      - name: my-container
+        image: nginx:latest
+        ports:
+        - containerPort: 80
+`;
+
+  const handleCreateStatefulSet = async () => {
+    if (!selectedClusterId) {
+      toast.error(t("selectClusterFirst"));
+      return;
+    }
+    if (!yamlContent.trim()) {
+      toast.error(t("yamlRequired"));
+      return;
+    }
+    try {
+      await runWithFeedback(
+        async () => {
+          const response = await statefulsetApi.createStatefulSet(
+            selectedClusterId,
+            selectedNamespace || "default",
+            yamlContent
+          );
+          if (!response.data) {
+            throw new Error(response.error || t("createErrorUnknown"));
+          }
+          setIsCreateOpen(false);
+          setYamlContent("");
+          setRefreshKey((k) => k + 1);
+        },
+        {
+          loading: t("createLoading"),
+          success: t("createSuccess"),
+          error: t("createError"),
+        }
+      );
+    } catch (error) {
+      console.error("create statefulset failed:", error);
+    }
+  };
+
+  const createButton = (
+    <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+      <DialogTrigger asChild>
+        <Button onClick={() => { setYamlContent(yamlTemplate); setYamlError(""); }}>
+          <Plus className="w-4 h-4 mr-2" />
+          {t("createStatefulSet")}
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{t("createTitle")}</DialogTitle>
+          <DialogDescription>{t("createDescription")}</DialogDescription>
+        </DialogHeader>
+        <YamlEditor
+          value={yamlContent}
+          onChange={(value) => { setYamlContent(value); setYamlError(""); }}
+          error={yamlError}
+          label={t("yamlEditorLabel")}
+          template={yamlTemplate}
+          onApplyTemplate={() => setYamlContent(yamlTemplate)}
+        />
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
+            {tCommon("cancel")}
+          </Button>
+          <Button onClick={handleCreateStatefulSet} disabled={!yamlContent.trim() || !!yamlError}>
+            {t("createStatefulSet")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 
   const openScaleDialog = (sts: StatefulSet) => {
     setScaleTarget(sts);
@@ -160,6 +261,7 @@ function StatefulSetsContent() {
         allowAllNamespaces={true}
         defaultNamespace=""
         searchPlaceholder={t("searchPlaceholder")}
+        headerActions={createButton}
         deleteConfirm={{
           title: t("deleteTitle"),
           description: (item) => t("deleteDescription", { name: item.name }),

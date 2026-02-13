@@ -143,6 +143,64 @@ func (h *DeploymentHandler) Pods(w http.ResponseWriter, r *http.Request) {
 	response.Success(w, r, http.StatusOK, items)
 }
 
+type deploymentCreateRequest struct {
+	YAMLContent string `json:"yaml_content"`
+	YAML        string `json:"yaml"`
+}
+
+func (h *DeploymentHandler) Create(w http.ResponseWriter, r *http.Request) {
+	var req deploymentCreateRequest
+	if err := response.DecodeJSON(r, &req); err != nil {
+		response.Error(w, r, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	content := strings.TrimSpace(req.YAMLContent)
+	if content == "" {
+		content = strings.TrimSpace(req.YAML)
+	}
+	if content == "" {
+		response.Error(w, r, http.StatusBadRequest, "yaml_content is required")
+		return
+	}
+
+	obj := &appsv1.Deployment{}
+	if err := yaml.Unmarshal([]byte(content), obj); err != nil {
+		response.Error(w, r, http.StatusBadRequest, "invalid deployment yaml: "+err.Error())
+		return
+	}
+	if strings.TrimSpace(obj.Name) == "" {
+		response.Error(w, r, http.StatusBadRequest, "metadata.name is required")
+		return
+	}
+	if strings.TrimSpace(obj.Namespace) == "" {
+		response.Error(w, r, http.StatusBadRequest, "metadata.namespace is required")
+		return
+	}
+
+	obj.ResourceVersion = ""
+	obj.UID = ""
+	obj.CreationTimestamp = metav1.Time{}
+	obj.ManagedFields = nil
+	obj.Generation = 0
+	obj.SelfLink = ""
+	obj.Status = appsv1.DeploymentStatus{}
+
+	_, cluster, clientset, err := h.Resolver.ResolveClient(r)
+	if err != nil {
+		response.Error(w, r, http.StatusBadRequest, err.Error())
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	created, err := clientset.AppsV1().Deployments(obj.Namespace).Create(ctx, obj, metav1.CreateOptions{})
+	if err != nil {
+		response.Error(w, r, http.StatusBadGateway, err.Error())
+		return
+	}
+	response.Success(w, r, http.StatusCreated, mapDeployment(*created, cluster.ID, cluster.Name))
+}
+
 type scaleRequest struct {
 	Replicas int32 `json:"replicas"`
 }

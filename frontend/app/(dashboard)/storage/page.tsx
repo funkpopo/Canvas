@@ -12,12 +12,10 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { LogOut, Database, Plus, Trash2, Eye, Loader2, ArrowLeft } from "lucide-react";
-import ClusterSelector from "@/components/ClusterSelector";
+import { Database, Plus, Trash2, Eye, Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useCluster } from "@/lib/cluster-context";
 import { storageApi } from "@/lib/api";
-import type { Cluster } from "@/lib/cluster-context";
 import { toast } from "sonner";
 import { useTranslations } from "@/hooks/use-translations";
 
@@ -106,7 +104,7 @@ export default function StorageManagement() {
   });
 
   const router = useRouter();
-  const { isAuthenticated, isLoading: authLoading, logout } = useAuth();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const { activeCluster, clusters, isLoading: clusterLoading } = useCluster();
 
   useEffect(() => {
@@ -298,59 +296,30 @@ export default function StorageManagement() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="bg-card shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
-              <Link href="/" className="flex items-center">
-                <ArrowLeft className="h-5 w-5 mr-2" />
-                <span className="text-gray-600 dark:text-gray-400">{tCommon("backToDashboard")}</span>
-              </Link>
-            </div>
-            <div className="flex items-center space-x-4">
-              <ClusterSelector />
-            </div>
-          </div>
-        </div>
-      </header>
-
+    <div className="p-6">
       {/* 检查是否有活跃集群 */}
       {!activeCluster && !isLoading && !clusterLoading ? (
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
-            <Database className="h-16 w-16 text-gray-400 mb-4" />
-            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-2">
-              {t("noActiveClusterTitle")}
-            </h2>
-            <p className="text-gray-600 dark:text-gray-400 mb-4">
-              {t("noActiveClusterDescription")}
-            </p>
-            <div className="text-sm text-gray-500 mt-4">
-              <p>{t("authStatus", { status: isAuthenticated ? t("statusAuthenticated") : t("statusUnauthenticated") })}</p>
-              <p>{t("clusterCount", { count: clusters.length })}</p>
-              <p>{t("activeClusterStatus", { status: activeCluster ? t("statusSelected") : t("statusNone") })}</p>
-            </div>
-            <Button asChild>
-              <Link href="/clusters/new">
-                {t("createCluster")}
-              </Link>
-            </Button>
-          </div>
-        </main>
-      ) : (
-        /* Main Content */
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <h2 className="text-3xl font-bold text-gray-900 dark:text-white">
-            {t("title")}
+        <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
+          <Database className="h-16 w-16 text-muted-foreground mb-4" />
+          <h2 className="text-2xl font-semibold mb-2">
+            {t("noActiveClusterTitle")}
           </h2>
-          <p className="mt-2 text-gray-600 dark:text-gray-400">
-            {t("description")}
+          <p className="text-muted-foreground mb-4">
+            {t("noActiveClusterDescription")}
           </p>
+          <div className="text-sm text-muted-foreground mt-4">
+            <p>{t("authStatus", { status: isAuthenticated ? t("statusAuthenticated") : t("statusUnauthenticated") })}</p>
+            <p>{t("clusterCount", { count: clusters.length })}</p>
+            <p>{t("activeClusterStatus", { status: activeCluster ? t("statusSelected") : t("statusNone") })}</p>
+          </div>
+          <Button asChild>
+            <Link href="/clusters/new">
+              {t("createCluster")}
+            </Link>
+          </Button>
         </div>
-
+      ) : (
+        <div className="space-y-6">
         <Card>
           <CardHeader>
             <CardTitle>{t("resourceManagementTitle")}</CardTitle>
@@ -793,7 +762,7 @@ export default function StorageManagement() {
             </Tabs>
           </CardContent>
         </Card>
-      </main>
+        </div>
       )}
     </div>
   );

@@ -19,6 +19,7 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"sigs.k8s.io/yaml"
 )
 
 type WorkloadHandler struct {
@@ -418,6 +419,265 @@ func (h *WorkloadHandler) DeleteIngress(w http.ResponseWriter, r *http.Request) 
 	h.deleteWorkload(w, r, func(ctx context.Context, clientset *kubernetes.Clientset, namespace string, name string) error {
 		return clientset.NetworkingV1().Ingresses(namespace).Delete(ctx, name, metav1.DeleteOptions{})
 	})
+}
+
+type workloadCreateRequest struct {
+	YAMLContent string `json:"yaml_content"`
+}
+
+func (h *WorkloadHandler) CreateStatefulSet(w http.ResponseWriter, r *http.Request) {
+	namespace := strings.TrimSpace(chi.URLParam(r, "namespace"))
+	if namespace == "" {
+		response.Error(w, r, http.StatusBadRequest, "namespace is required")
+		return
+	}
+
+	var req workloadCreateRequest
+	if err := response.DecodeJSON(r, &req); err != nil {
+		response.Error(w, r, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if strings.TrimSpace(req.YAMLContent) == "" {
+		response.Error(w, r, http.StatusBadRequest, "yaml_content is required")
+		return
+	}
+
+	cluster, clientset, err := h.resolveClusterClient(r)
+	if err != nil {
+		response.Error(w, r, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	obj := &appsv1.StatefulSet{}
+	if err := yaml.Unmarshal([]byte(req.YAMLContent), obj); err != nil {
+		response.Error(w, r, http.StatusBadRequest, "invalid statefulset yaml: "+err.Error())
+		return
+	}
+	if strings.TrimSpace(obj.Name) == "" {
+		response.Error(w, r, http.StatusBadRequest, "metadata.name is required")
+		return
+	}
+	obj.Namespace = namespace
+	obj.ResourceVersion = ""
+	obj.UID = ""
+	obj.CreationTimestamp = metav1.Time{}
+	obj.ManagedFields = nil
+	obj.Generation = 0
+	obj.Status = appsv1.StatefulSetStatus{}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	created, err := clientset.AppsV1().StatefulSets(namespace).Create(ctx, obj, metav1.CreateOptions{})
+	if err != nil {
+		response.Error(w, r, http.StatusBadGateway, err.Error())
+		return
+	}
+	response.Success(w, r, http.StatusCreated, mapStatefulSet(*created, cluster.ID, cluster.Name))
+}
+
+func (h *WorkloadHandler) CreateDaemonSet(w http.ResponseWriter, r *http.Request) {
+	namespace := strings.TrimSpace(chi.URLParam(r, "namespace"))
+	if namespace == "" {
+		response.Error(w, r, http.StatusBadRequest, "namespace is required")
+		return
+	}
+
+	var req workloadCreateRequest
+	if err := response.DecodeJSON(r, &req); err != nil {
+		response.Error(w, r, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if strings.TrimSpace(req.YAMLContent) == "" {
+		response.Error(w, r, http.StatusBadRequest, "yaml_content is required")
+		return
+	}
+
+	cluster, clientset, err := h.resolveClusterClient(r)
+	if err != nil {
+		response.Error(w, r, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	obj := &appsv1.DaemonSet{}
+	if err := yaml.Unmarshal([]byte(req.YAMLContent), obj); err != nil {
+		response.Error(w, r, http.StatusBadRequest, "invalid daemonset yaml: "+err.Error())
+		return
+	}
+	if strings.TrimSpace(obj.Name) == "" {
+		response.Error(w, r, http.StatusBadRequest, "metadata.name is required")
+		return
+	}
+	obj.Namespace = namespace
+	obj.ResourceVersion = ""
+	obj.UID = ""
+	obj.CreationTimestamp = metav1.Time{}
+	obj.ManagedFields = nil
+	obj.Generation = 0
+	obj.Status = appsv1.DaemonSetStatus{}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	created, err := clientset.AppsV1().DaemonSets(namespace).Create(ctx, obj, metav1.CreateOptions{})
+	if err != nil {
+		response.Error(w, r, http.StatusBadGateway, err.Error())
+		return
+	}
+	response.Success(w, r, http.StatusCreated, mapDaemonSet(*created, cluster.ID, cluster.Name))
+}
+
+func (h *WorkloadHandler) CreateCronJob(w http.ResponseWriter, r *http.Request) {
+	namespace := strings.TrimSpace(chi.URLParam(r, "namespace"))
+	if namespace == "" {
+		response.Error(w, r, http.StatusBadRequest, "namespace is required")
+		return
+	}
+
+	var req workloadCreateRequest
+	if err := response.DecodeJSON(r, &req); err != nil {
+		response.Error(w, r, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if strings.TrimSpace(req.YAMLContent) == "" {
+		response.Error(w, r, http.StatusBadRequest, "yaml_content is required")
+		return
+	}
+
+	cluster, clientset, err := h.resolveClusterClient(r)
+	if err != nil {
+		response.Error(w, r, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	obj := &batchv1.CronJob{}
+	if err := yaml.Unmarshal([]byte(req.YAMLContent), obj); err != nil {
+		response.Error(w, r, http.StatusBadRequest, "invalid cronjob yaml: "+err.Error())
+		return
+	}
+	if strings.TrimSpace(obj.Name) == "" {
+		response.Error(w, r, http.StatusBadRequest, "metadata.name is required")
+		return
+	}
+	obj.Namespace = namespace
+	obj.ResourceVersion = ""
+	obj.UID = ""
+	obj.CreationTimestamp = metav1.Time{}
+	obj.ManagedFields = nil
+	obj.Generation = 0
+	obj.Status = batchv1.CronJobStatus{}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	created, err := clientset.BatchV1().CronJobs(namespace).Create(ctx, obj, metav1.CreateOptions{})
+	if err != nil {
+		response.Error(w, r, http.StatusBadGateway, err.Error())
+		return
+	}
+	response.Success(w, r, http.StatusCreated, mapCronJob(*created, cluster.ID, cluster.Name))
+}
+
+func (h *WorkloadHandler) CreateIngress(w http.ResponseWriter, r *http.Request) {
+	namespace := strings.TrimSpace(chi.URLParam(r, "namespace"))
+	if namespace == "" {
+		response.Error(w, r, http.StatusBadRequest, "namespace is required")
+		return
+	}
+
+	var req workloadCreateRequest
+	if err := response.DecodeJSON(r, &req); err != nil {
+		response.Error(w, r, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if strings.TrimSpace(req.YAMLContent) == "" {
+		response.Error(w, r, http.StatusBadRequest, "yaml_content is required")
+		return
+	}
+
+	cluster, clientset, err := h.resolveClusterClient(r)
+	if err != nil {
+		response.Error(w, r, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	obj := &networkingv1.Ingress{}
+	if err := yaml.Unmarshal([]byte(req.YAMLContent), obj); err != nil {
+		response.Error(w, r, http.StatusBadRequest, "invalid ingress yaml: "+err.Error())
+		return
+	}
+	if strings.TrimSpace(obj.Name) == "" {
+		response.Error(w, r, http.StatusBadRequest, "metadata.name is required")
+		return
+	}
+	obj.Namespace = namespace
+	obj.ResourceVersion = ""
+	obj.UID = ""
+	obj.CreationTimestamp = metav1.Time{}
+	obj.ManagedFields = nil
+	obj.Generation = 0
+	obj.Status = networkingv1.IngressStatus{}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	created, err := clientset.NetworkingV1().Ingresses(namespace).Create(ctx, obj, metav1.CreateOptions{})
+	if err != nil {
+		response.Error(w, r, http.StatusBadGateway, err.Error())
+		return
+	}
+	response.Success(w, r, http.StatusCreated, mapIngress(*created, cluster.ID, cluster.Name))
+}
+
+func (h *WorkloadHandler) CreateHPA(w http.ResponseWriter, r *http.Request) {
+	namespace := strings.TrimSpace(chi.URLParam(r, "namespace"))
+	if namespace == "" {
+		response.Error(w, r, http.StatusBadRequest, "namespace is required")
+		return
+	}
+
+	var req workloadCreateRequest
+	if err := response.DecodeJSON(r, &req); err != nil {
+		response.Error(w, r, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if strings.TrimSpace(req.YAMLContent) == "" {
+		response.Error(w, r, http.StatusBadRequest, "yaml_content is required")
+		return
+	}
+
+	cluster, clientset, err := h.resolveClusterClient(r)
+	if err != nil {
+		response.Error(w, r, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	obj := &autoscalingv2.HorizontalPodAutoscaler{}
+	if err := yaml.Unmarshal([]byte(req.YAMLContent), obj); err != nil {
+		response.Error(w, r, http.StatusBadRequest, "invalid hpa yaml: "+err.Error())
+		return
+	}
+	if strings.TrimSpace(obj.Name) == "" {
+		response.Error(w, r, http.StatusBadRequest, "metadata.name is required")
+		return
+	}
+	obj.Namespace = namespace
+	obj.ResourceVersion = ""
+	obj.UID = ""
+	obj.CreationTimestamp = metav1.Time{}
+	obj.ManagedFields = nil
+	obj.Generation = 0
+	obj.Status = autoscalingv2.HorizontalPodAutoscalerStatus{}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	created, err := clientset.AutoscalingV2().HorizontalPodAutoscalers(namespace).Create(ctx, obj, metav1.CreateOptions{})
+	if err != nil {
+		response.Error(w, r, http.StatusBadGateway, err.Error())
+		return
+	}
+	response.Success(w, r, http.StatusCreated, mapHPA(*created, cluster.ID, cluster.Name))
 }
 
 func (h *WorkloadHandler) deleteWorkload(

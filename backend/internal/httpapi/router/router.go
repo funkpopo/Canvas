@@ -172,6 +172,7 @@ func New(db *gorm.DB, cfg config.Settings) http.Handler {
 			deployments.Use(authMiddleware.RequireAuth)
 			deployments.Get("/", deploymentHandler.List)
 			deployments.Get("/page", deploymentHandler.ListPage)
+			deployments.With(appmw.RequireAdmin).Post("/", deploymentHandler.Create)
 			deployments.Get("/{namespace}/{deploymentName}", deploymentHandler.Get)
 			deployments.Get("/{namespace}/{deploymentName}/pods", deploymentHandler.Pods)
 			deployments.Get("/{namespace}/{deploymentName}/yaml", deploymentHandler.GetYAML)
@@ -323,6 +324,7 @@ func New(db *gorm.DB, cfg config.Settings) http.Handler {
 			cronjobs.Use(authMiddleware.RequireAuth)
 			cronjobs.Get("/clusters/{clusterID}/namespaces/{namespace}/cronjobs", workloadHandler.ListCronJobs)
 			cronjobs.Get("/clusters/{clusterID}/namespaces/{namespace}/cronjobs/{name}", workloadHandler.GetCronJob)
+			cronjobs.With(appmw.RequireAdmin).Post("/clusters/{clusterID}/namespaces/{namespace}/cronjobs", workloadHandler.CreateCronJob)
 			cronjobs.With(appmw.RequireAdmin).Delete("/clusters/{clusterID}/namespaces/{namespace}/cronjobs/{name}", workloadHandler.DeleteCronJob)
 		})
 
@@ -330,6 +332,7 @@ func New(db *gorm.DB, cfg config.Settings) http.Handler {
 			daemonsets.Use(authMiddleware.RequireAuth)
 			daemonsets.Get("/clusters/{clusterID}/namespaces/{namespace}/daemonsets", workloadHandler.ListDaemonSets)
 			daemonsets.Get("/clusters/{clusterID}/namespaces/{namespace}/daemonsets/{name}", workloadHandler.GetDaemonSet)
+			daemonsets.With(appmw.RequireAdmin).Post("/clusters/{clusterID}/namespaces/{namespace}/daemonsets", workloadHandler.CreateDaemonSet)
 			daemonsets.With(appmw.RequireAdmin).Delete("/clusters/{clusterID}/namespaces/{namespace}/daemonsets/{name}", workloadHandler.DeleteDaemonSet)
 		})
 
@@ -337,6 +340,7 @@ func New(db *gorm.DB, cfg config.Settings) http.Handler {
 			statefulsets.Use(authMiddleware.RequireAuth)
 			statefulsets.Get("/clusters/{clusterID}/namespaces/{namespace}/statefulsets", workloadHandler.ListStatefulSets)
 			statefulsets.Get("/clusters/{clusterID}/namespaces/{namespace}/statefulsets/{name}", workloadHandler.GetStatefulSet)
+			statefulsets.With(appmw.RequireAdmin).Post("/clusters/{clusterID}/namespaces/{namespace}/statefulsets", workloadHandler.CreateStatefulSet)
 			statefulsets.With(appmw.RequireAdmin).Post("/clusters/{clusterID}/namespaces/{namespace}/statefulsets/{name}/scale", workloadHandler.ScaleStatefulSet)
 			statefulsets.With(appmw.RequireAdmin).Delete("/clusters/{clusterID}/namespaces/{namespace}/statefulsets/{name}", workloadHandler.DeleteStatefulSet)
 		})
@@ -345,6 +349,7 @@ func New(db *gorm.DB, cfg config.Settings) http.Handler {
 			hpas.Use(authMiddleware.RequireAuth)
 			hpas.Get("/clusters/{clusterID}/namespaces/{namespace}/hpas", workloadHandler.ListHPAs)
 			hpas.Get("/clusters/{clusterID}/namespaces/{namespace}/hpas/{name}", workloadHandler.GetHPA)
+			hpas.With(appmw.RequireAdmin).Post("/clusters/{clusterID}/namespaces/{namespace}/hpas", workloadHandler.CreateHPA)
 			hpas.With(appmw.RequireAdmin).Delete("/clusters/{clusterID}/namespaces/{namespace}/hpas/{name}", workloadHandler.DeleteHPA)
 		})
 
@@ -352,6 +357,7 @@ func New(db *gorm.DB, cfg config.Settings) http.Handler {
 			ingresses.Use(authMiddleware.RequireAuth)
 			ingresses.Get("/clusters/{clusterID}/namespaces/{namespace}/ingresses", workloadHandler.ListIngresses)
 			ingresses.Get("/clusters/{clusterID}/namespaces/{namespace}/ingresses/{name}", workloadHandler.GetIngress)
+			ingresses.With(appmw.RequireAdmin).Post("/clusters/{clusterID}/namespaces/{namespace}/ingresses", workloadHandler.CreateIngress)
 			ingresses.With(appmw.RequireAdmin).Delete("/clusters/{clusterID}/namespaces/{namespace}/ingresses/{name}", workloadHandler.DeleteIngress)
 		})
 

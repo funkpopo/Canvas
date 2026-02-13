@@ -87,6 +87,10 @@ export const deploymentApi = {
     return apiClient.delete<null>(`/deployments/${namespace}/${deploymentName}${clusterQuery(clusterId)}`);
   },
 
+  async createDeployment(clusterId: number, data: { yaml_content: string }): Promise<ApiResponse<any>> {
+    return apiClient.post<any>(`/deployments${clusterQuery(clusterId)}`, data);
+  },
+
   async getDeploymentYaml(
     clusterId: number | undefined,
     namespace: string,

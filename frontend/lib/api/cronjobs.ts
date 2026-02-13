@@ -27,6 +27,13 @@ export const cronjobApi = {
   async deleteCronJob(clusterId: number, namespace: string, cronjobName: string): Promise<ApiResponse<null>> {
     return apiClient.delete<null>(`/cronjobs/clusters/${clusterId}/namespaces/${namespace}/cronjobs/${cronjobName}`);
   },
+
+  async createCronJob(clusterId: number, namespace: string, yamlContent: string): Promise<ApiResponse<any>> {
+    return apiClient.post<any>(
+      `/cronjobs/clusters/${clusterId}/namespaces/${namespace}/cronjobs`,
+      { yaml_content: yamlContent }
+    );
+  },
 };
 
 

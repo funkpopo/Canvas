@@ -2,15 +2,25 @@
 
 import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowLeft, Loader2, RefreshCw, Search, Trash2, Clock, Pause, Play, AlertCircle } from "lucide-react";
-import { toast } from "sonner";
+import { Loader2, RefreshCw, Search, Trash2, Clock, Pause, Play, AlertCircle, Plus } from "lucide-react";import { toast } from "sonner";
+import dynamic from "next/dynamic";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+
+const YamlEditor = dynamic(() => import("@/components/YamlEditor"), { ssr: false });
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useCluster } from "@/lib/cluster-context";
 import { cronjobApi, namespaceApi } from "@/lib/api";
@@ -53,14 +63,17 @@ function CronJobsContent() {
     onConfirm: () => {},
   });
 
+  // 创建对话框状态
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [createYamlContent, setCreateYamlContent] = useState("");
+  const [createYamlError, setCreateYamlError] = useState("");
+
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { selectedCluster, clusters } = useCluster();
+  const { selectedCluster } = useCluster();
   const clusterIdFromUrl = searchParams.get("cluster_id");
   const clusterId = clusterIdFromUrl || (selectedCluster ? String(selectedCluster) : null);
   const clusterIdNum = clusterId ? parseInt(clusterId, 10) : null;
-
-  const currentCluster = clusterIdNum ? clusters.find((c) => c.id === clusterIdNum) : null;
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -151,6 +164,59 @@ function CronJobsContent() {
     cj.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const cronjobYamlTemplate = `apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: my-cronjob
+  namespace: ${selectedNamespace || "default"}
+spec:
+  schedule: "*/5 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: my-job
+            image: busybox:latest
+            command: ["echo", "Hello from CronJob"]
+          restartPolicy: OnFailure
+`;
+
+  const handleCreateCronJob = async () => {
+    if (!clusterIdNum) {
+      toast.error(t("selectClusterFirst"));
+      return;
+    }
+    if (!createYamlContent.trim()) {
+      toast.error(t("yamlRequired"));
+      return;
+    }
+    try {
+      await runWithFeedback(
+        async () => {
+          const response = await cronjobApi.createCronJob(
+            clusterIdNum,
+            selectedNamespace || "default",
+            createYamlContent
+          );
+          if (!response.data) {
+            throw new Error(response.error || t("createErrorUnknown"));
+          }
+          setIsCreateOpen(false);
+          setCreateYamlContent("");
+          await fetchCronJobs();
+        },
+        {
+          loading: t("createLoading"),
+          success: t("createSuccess"),
+          error: t("createError"),
+        }
+      );
+    } catch (error) {
+      console.error("create cronjob failed:", error);
+    }
+  };
+
   if (!isAuthenticated) {
     return <div>{t("authVerifying")}</div>;
   }
@@ -159,20 +225,10 @@ function CronJobsContent() {
     return (
       <div className="container mx-auto p-6">
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center text-yellow-600">
-              <AlertCircle className="h-5 w-5 mr-2" />
-              {t("clusterRequiredTitle")}
-            </CardTitle>
-            <CardDescription>{t("clusterRequiredDescription")}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Link href="/">
-              <Button>
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                {t("clusterRequiredAction")}
-              </Button>
-            </Link>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <AlertCircle className="h-8 w-8 text-yellow-600 mb-2" />
+            <h3 className="text-lg font-medium mb-2">{t("clusterRequiredTitle")}</h3>
+            <p className="text-muted-foreground mb-4">{t("clusterRequiredDescription")}</p>
           </CardContent>
         </Card>
       </div>
@@ -181,26 +237,37 @@ function CronJobsContent() {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <Link href="/">
-            <Button variant="outline" size="sm">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              {t("back")}
+      <div className="flex items-center justify-end gap-2">
+        <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+          <DialogTrigger asChild>
+            <Button onClick={() => { setCreateYamlContent(cronjobYamlTemplate); setCreateYamlError(""); }}>
+              <Plus className="h-4 w-4 mr-2" />
+              {t("createCronJob")}
             </Button>
-          </Link>
-          <div>
-            <h1 className="text-3xl font-bold">{t("title")}</h1>
-            <p className="text-muted-foreground">
-              {t("description")}
-              {currentCluster && (
-                <span className="ml-2">
-                  • {t("clusterLabel")}: <span className="font-semibold text-foreground">{currentCluster.name}</span>
-                </span>
-              )}
-            </p>
-          </div>
-        </div>
+          </DialogTrigger>
+          <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>{t("createTitle")}</DialogTitle>
+              <DialogDescription>{t("createDescription")}</DialogDescription>
+            </DialogHeader>
+            <YamlEditor
+              value={createYamlContent}
+              onChange={(value) => { setCreateYamlContent(value); setCreateYamlError(""); }}
+              error={createYamlError}
+              label={t("yamlEditorLabel")}
+              template={cronjobYamlTemplate}
+              onApplyTemplate={() => setCreateYamlContent(cronjobYamlTemplate)}
+            />
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
+                {tCommon("cancel")}
+              </Button>
+              <Button onClick={handleCreateCronJob} disabled={!createYamlContent.trim() || !!createYamlError}>
+                {t("createCronJob")}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
         <Button onClick={fetchCronJobs} disabled={isLoading}>
           <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
           {t("refresh")}

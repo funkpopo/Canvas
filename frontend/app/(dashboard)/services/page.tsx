@@ -51,6 +51,7 @@ export default function ServicesPage() {
   const [yamlContent, setYamlContent] = useState("");
   const [yamlError, setYamlError] = useState("");
   const [selectedNamespace, setSelectedNamespace] = useState("default");
+  const [selectedClusterId, setSelectedClusterId] = useState<number | null>(null);
 
   // YAML 预览对话框状态
   const [isYamlOpen, setIsYamlOpen] = useState(false);
@@ -68,6 +69,7 @@ export default function ServicesPage() {
     limit: number
   ): Promise<ApiResponse<{ items: Service[]; continue_token: string | null }>> => {
     if (namespace) setSelectedNamespace(namespace);
+    setSelectedClusterId(clusterId);
     const result = await serviceApi.getServicesPage(clusterId, namespace, limit, continueToken);
     if (result.data) {
       return {
@@ -129,14 +131,40 @@ spec:
   };
 
   // 创建服务
-  const handleCreateService = () => {
+  const handleCreateService = async () => {
+    if (!selectedClusterId) {
+      toast.error(t("createClusterRequired"));
+      return;
+    }
+
     if (!yamlContent.trim()) {
       toast.error(t("yamlRequired"));
       return;
     }
 
-    // TODO: 需要集群 ID，这里暂时只给出引导提示
-    toast.error(t("createClusterRequired"));
+    try {
+      await runWithFeedback(
+        async () => {
+          const response = await serviceApi.createService(
+            selectedClusterId,
+            { yaml_content: yamlContent }
+          );
+          if (!response.data) {
+            throw new Error(response.error || t("createErrorUnknown"));
+          }
+
+          setIsCreateOpen(false);
+          resetForm();
+        },
+        {
+          loading: t("createLoading"),
+          success: t("createSuccess"),
+          error: t("createError"),
+        }
+      );
+    } catch (error) {
+      console.error("create service failed:", error);
+    }
   };
 
   // YAML 模板
