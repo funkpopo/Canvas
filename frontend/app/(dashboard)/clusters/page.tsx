@@ -298,6 +298,8 @@ function ClustersPageContent() {
                         variant="destructive"
                         onClick={() => handleDeleteCluster(cluster.id, cluster.name)}
                         disabled={isOperationLoading}
+                        aria-label={`${tCommon("delete")}: ${cluster.name}`}
+                        title={`${tCommon("delete")}: ${cluster.name}`}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>

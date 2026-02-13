@@ -436,6 +436,8 @@ export default function JobTemplatesPage() {
                                 variant="outline"
                                 onClick={() => openEditDialog(template)}
                                 disabled={isOperationLoading || isEditTemplateLoading}
+                                aria-label={`${tCommon("edit")}: ${template.name}`}
+                                title={`${tCommon("edit")}: ${template.name}`}
                               >
                                 <Edit className="h-3 w-3" />
                               </Button>
@@ -449,6 +451,8 @@ export default function JobTemplatesPage() {
                                   onConfirm: () => handleDeleteTemplate(template.id),
                                 })}
                                 disabled={isOperationLoading}
+                                aria-label={`${tCommon("delete")}: ${template.name}`}
+                                title={`${tCommon("delete")}: ${template.name}`}
                               >
                                 <Trash2 className="h-3 w-3" />
                               </Button>

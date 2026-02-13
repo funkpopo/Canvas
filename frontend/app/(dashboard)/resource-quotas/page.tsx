@@ -266,6 +266,8 @@ export default function ResourceQuotasManagement() {
                           size="sm"
                           onClick={() => handleViewResourceQuota(quota)}
                           disabled={isPreviewLoading}
+                          aria-label={`${t("detailsTitle")}: ${quota.name}`}
+                          title={`${t("detailsTitle")}: ${quota.name}`}
                         >
                           <Eye className="w-4 h-4" />
                         </Button>
@@ -274,6 +276,8 @@ export default function ResourceQuotasManagement() {
                           size="sm"
                           onClick={() => handleDeleteResourceQuota(quota)}
                           className="text-red-600 hover:text-red-700"
+                          aria-label={`${tCommon("delete")}: ${quota.name}`}
+                          title={`${tCommon("delete")}: ${quota.name}`}
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>

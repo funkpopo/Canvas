@@ -519,6 +519,8 @@ export default function StorageManagement() {
                                 variant="outline"
                                 size="sm"
                                 onClick={() => handleDeleteStorageClass(sc.name)}
+                                aria-label={`${tCommon("delete")}: ${sc.name}`}
+                                title={`${tCommon("delete")}: ${sc.name}`}
                               >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
@@ -626,7 +628,13 @@ export default function StorageManagement() {
                             <TableCell>{pv.claim || '-'}</TableCell>
                             <TableCell>
                               <div className="flex gap-2">
-                                <Button variant="outline" size="sm" asChild>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  asChild
+                                  aria-label={`${tCommon("view")}: ${pv.name}`}
+                                  title={`${tCommon("view")}: ${pv.name}`}
+                                >
                                   <Link href={`/storage/volumes/${pv.name}`}>
                                     <Eye className="h-4 w-4" />
                                   </Link>
@@ -635,6 +643,8 @@ export default function StorageManagement() {
                                   variant="outline"
                                   size="sm"
                                   onClick={() => handleDeletePV(pv.name)}
+                                  aria-label={`${tCommon("delete")}: ${pv.name}`}
+                                  title={`${tCommon("delete")}: ${pv.name}`}
                                 >
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
@@ -748,6 +758,8 @@ export default function StorageManagement() {
                                 variant="outline"
                                 size="sm"
                                 onClick={() => handleDeletePVC(pvc.namespace, pvc.name)}
+                                aria-label={`${tCommon("delete")}: ${pvc.name}`}
+                                title={`${tCommon("delete")}: ${pvc.name}`}
                               >
                                 <Trash2 className="h-4 w-4" />
                               </Button>

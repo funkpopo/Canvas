@@ -40,6 +40,7 @@ import { useLanguage } from "@/lib/language-context";
 
 export default function AuditLogsPage() {
   const t = useTranslations("auditLogs");
+  const tCommon = useTranslations("common");
   const { locale } = useLanguage();
   const router = useRouter();
   const { user: currentUser, isLoading: authLoading } = useAuth();
@@ -139,7 +140,12 @@ export default function AuditLogsPage() {
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
         <div className="flex items-center space-x-4">
-          <Button variant="ghost" onClick={() => router.push("/")}>
+          <Button
+            variant="ghost"
+            onClick={() => router.push("/")}
+            aria-label={tCommon("backToDashboard")}
+            title={tCommon("backToDashboard")}
+          >
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>

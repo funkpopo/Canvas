@@ -88,7 +88,12 @@ export default function UserCenterPage() {
       <div className="max-w-7xl mx-auto space-y-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
-            <Button variant="ghost" asChild>
+            <Button
+              variant="ghost"
+              asChild
+              aria-label={tCommon("backToDashboard")}
+              title={tCommon("backToDashboard")}
+            >
               <Link href="/">
                 <ArrowLeft className="h-4 w-4" />
               </Link>

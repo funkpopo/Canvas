@@ -388,6 +388,8 @@ spec:
                                   })
                                 }
                                 disabled={isOperationLoading}
+                                aria-label={`${tCommon("delete")}: ${ing.name}`}
+                                title={`${tCommon("delete")}: ${ing.name}`}
                               >
                                 <Trash2 className="h-3 w-3" />
                               </Button>

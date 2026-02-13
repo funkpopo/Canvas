@@ -270,6 +270,8 @@ function AlertsPageContent() {
                           size="sm"
                           variant="ghost"
                           onClick={() => handleToggleRule(rule)}
+                          aria-label={`${rule.enabled ? t("ruleDisabled") : t("ruleEnabled")}: ${rule.name}`}
+                          title={`${rule.enabled ? t("ruleDisabled") : t("ruleEnabled")}: ${rule.name}`}
                         >
                           {rule.enabled ? <BellOff className="h-4 w-4" /> : <Bell className="h-4 w-4" />}
                         </Button>
@@ -277,6 +279,8 @@ function AlertsPageContent() {
                           size="sm"
                           variant="ghost"
                           onClick={() => setRuleDialog({ open: true, rule })}
+                          aria-label={`${tCommon("edit")}: ${rule.name}`}
+                          title={`${tCommon("edit")}: ${rule.name}`}
                         >
                           <Edit className="h-4 w-4" />
                         </Button>
@@ -291,6 +295,8 @@ function AlertsPageContent() {
                               onConfirm: () => handleDeleteRule(rule.id),
                             });
                           }}
+                          aria-label={`${tCommon("delete")}: ${rule.name}`}
+                          title={`${tCommon("delete")}: ${rule.name}`}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>

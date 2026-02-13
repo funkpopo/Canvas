@@ -383,6 +383,8 @@ export default function CreateDeploymentPage() {
                           onClick={() =>
                             updateContainer(idx, { ports: container.ports.filter((_, i) => i !== pIdx) })
                           }
+                          aria-label={`${tCommon("delete")}: ${t("containerPort")} ${pIdx + 1}`}
+                          title={`${tCommon("delete")}: ${t("containerPort")} ${pIdx + 1}`}
                         >
                           <Trash2 className="h-3 w-3" />
                         </Button>
@@ -490,6 +492,8 @@ export default function CreateDeploymentPage() {
                     variant="ghost"
                     size="sm"
                     onClick={() => setLabels((prev) => prev.filter((_, i) => i !== idx))}
+                    aria-label={`${tCommon("delete")}: ${t("labels")} ${idx + 1}`}
+                    title={`${tCommon("delete")}: ${t("labels")} ${idx + 1}`}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
