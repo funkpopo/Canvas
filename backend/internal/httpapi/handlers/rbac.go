@@ -25,6 +25,7 @@ func NewRBACHandler(resolver *K8sResolver) *RBACHandler {
 
 func (h *RBACHandler) ListRoles(w http.ResponseWriter, r *http.Request) {
 	namespace := strings.TrimSpace(r.URL.Query().Get("namespace"))
+	limit, continueToken := parseRBACListParams(r)
 	_, cluster, clientset, err := h.Resolver.ResolveClient(r)
 	if err != nil {
 		response.Error(w, r, http.StatusBadRequest, err.Error())
@@ -33,22 +34,22 @@ func (h *RBACHandler) ListRoles(w http.ResponseWriter, r *http.Request) {
 
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
-	var roles []rbacv1.Role
+	var list *rbacv1.RoleList
+	listOptions := metav1.ListOptions{Limit: limit, Continue: continueToken}
 	if namespace != "" {
-		list, err := clientset.RbacV1().Roles(namespace).List(ctx, metav1.ListOptions{})
+		list, err = clientset.RbacV1().Roles(namespace).List(ctx, listOptions)
 		if err != nil {
 			response.Error(w, r, http.StatusBadGateway, err.Error())
 			return
 		}
-		roles = list.Items
 	} else {
-		list, err := clientset.RbacV1().Roles(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
+		list, err = clientset.RbacV1().Roles(metav1.NamespaceAll).List(ctx, listOptions)
 		if err != nil {
 			response.Error(w, r, http.StatusBadGateway, err.Error())
 			return
 		}
-		roles = list.Items
 	}
+	roles := list.Items
 
 	items := make([]map[string]interface{}, 0, len(roles))
 	for _, role := range roles {
@@ -59,10 +60,11 @@ func (h *RBACHandler) ListRoles(w http.ResponseWriter, r *http.Request) {
 	})
 
 	response.Success(w, r, http.StatusOK, map[string]interface{}{
-		"roles":        items,
-		"total":        len(items),
-		"cluster_id":   cluster.ID,
-		"cluster_name": cluster.Name,
+		"roles":          items,
+		"total":          totalWithRemaining(len(items), list.RemainingItemCount),
+		"continue_token": nullIfEmpty(list.Continue),
+		"cluster_id":     cluster.ID,
+		"cluster_name":   cluster.Name,
 	})
 }
 
@@ -113,6 +115,7 @@ func (h *RBACHandler) DeleteRole(w http.ResponseWriter, r *http.Request) {
 
 func (h *RBACHandler) ListRoleBindings(w http.ResponseWriter, r *http.Request) {
 	namespace := strings.TrimSpace(r.URL.Query().Get("namespace"))
+	limit, continueToken := parseRBACListParams(r)
 	_, cluster, clientset, err := h.Resolver.ResolveClient(r)
 	if err != nil {
 		response.Error(w, r, http.StatusBadRequest, err.Error())
@@ -121,22 +124,22 @@ func (h *RBACHandler) ListRoleBindings(w http.ResponseWriter, r *http.Request) {
 
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
-	var bindings []rbacv1.RoleBinding
+	var list *rbacv1.RoleBindingList
+	listOptions := metav1.ListOptions{Limit: limit, Continue: continueToken}
 	if namespace != "" {
-		list, err := clientset.RbacV1().RoleBindings(namespace).List(ctx, metav1.ListOptions{})
+		list, err = clientset.RbacV1().RoleBindings(namespace).List(ctx, listOptions)
 		if err != nil {
 			response.Error(w, r, http.StatusBadGateway, err.Error())
 			return
 		}
-		bindings = list.Items
 	} else {
-		list, err := clientset.RbacV1().RoleBindings(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
+		list, err = clientset.RbacV1().RoleBindings(metav1.NamespaceAll).List(ctx, listOptions)
 		if err != nil {
 			response.Error(w, r, http.StatusBadGateway, err.Error())
 			return
 		}
-		bindings = list.Items
 	}
+	bindings := list.Items
 
 	items := make([]map[string]interface{}, 0, len(bindings))
 	for _, binding := range bindings {
@@ -144,10 +147,11 @@ func (h *RBACHandler) ListRoleBindings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.Success(w, r, http.StatusOK, map[string]interface{}{
-		"role_bindings": items,
-		"total":         len(items),
-		"cluster_id":    cluster.ID,
-		"cluster_name":  cluster.Name,
+		"role_bindings":  items,
+		"total":          totalWithRemaining(len(items), list.RemainingItemCount),
+		"continue_token": nullIfEmpty(list.Continue),
+		"cluster_id":     cluster.ID,
+		"cluster_name":   cluster.Name,
 	})
 }
 
@@ -198,6 +202,7 @@ func (h *RBACHandler) DeleteRoleBinding(w http.ResponseWriter, r *http.Request) 
 
 func (h *RBACHandler) ListServiceAccounts(w http.ResponseWriter, r *http.Request) {
 	namespace := strings.TrimSpace(r.URL.Query().Get("namespace"))
+	limit, continueToken := parseRBACListParams(r)
 	_, cluster, clientset, err := h.Resolver.ResolveClient(r)
 	if err != nil {
 		response.Error(w, r, http.StatusBadRequest, err.Error())
@@ -206,22 +211,22 @@ func (h *RBACHandler) ListServiceAccounts(w http.ResponseWriter, r *http.Request
 
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
-	var serviceAccounts []corev1.ServiceAccount
+	var list *corev1.ServiceAccountList
+	listOptions := metav1.ListOptions{Limit: limit, Continue: continueToken}
 	if namespace != "" {
-		list, err := clientset.CoreV1().ServiceAccounts(namespace).List(ctx, metav1.ListOptions{})
+		list, err = clientset.CoreV1().ServiceAccounts(namespace).List(ctx, listOptions)
 		if err != nil {
 			response.Error(w, r, http.StatusBadGateway, err.Error())
 			return
 		}
-		serviceAccounts = list.Items
 	} else {
-		list, err := clientset.CoreV1().ServiceAccounts(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
+		list, err = clientset.CoreV1().ServiceAccounts(metav1.NamespaceAll).List(ctx, listOptions)
 		if err != nil {
 			response.Error(w, r, http.StatusBadGateway, err.Error())
 			return
 		}
-		serviceAccounts = list.Items
 	}
+	serviceAccounts := list.Items
 
 	items := make([]map[string]interface{}, 0, len(serviceAccounts))
 	for _, sa := range serviceAccounts {
@@ -229,7 +234,8 @@ func (h *RBACHandler) ListServiceAccounts(w http.ResponseWriter, r *http.Request
 	}
 	response.Success(w, r, http.StatusOK, map[string]interface{}{
 		"service_accounts": items,
-		"total":            len(items),
+		"total":            totalWithRemaining(len(items), list.RemainingItemCount),
+		"continue_token":   nullIfEmpty(list.Continue),
 		"cluster_id":       cluster.ID,
 		"cluster_name":     cluster.Name,
 	})
@@ -280,6 +286,7 @@ func (h *RBACHandler) DeleteServiceAccount(w http.ResponseWriter, r *http.Reques
 	response.Success(w, r, http.StatusOK, map[string]string{"message": fmt.Sprintf("ServiceAccount %s/%s 删除成功", namespace, name)})
 }
 func (h *RBACHandler) ListClusterRoles(w http.ResponseWriter, r *http.Request) {
+	limit, continueToken := parseRBACListParams(r)
 	_, cluster, clientset, err := h.Resolver.ResolveClient(r)
 	if err != nil {
 		response.Error(w, r, http.StatusBadRequest, err.Error())
@@ -287,7 +294,10 @@ func (h *RBACHandler) ListClusterRoles(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
-	roles, err := clientset.RbacV1().ClusterRoles().List(ctx, metav1.ListOptions{})
+	roles, err := clientset.RbacV1().ClusterRoles().List(ctx, metav1.ListOptions{
+		Limit:    limit,
+		Continue: continueToken,
+	})
 	if err != nil {
 		response.Error(w, r, http.StatusBadGateway, err.Error())
 		return
@@ -298,14 +308,16 @@ func (h *RBACHandler) ListClusterRoles(w http.ResponseWriter, r *http.Request) {
 		items = append(items, mapClusterRole(role))
 	}
 	response.Success(w, r, http.StatusOK, map[string]interface{}{
-		"cluster_roles": items,
-		"total":         len(items),
-		"cluster_id":    cluster.ID,
-		"cluster_name":  cluster.Name,
+		"cluster_roles":  items,
+		"total":          totalWithRemaining(len(items), roles.RemainingItemCount),
+		"continue_token": nullIfEmpty(roles.Continue),
+		"cluster_id":     cluster.ID,
+		"cluster_name":   cluster.Name,
 	})
 }
 
 func (h *RBACHandler) ListClusterRoleBindings(w http.ResponseWriter, r *http.Request) {
+	limit, continueToken := parseRBACListParams(r)
 	_, cluster, clientset, err := h.Resolver.ResolveClient(r)
 	if err != nil {
 		response.Error(w, r, http.StatusBadRequest, err.Error())
@@ -313,7 +325,10 @@ func (h *RBACHandler) ListClusterRoleBindings(w http.ResponseWriter, r *http.Req
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
-	bindings, err := clientset.RbacV1().ClusterRoleBindings().List(ctx, metav1.ListOptions{})
+	bindings, err := clientset.RbacV1().ClusterRoleBindings().List(ctx, metav1.ListOptions{
+		Limit:    limit,
+		Continue: continueToken,
+	})
 	if err != nil {
 		response.Error(w, r, http.StatusBadGateway, err.Error())
 		return
@@ -325,10 +340,30 @@ func (h *RBACHandler) ListClusterRoleBindings(w http.ResponseWriter, r *http.Req
 	}
 	response.Success(w, r, http.StatusOK, map[string]interface{}{
 		"cluster_role_bindings": items,
-		"total":                 len(items),
+		"total":                 totalWithRemaining(len(items), bindings.RemainingItemCount),
+		"continue_token":        nullIfEmpty(bindings.Continue),
 		"cluster_id":            cluster.ID,
 		"cluster_name":          cluster.Name,
 	})
+}
+
+func parseRBACListParams(r *http.Request) (int64, string) {
+	limit := int64(parseIntWithDefault(strings.TrimSpace(r.URL.Query().Get("limit")), 200))
+	if limit <= 0 {
+		limit = 200
+	}
+	if limit > 1000 {
+		limit = 1000
+	}
+	continueToken := strings.TrimSpace(r.URL.Query().Get("continue_token"))
+	return limit, continueToken
+}
+
+func totalWithRemaining(current int, remaining *int64) int {
+	if remaining == nil {
+		return current
+	}
+	return current + int(*remaining)
 }
 
 func mapPolicyRules(rules []rbacv1.PolicyRule) []map[string]interface{} {

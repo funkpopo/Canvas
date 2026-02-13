@@ -86,8 +86,9 @@ export interface JobHistory {
 // ===== Jobs 相关 API =====
 export const jobApi = {
   // Job 管理
-  async getJobs(clusterId: number, namespace: string): Promise<ApiResponse<Job[]>> {
-    return apiClient.get<Job[]>(`/jobs/${clusterId}/namespaces/${namespace}/jobs`);
+  async getJobs(clusterId: number, namespace?: string): Promise<ApiResponse<Job[]>> {
+    const ns = namespace?.trim() || "all";
+    return apiClient.get<Job[]>(`/jobs/${clusterId}/namespaces/${ns}/jobs`);
   },
 
   async getJob(clusterId: number, namespace: string, jobName: string): Promise<ApiResponse<JobDetails>> {

@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter, useParams } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
+import { useRouter, useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,8 +10,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { LogOut, Database, ArrowLeft, FileText, Folder, Eye, Loader2, HardDrive } from "lucide-react";
 import ClusterSelector from "@/components/ClusterSelector";
+import { ClusterContextRequired } from "@/components/ClusterContextRequired";
 import { useAuth } from "@/lib/auth-context";
 import { useCluster } from "@/lib/cluster-context";
+import { resolveClusterContext, withClusterId } from "@/lib/cluster-context-resolver";
 import { storageApi } from "@/lib/api";
 import { useTranslations } from "@/hooks/use-translations";
 
@@ -46,47 +48,40 @@ export default function VolumeDetail() {
   const [volume, setVolume] = useState<PersistentVolume | null>(null);
   const [files, setFiles] = useState<FileItem[]>([]);
   const [currentPath, setCurrentPath] = useState("/");
-  const [isLoading] = useState(true);
-  const [selectedClusterId, setSelectedClusterId] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [fileContent, setFileContent] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [isFileDialogOpen, setIsFileDialogOpen] = useState(false);
 
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { isAuthenticated, isLoading: authLoading, logout } = useAuth();
   const { activeCluster } = useCluster();
+  const clusterContext = resolveClusterContext({
+    clusterIdFromUrl: searchParams.get("cluster_id"),
+    activeClusterId: activeCluster?.id ?? null,
+  });
+  const effectiveClusterId = clusterContext.clusterId;
+  const isClusterContextMissing = clusterContext.source === "none";
 
-  useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
-      router.push("/login");
-      return;
-    }
-
-    if (activeCluster) {
-      setSelectedClusterId(activeCluster.id);
-      loadVolumeData();
-      loadFiles();
-    }
-  }, [isAuthenticated, authLoading, router, activeCluster, volumeName, currentPath]);
-
-  const loadVolumeData = async () => {
-    if (!selectedClusterId || !volumeName) return;
+  const loadVolumeData = useCallback(async () => {
+    if (!effectiveClusterId || !volumeName) return;
 
     try {
-      const response = await storageApi.getPersistentVolume(selectedClusterId, volumeName);
+      const response = await storageApi.getPersistentVolume(effectiveClusterId, volumeName);
       if (response.data) {
         setVolume(response.data);
       }
     } catch (error) {
       console.error("加载持久卷详情失败:", error);
     }
-  };
+  }, [effectiveClusterId, volumeName]);
 
-  const loadFiles = async () => {
-    if (!selectedClusterId || !volumeName) return;
+  const loadFiles = useCallback(async () => {
+    if (!effectiveClusterId || !volumeName) return;
 
     try {
-      const response = await storageApi.browseVolumeFiles(selectedClusterId, volumeName, currentPath);
+      const response = await storageApi.browseVolumeFiles(effectiveClusterId, volumeName, currentPath);
       if (response.data) {
         setFiles(response.data.files || []);
       }
@@ -94,7 +89,38 @@ export default function VolumeDetail() {
       console.error("加载文件列表失败:", error);
       setFiles([]);
     }
-  };
+  }, [effectiveClusterId, volumeName, currentPath]);
+
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      router.push("/login");
+      return;
+    }
+
+    if (!isAuthenticated) return;
+
+    if (isClusterContextMissing) {
+      setIsLoading(false);
+      setVolume(null);
+      setFiles([]);
+      return;
+    }
+
+    let cancelled = false;
+    const loadData = async () => {
+      setIsLoading(true);
+      await Promise.all([loadVolumeData(), loadFiles()]);
+      if (!cancelled) {
+        setIsLoading(false);
+      }
+    };
+
+    void loadData();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, isAuthenticated, router, isClusterContextMissing, loadVolumeData, loadFiles]);
 
   const handleFileClick = async (fileName: string, fileType: string) => {
     if (fileType === "directory") {
@@ -103,7 +129,12 @@ export default function VolumeDetail() {
     } else {
       // 查看文件内容
       try {
-        const response = await storageApi.readVolumeFile(selectedClusterId!, volumeName, `${currentPath === "/" ? "" : currentPath}/${fileName}`);
+        if (!effectiveClusterId) return;
+        const response = await storageApi.readVolumeFile(
+          effectiveClusterId,
+          volumeName,
+          `${currentPath === "/" ? "" : currentPath}/${fileName}`
+        );
         if (response.data) {
           setFileContent(response.data.content);
           setSelectedFile(fileName);
@@ -166,7 +197,7 @@ export default function VolumeDetail() {
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
               <Button variant="outline" asChild>
-                <Link href="/storage">
+                <Link href={withClusterId("/storage", effectiveClusterId)}>
                   <ArrowLeft className="h-4 w-4 mr-2" />
                   {t("backToStorage")}
                 </Link>
@@ -184,7 +215,9 @@ export default function VolumeDetail() {
         </div>
 
         {/* 卷信息卡片 */}
-        {volume && (
+        {isClusterContextMissing ? (
+          <ClusterContextRequired />
+        ) : volume && (
           <Card className="mb-6">
             <CardHeader>
               <CardTitle className="flex items-center">
@@ -229,6 +262,7 @@ export default function VolumeDetail() {
         )}
 
         {/* 文件浏览器 */}
+        {!isClusterContextMissing && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center">
@@ -332,6 +366,7 @@ export default function VolumeDetail() {
             )}
           </CardContent>
         </Card>
+        )}
 
         {/* 文件内容对话框 */}
         <Dialog open={isFileDialogOpen} onOpenChange={setIsFileDialogOpen}>

@@ -14,6 +14,7 @@ import { ArrowLeft, Activity, Loader2, RefreshCw, RotateCcw, Trash2, Settings, S
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { LanguageToggle } from "@/components/ui/language-toggle";
 import ClusterSelector from "@/components/ClusterSelector";
+import { ClusterContextRequired } from "@/components/ClusterContextRequired";
 import { useAuth } from "@/lib/auth-context";
 import { useCluster } from "@/lib/cluster-context";
 import { resolveClusterContext, withClusterId } from "@/lib/cluster-context-resolver";
@@ -104,6 +105,7 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
     [searchParams, activeCluster?.id]
   );
   const effectiveClusterId = clusterContext.clusterId;
+  const isClusterContextMissing = clusterContext.source === "none";
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -113,18 +115,24 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
   }, [isAuthenticated, authLoading, router]);
 
   useEffect(() => {
-    if (isAuthenticated) {
-      fetchDeploymentData();
+    if (!isAuthenticated) return;
+    if (isClusterContextMissing) {
+      setIsLoading(false);
+      setDeploymentDetails(null);
+      setDeploymentPods([]);
+      return;
     }
-  }, [isAuthenticated, effectiveClusterId, resolvedParams.namespace, resolvedParams.deployment, activeTab]);
+    fetchDeploymentData();
+  }, [isAuthenticated, isClusterContextMissing, effectiveClusterId, resolvedParams.namespace, resolvedParams.deployment, activeTab]);
 
   const fetchDeploymentData = async () => {
+    if (!effectiveClusterId) return;
     setIsLoading(true);
     try {
       if (activeTab === "overview") {
         // 获取部署详情
         const result = await deploymentApi.getDeployment(
-          effectiveClusterId ?? undefined,
+          effectiveClusterId,
           resolvedParams.namespace,
           resolvedParams.deployment
         );
@@ -136,7 +144,7 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
       } else if (activeTab === "pods") {
         // 获取部署管理的Pods
         const result = await deploymentApi.getDeploymentPods(
-          effectiveClusterId ?? undefined,
+          effectiveClusterId,
           resolvedParams.namespace,
           resolvedParams.deployment
         );
@@ -388,7 +396,10 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
           </p>
         </div>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
+        {isClusterContextMissing ? (
+          <ClusterContextRequired />
+        ) : (
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="overview">{t("tabOverview")}</TabsTrigger>
             <TabsTrigger value="config">{t("tabConfig")}</TabsTrigger>
@@ -633,7 +644,8 @@ export default function DeploymentDetailsPage({ params }: { params: Promise<{ na
             />
           </TabsContent>
 
-        </Tabs>
+          </Tabs>
+        )}
       </main>
 
       <ConfirmDialog

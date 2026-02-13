@@ -71,10 +71,12 @@ export const rbacApi = {
   // Roles
   async getRoles(
     clusterId: number,
-    namespace?: string
-  ): Promise<ApiResponse<{ roles: Role[]; total: number; cluster_id: number; cluster_name: string }>> {
+    options?: { namespace?: string; limit?: number; continueToken?: string | null }
+  ): Promise<ApiResponse<{ roles: Role[]; total: number; cluster_id: number; cluster_name: string; continue_token?: string | null }>> {
     const params = new URLSearchParams({ cluster_id: clusterId.toString() });
-    if (namespace) params.append("namespace", namespace);
+    if (options?.namespace) params.append("namespace", options.namespace);
+    if (options?.limit) params.append("limit", options.limit.toString());
+    if (options?.continueToken) params.append("continue_token", options.continueToken);
     return apiClient.get(`/rbac/roles?${params.toString()}`);
   },
 
@@ -91,10 +93,12 @@ export const rbacApi = {
   // RoleBindings
   async getRoleBindings(
     clusterId: number,
-    namespace?: string
-  ): Promise<ApiResponse<{ role_bindings: RoleBinding[]; total: number; cluster_id: number; cluster_name: string }>> {
+    options?: { namespace?: string; limit?: number; continueToken?: string | null }
+  ): Promise<ApiResponse<{ role_bindings: RoleBinding[]; total: number; cluster_id: number; cluster_name: string; continue_token?: string | null }>> {
     const params = new URLSearchParams({ cluster_id: clusterId.toString() });
-    if (namespace) params.append("namespace", namespace);
+    if (options?.namespace) params.append("namespace", options.namespace);
+    if (options?.limit) params.append("limit", options.limit.toString());
+    if (options?.continueToken) params.append("continue_token", options.continueToken);
     return apiClient.get(`/rbac/role-bindings?${params.toString()}`);
   },
 
@@ -115,10 +119,12 @@ export const rbacApi = {
   // ServiceAccounts
   async getServiceAccounts(
     clusterId: number,
-    namespace?: string
-  ): Promise<ApiResponse<{ service_accounts: ServiceAccount[]; total: number; cluster_id: number; cluster_name: string }>> {
+    options?: { namespace?: string; limit?: number; continueToken?: string | null }
+  ): Promise<ApiResponse<{ service_accounts: ServiceAccount[]; total: number; cluster_id: number; cluster_name: string; continue_token?: string | null }>> {
     const params = new URLSearchParams({ cluster_id: clusterId.toString() });
-    if (namespace) params.append("namespace", namespace);
+    if (options?.namespace) params.append("namespace", options.namespace);
+    if (options?.limit) params.append("limit", options.limit.toString());
+    if (options?.continueToken) params.append("continue_token", options.continueToken);
     return apiClient.get(`/rbac/service-accounts?${params.toString()}`);
   },
 
@@ -138,17 +144,23 @@ export const rbacApi = {
 
   // ClusterRoles (只读)
   async getClusterRoles(
-    clusterId: number
-  ): Promise<ApiResponse<{ cluster_roles: ClusterRole[]; total: number; cluster_id: number; cluster_name: string }>> {
+    clusterId: number,
+    options?: { limit?: number; continueToken?: string | null }
+  ): Promise<ApiResponse<{ cluster_roles: ClusterRole[]; total: number; cluster_id: number; cluster_name: string; continue_token?: string | null }>> {
     const params = new URLSearchParams({ cluster_id: clusterId.toString() });
+    if (options?.limit) params.append("limit", options.limit.toString());
+    if (options?.continueToken) params.append("continue_token", options.continueToken);
     return apiClient.get(`/rbac/cluster-roles?${params.toString()}`);
   },
 
   // ClusterRoleBindings (只读)
   async getClusterRoleBindings(
-    clusterId: number
-  ): Promise<ApiResponse<{ cluster_role_bindings: ClusterRoleBinding[]; total: number; cluster_id: number; cluster_name: string }>> {
+    clusterId: number,
+    options?: { limit?: number; continueToken?: string | null }
+  ): Promise<ApiResponse<{ cluster_role_bindings: ClusterRoleBinding[]; total: number; cluster_id: number; cluster_name: string; continue_token?: string | null }>> {
     const params = new URLSearchParams({ cluster_id: clusterId.toString() });
+    if (options?.limit) params.append("limit", options.limit.toString());
+    if (options?.continueToken) params.append("continue_token", options.continueToken);
     return apiClient.get(`/rbac/cluster-role-bindings?${params.toString()}`);
   },
 };

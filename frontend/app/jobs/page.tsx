@@ -50,7 +50,7 @@ function JobsContent() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [yamlContent, setYamlContent] = useState("");
   const [isOperationLoading, setIsOperationLoading] = useState(false);
-  const [selectedNamespace, setSelectedNamespace] = useState("default");
+  const [selectedNamespace, setSelectedNamespace] = useState("");
   const [selectedClusterId, setSelectedClusterId] = useState<number | null>(
     clusterIdFromUrl ? parseInt(clusterIdFromUrl) : null
   );
@@ -64,6 +64,11 @@ function JobsContent() {
 
     if (!yamlContent.trim()) {
       toast.error(tJobs("yamlRequired"));
+      return;
+    }
+
+    if (!selectedNamespace) {
+      toast.error(tJobs("createNamespaceRequired"));
       return;
     }
 
@@ -234,9 +239,9 @@ function JobsContent() {
       columns={columns}
       actions={actions}
       fetchFn={async (clusterId, namespace) => {
-        if (namespace) setSelectedNamespace(namespace);
+        setSelectedNamespace(namespace || "");
         setSelectedClusterId(clusterId);
-        const result = await jobApi.getJobs(clusterId, namespace!);
+        const result = await jobApi.getJobs(clusterId, namespace);
         return {
           data: result.data as unknown as Job[],
           error: result.error,
@@ -261,8 +266,8 @@ function JobsContent() {
         ],
       }}
       requireNamespace={true}
-      allowAllNamespaces={false}
-      defaultNamespace="default"
+      allowAllNamespaces={true}
+      defaultNamespace=""
       searchPlaceholder={tJobs("searchPlaceholder")}
       headerActions={headerActions}
       detailLink={(item) =>

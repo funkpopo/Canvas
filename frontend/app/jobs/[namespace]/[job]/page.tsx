@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { useEffect, useMemo, useState, use } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import dynamic from "next/dynamic";
@@ -14,7 +14,10 @@ import { ArrowLeft, Activity, Loader2, RefreshCw, AlertCircle, Play, Trash2, Fil
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { LanguageToggle } from "@/components/ui/language-toggle";
 import ClusterSelector from "@/components/ClusterSelector";
+import { ClusterContextRequired } from "@/components/ClusterContextRequired";
 import { useAuth } from "@/lib/auth-context";
+import { useCluster } from "@/lib/cluster-context";
+import { resolveClusterContext, withClusterId } from "@/lib/cluster-context-resolver";
 import { jobApi, JobDetails, JobPod } from "@/lib/api";
 import { useTranslations } from "@/hooks/use-translations";
 import { useAsyncActionFeedback } from "@/hooks/use-async-action-feedback";
@@ -53,8 +56,17 @@ export default function JobDetailsPage({ params }: { params: Promise<{ namespace
 
   const router = useRouter();
   const searchParams = useSearchParams();
-  const clusterId = searchParams.get('cluster_id');
-  const clusterIdNum = clusterId ? parseInt(clusterId, 10) : null;
+  const { activeCluster } = useCluster();
+  const clusterContext = useMemo(
+    () =>
+      resolveClusterContext({
+        clusterIdFromUrl: searchParams.get("cluster_id"),
+        activeClusterId: activeCluster?.id ?? null,
+      }),
+    [searchParams, activeCluster?.id]
+  );
+  const effectiveClusterId = clusterContext.clusterId;
+  const isClusterContextMissing = clusterContext.source === "none";
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -64,18 +76,24 @@ export default function JobDetailsPage({ params }: { params: Promise<{ namespace
   }, [isAuthenticated, authLoading, router]);
 
   useEffect(() => {
-    if (isAuthenticated && clusterIdNum) {
-      fetchJobData();
+    if (!isAuthenticated) return;
+    if (isClusterContextMissing) {
+      setIsLoading(false);
+      setJobDetails(null);
+      setJobPods([]);
+      setYamlContent("");
+      return;
     }
-  }, [isAuthenticated, clusterIdNum, resolvedParams.namespace, resolvedParams.job, activeTab]);
+    fetchJobData();
+  }, [isAuthenticated, isClusterContextMissing, effectiveClusterId, resolvedParams.namespace, resolvedParams.job, activeTab]);
 
   const fetchJobData = async () => {
-    if (!clusterIdNum) return;
+    if (!effectiveClusterId) return;
 
     setIsLoading(true);
     try {
       // 获取Job详情
-      const jobResponse = await jobApi.getJob(clusterIdNum, resolvedParams.namespace, resolvedParams.job);
+      const jobResponse = await jobApi.getJob(effectiveClusterId, resolvedParams.namespace, resolvedParams.job);
       if (jobResponse.data) {
         setJobDetails(jobResponse.data);
       } else if (jobResponse.error) {
@@ -85,7 +103,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ namespace
 
       // 获取关联的Pods
       if (activeTab === "pods") {
-        const podsResponse = await jobApi.getJobPods(clusterIdNum, resolvedParams.namespace, resolvedParams.job);
+        const podsResponse = await jobApi.getJobPods(effectiveClusterId, resolvedParams.namespace, resolvedParams.job);
         if (podsResponse.data) {
           setJobPods(podsResponse.data);
         }
@@ -93,7 +111,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ namespace
 
       // 获取YAML配置
       if (activeTab === "yaml") {
-        const yamlResponse = await jobApi.getJobYaml(clusterIdNum, resolvedParams.namespace, resolvedParams.job);
+        const yamlResponse = await jobApi.getJobYaml(effectiveClusterId, resolvedParams.namespace, resolvedParams.job);
         if (yamlResponse.data) {
           setYamlContent(yamlResponse.data.yaml_content);
         }
@@ -107,18 +125,18 @@ export default function JobDetailsPage({ params }: { params: Promise<{ namespace
   };
 
   const handleDeleteJob = async () => {
-    if (!clusterIdNum) return;
+    if (!effectiveClusterId) return;
 
     setIsOperationLoading(true);
     try {
       await runWithFeedback(
         async () => {
-          const response = await jobApi.deleteJob(clusterIdNum, resolvedParams.namespace, resolvedParams.job);
+          const response = await jobApi.deleteJob(effectiveClusterId, resolvedParams.namespace, resolvedParams.job);
           if (!response.data) {
             throw new Error(response.error || t("deleteErrorUnknown"));
           }
 
-          router.push(`/jobs?cluster_id=${clusterIdNum}`);
+          router.push(withClusterId("/jobs", effectiveClusterId));
         },
         {
           loading: t("deleteLoading"),
@@ -134,13 +152,13 @@ export default function JobDetailsPage({ params }: { params: Promise<{ namespace
   };
 
   const handleRestartJob = async () => {
-    if (!clusterIdNum) return;
+    if (!effectiveClusterId) return;
 
     setIsOperationLoading(true);
     try {
       await runWithFeedback(
         async () => {
-          const response = await jobApi.restartJob(clusterIdNum, resolvedParams.namespace, resolvedParams.job);
+          const response = await jobApi.restartJob(effectiveClusterId, resolvedParams.namespace, resolvedParams.job);
           if (!response.data) {
             throw new Error(response.error || t("restartErrorUnknown"));
           }
@@ -160,13 +178,18 @@ export default function JobDetailsPage({ params }: { params: Promise<{ namespace
   };
 
   const handleSaveYaml = async (content: string) => {
-    if (!clusterIdNum) return;
+    if (!effectiveClusterId) return;
 
     setIsOperationLoading(true);
     try {
       await runWithFeedback(
         async () => {
-          const response = await jobApi.updateJobYaml(clusterIdNum, resolvedParams.namespace, resolvedParams.job, content);
+          const response = await jobApi.updateJobYaml(
+            effectiveClusterId,
+            resolvedParams.namespace,
+            resolvedParams.job,
+            content
+          );
           if (!response.data) {
             throw new Error(response.error || t("yamlSaveErrorUnknown"));
           }
@@ -206,7 +229,19 @@ export default function JobDetailsPage({ params }: { params: Promise<{ namespace
     return 'secondary';
   };
 
-  if (!isAuthenticated || !jobDetails) {
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return null;
+  }
+
+  if (isClusterContextMissing) {
     return (
       <div className="min-h-screen bg-background">
         <header className="bg-card shadow-sm border-b">
@@ -231,10 +266,49 @@ export default function JobDetailsPage({ params }: { params: Promise<{ namespace
           </div>
         </header>
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-8 w-8 animate-spin" />
-            <span className="ml-2">{tCommon("loading")}</span>
+          <ClusterContextRequired />
+        </main>
+      </div>
+    );
+  }
+
+  if (!jobDetails) {
+    return (
+      <div className="min-h-screen bg-background">
+        <header className="bg-card shadow-sm border-b">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex justify-between items-center h-16">
+              <div className="flex items-center">
+                <Server className="h-8 w-8 text-zinc-600" />
+                <h1 className="ml-2 text-xl font-semibold text-gray-900 dark:text-white">
+                  Canvas
+                </h1>
+              </div>
+              <div className="flex items-center space-x-4">
+                <ClusterSelector />
+                <LanguageToggle />
+                <ThemeToggle />
+                <Button variant="outline" onClick={logout}>
+                  <LogOut className="h-4 w-4 mr-2" />
+                  {tAuth("logout")}
+                </Button>
+              </div>
+            </div>
           </div>
+        </header>
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin" />
+              <span className="ml-2">{tCommon("loading")}</span>
+            </div>
+          ) : (
+            <Card>
+              <CardContent className="py-8 text-center text-muted-foreground">
+                {t("detailsLoadError")}
+              </CardContent>
+            </Card>
+          )}
         </main>
       </div>
     );
@@ -270,7 +344,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ namespace
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between py-4">
             <div className="flex items-center space-x-4">
-              <Link href={`/jobs?cluster_id=${clusterId}`}>
+              <Link href={withClusterId("/jobs", effectiveClusterId)}>
                 <Button variant="outline" size="sm">
                   <ArrowLeft className="h-4 w-4 mr-2" />
                   {t("backToJobs")}

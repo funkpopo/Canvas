@@ -64,6 +64,7 @@ func (h *WorkloadHandler) ListCronJobs(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, r, http.StatusBadRequest, "namespace is required")
 		return
 	}
+	namespace = normalizeWorkloadNamespace(namespace)
 
 	cluster, clientset, err := h.resolveClusterClient(r)
 	if err != nil {
@@ -126,6 +127,7 @@ func (h *WorkloadHandler) ListDaemonSets(w http.ResponseWriter, r *http.Request)
 		response.Error(w, r, http.StatusBadRequest, "namespace is required")
 		return
 	}
+	namespace = normalizeWorkloadNamespace(namespace)
 
 	cluster, clientset, err := h.resolveClusterClient(r)
 	if err != nil {
@@ -188,6 +190,7 @@ func (h *WorkloadHandler) ListStatefulSets(w http.ResponseWriter, r *http.Reques
 		response.Error(w, r, http.StatusBadRequest, "namespace is required")
 		return
 	}
+	namespace = normalizeWorkloadNamespace(namespace)
 
 	cluster, clientset, err := h.resolveClusterClient(r)
 	if err != nil {
@@ -297,6 +300,7 @@ func (h *WorkloadHandler) ListHPAs(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, r, http.StatusBadRequest, "namespace is required")
 		return
 	}
+	namespace = normalizeWorkloadNamespace(namespace)
 
 	cluster, clientset, err := h.resolveClusterClient(r)
 	if err != nil {
@@ -359,6 +363,7 @@ func (h *WorkloadHandler) ListIngresses(w http.ResponseWriter, r *http.Request) 
 		response.Error(w, r, http.StatusBadRequest, "namespace is required")
 		return
 	}
+	namespace = normalizeWorkloadNamespace(namespace)
 
 	cluster, clientset, err := h.resolveClusterClient(r)
 	if err != nil {
@@ -442,6 +447,15 @@ func (h *WorkloadHandler) deleteWorkload(
 	}
 
 	response.NoContent(w)
+}
+
+func normalizeWorkloadNamespace(namespace string) string {
+	switch strings.ToLower(strings.TrimSpace(namespace)) {
+	case "*", "all", "__all__":
+		return metav1.NamespaceAll
+	default:
+		return namespace
+	}
 }
 
 func mapCronJob(item batchv1.CronJob, clusterID uint, clusterName string) map[string]interface{} {

@@ -95,12 +95,21 @@ export const podApi = {
 
       const token = localStorage.getItem("token");
       const query = params.toString() ? `?${params.toString()}` : "";
-      const response = await fetch(
-        `${API_BASE_URL.replace(/\/$/, "")}/pods/${options.namespace}/${options.podName}/logs${query}`,
-        {
+      const namespace = encodeURIComponent(options.namespace);
+      const podName = encodeURIComponent(options.podName);
+      const requestLogs = async (path: string) =>
+        fetch(`${API_BASE_URL.replace(/\/$/, "")}/${path}${query}`, {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+
+      let response = await requestLogs(`pods/${namespace}/${podName}/logs`);
+      // 兼容历史路由：/pods/logs/{namespace}/{pod}
+      if (response.status === 404) {
+        const legacyResponse = await requestLogs(`pods/logs/${namespace}/${podName}`);
+        if (legacyResponse.ok || legacyResponse.status !== 404) {
+          response = legacyResponse;
         }
-      );
+      }
 
       if (!response.ok) {
         const errorBody = await response.json().catch(() => null);
@@ -114,7 +123,7 @@ export const podApi = {
             typeof (errorBody.error as { message?: unknown }).message === "string" &&
             (errorBody.error as { message: string }).message) ||
           `HTTP ${response.status}: ${response.statusText}`;
-        return { error: message };
+        return { error: message, statusCode: response.status };
       }
 
       const text = await response.text();

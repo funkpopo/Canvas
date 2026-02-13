@@ -38,6 +38,7 @@ func (h *JobsHandler) ListJobs(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, r, http.StatusBadRequest, "namespace is required")
 		return
 	}
+	namespace = normalizeJobsNamespace(namespace)
 
 	cluster, clientset, err := h.resolvePathClusterClient(r)
 	if err != nil {
@@ -1189,4 +1190,13 @@ func trimStringPtr(v *string) *string {
 		return nil
 	}
 	return &trimmed
+}
+
+func normalizeJobsNamespace(namespace string) string {
+	switch strings.ToLower(strings.TrimSpace(namespace)) {
+	case "*", "all", "__all__":
+		return metav1.NamespaceAll
+	default:
+		return namespace
+	}
 }

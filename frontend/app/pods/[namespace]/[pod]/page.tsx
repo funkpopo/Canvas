@@ -12,9 +12,10 @@ import { ArrowLeft, Activity, Loader2, RefreshCw, AlertCircle, Square, Server, L
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { LanguageToggle } from "@/components/ui/language-toggle";
 import ClusterSelector from "@/components/ClusterSelector";
+import { ClusterContextRequired } from "@/components/ClusterContextRequired";
 import { useAuth } from "@/lib/auth-context";
 import { useCluster } from "@/lib/cluster-context";
-import { resolveClusterContext } from "@/lib/cluster-context-resolver";
+import { resolveClusterContext, withClusterId } from "@/lib/cluster-context-resolver";
 import { useAsyncActionFeedback } from "@/hooks/use-async-action-feedback";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { podApi } from "@/lib/api";
@@ -107,6 +108,7 @@ export default function PodDetailsPage({ params }: { params: Promise<{ namespace
     [searchParams, activeCluster?.id]
   );
   const effectiveClusterId = clusterContext.clusterId;
+  const isClusterContextMissing = clusterContext.source === "none";
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -116,16 +118,22 @@ export default function PodDetailsPage({ params }: { params: Promise<{ namespace
   }, [isAuthenticated, authLoading, router]);
 
   useEffect(() => {
-    if (isAuthenticated) {
-      fetchPodDetails();
-      fetchMetrics();
+    if (!isAuthenticated) return;
+    if (isClusterContextMissing) {
+      setIsLoading(false);
+      setPodDetails(null);
+      setMetricsData([]);
+      return;
     }
-  }, [isAuthenticated, effectiveClusterId, timeRange, resolvedParams.namespace, resolvedParams.pod]);
+    fetchPodDetails();
+    fetchMetrics();
+  }, [isAuthenticated, isClusterContextMissing, effectiveClusterId, timeRange, resolvedParams.namespace, resolvedParams.pod]);
 
   const fetchPodDetails = async () => {
+    if (!effectiveClusterId) return;
     try {
       const result = await podApi.getPod(
-        effectiveClusterId ?? undefined,
+        effectiveClusterId,
         resolvedParams.namespace,
         resolvedParams.pod
       );
@@ -278,7 +286,7 @@ export default function PodDetailsPage({ params }: { params: Promise<{ namespace
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
-              <Link href="/pods" className="flex items-center">
+              <Link href={withClusterId("/pods", effectiveClusterId)} className="flex items-center">
                 <ArrowLeft className="h-5 w-5 mr-2" />
                 <span className="text-gray-600 dark:text-gray-400">{t("backToPods")}</span>
               </Link>
@@ -316,7 +324,9 @@ export default function PodDetailsPage({ params }: { params: Promise<{ namespace
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {isLoading ? (
+        {isClusterContextMissing ? (
+          <ClusterContextRequired />
+        ) : isLoading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin mr-2" />
             <span className="text-lg">{tCommon("loading")}</span>

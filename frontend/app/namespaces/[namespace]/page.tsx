@@ -11,6 +11,7 @@ import { ArrowLeft, Activity, Loader2, RefreshCw, Users, Settings, FileText, Dat
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { LanguageToggle } from "@/components/ui/language-toggle";
 import ClusterSelector from "@/components/ClusterSelector";
+import { ClusterContextRequired } from "@/components/ClusterContextRequired";
 import { useAuth } from "@/lib/auth-context";
 import { useCluster } from "@/lib/cluster-context";
 import { resolveClusterContext, withClusterId } from "@/lib/cluster-context-resolver";
@@ -106,6 +107,7 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
     [searchParams, activeCluster?.id]
   );
   const effectiveClusterId = clusterContext.clusterId;
+  const isClusterContextMissing = clusterContext.source === "none";
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -115,18 +117,28 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
   }, [isAuthenticated, authLoading, router]);
 
   useEffect(() => {
-    if (isAuthenticated) {
-      fetchNamespaceData();
+    if (!isAuthenticated) return;
+    if (isClusterContextMissing) {
+      setIsLoading(false);
+      setResources(null);
+      setDeployments([]);
+      setServices([]);
+      setPvcs([]);
+      setCrds([]);
+      setJobs([]);
+      return;
     }
-  }, [isAuthenticated, effectiveClusterId, resolvedParams.namespace, activeTab]);
+    fetchNamespaceData();
+  }, [isAuthenticated, isClusterContextMissing, effectiveClusterId, resolvedParams.namespace, activeTab]);
 
   const fetchNamespaceData = async () => {
+    if (!effectiveClusterId) return;
     setIsLoading(true);
     try {
       if (activeTab === "overview") {
         // 获取资源使用情况
         const result = await namespaceApi.getNamespaceResources(
-          effectiveClusterId ?? undefined,
+          effectiveClusterId,
           resolvedParams.namespace
         );
 
@@ -136,7 +148,7 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
       } else if (activeTab === "deployments") {
         // 获取部署
         const result = await namespaceApi.getNamespaceDeployments(
-          effectiveClusterId ?? undefined,
+          effectiveClusterId,
           resolvedParams.namespace
         );
 
@@ -146,7 +158,7 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
       } else if (activeTab === "services") {
         // 获取服务
         const result = await namespaceApi.getNamespaceServices(
-          effectiveClusterId ?? undefined,
+          effectiveClusterId,
           resolvedParams.namespace
         );
 
@@ -156,7 +168,7 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
       } else if (activeTab === "pvcs") {
         // 获取PVC
         const result = await storageApi.getPersistentVolumeClaims(
-          effectiveClusterId ?? undefined,
+          effectiveClusterId,
           resolvedParams.namespace
         );
 
@@ -166,7 +178,7 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
       } else if (activeTab === "crds") {
         // 获取CRD
         const result = await namespaceApi.getNamespaceCrds(
-          effectiveClusterId ?? undefined,
+          effectiveClusterId,
           resolvedParams.namespace
         );
 
@@ -175,11 +187,6 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
         }
       } else if (activeTab === "jobs") {
         // 获取Jobs
-        if (!effectiveClusterId) {
-          toast.error(t("clusterRequired"));
-          setJobs([]);
-          return;
-        }
         const jobsResponse = await jobApi.getJobs(effectiveClusterId, resolvedParams.namespace);
         if (jobsResponse.data) {
           setJobs(jobsResponse.data);
@@ -281,18 +288,21 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
           </p>
         </div>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-6">
-            <TabsTrigger value="overview">{t("tabOverview")}</TabsTrigger>
-            <TabsTrigger value="deployments">{t("tabDeployments")}</TabsTrigger>
-            <TabsTrigger value="services">{t("tabServices")}</TabsTrigger>
-            <TabsTrigger value="jobs">Jobs</TabsTrigger>
-            <TabsTrigger value="pvcs">PVC</TabsTrigger>
-            <TabsTrigger value="crds">{t("tabCrds")}</TabsTrigger>
-          </TabsList>
+        {isClusterContextMissing ? (
+          <ClusterContextRequired />
+        ) : (
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <TabsList className="grid w-full grid-cols-6">
+              <TabsTrigger value="overview">{t("tabOverview")}</TabsTrigger>
+              <TabsTrigger value="deployments">{t("tabDeployments")}</TabsTrigger>
+              <TabsTrigger value="services">{t("tabServices")}</TabsTrigger>
+              <TabsTrigger value="jobs">Jobs</TabsTrigger>
+              <TabsTrigger value="pvcs">PVC</TabsTrigger>
+              <TabsTrigger value="crds">{t("tabCrds")}</TabsTrigger>
+            </TabsList>
 
-          {/* 概览标签页 */}
-          <TabsContent value="overview" className="space-y-6">
+            {/* 概览标签页 */}
+            <TabsContent value="overview" className="space-y-6">
             {isLoading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin mr-2" />
@@ -406,8 +416,8 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
             )}
           </TabsContent>
 
-          {/* 部署标签页 */}
-          <TabsContent value="deployments" className="space-y-6">
+            {/* 部署标签页 */}
+            <TabsContent value="deployments" className="space-y-6">
             {isLoading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin mr-2" />
@@ -486,8 +496,8 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
             )}
           </TabsContent>
 
-          {/* 服务标签页 */}
-          <TabsContent value="services" className="space-y-6">
+            {/* 服务标签页 */}
+            <TabsContent value="services" className="space-y-6">
             {isLoading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin mr-2" />
@@ -594,8 +604,8 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
             )}
           </TabsContent>
 
-          {/* PVC标签页 */}
-          <TabsContent value="pvcs" className="space-y-6">
+            {/* PVC标签页 */}
+            <TabsContent value="pvcs" className="space-y-6">
             {isLoading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin mr-2" />
@@ -658,8 +668,8 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
             )}
           </TabsContent>
 
-          {/* CRD标签页 */}
-          <TabsContent value="crds" className="space-y-6">
+            {/* CRD标签页 */}
+            <TabsContent value="crds" className="space-y-6">
             {isLoading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin mr-2" />
@@ -710,8 +720,8 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
             )}
           </TabsContent>
 
-          {/* Jobs标签页 */}
-          <TabsContent value="jobs" className="space-y-6">
+            {/* Jobs标签页 */}
+            <TabsContent value="jobs" className="space-y-6">
             {isLoading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin mr-2" />
@@ -786,8 +796,9 @@ export default function NamespaceDetailsPage({ params }: { params: Promise<{ nam
                 ))}
               </div>
             )}
-          </TabsContent>
-        </Tabs>
+            </TabsContent>
+          </Tabs>
+        )}
       </main>
     </div>
   );

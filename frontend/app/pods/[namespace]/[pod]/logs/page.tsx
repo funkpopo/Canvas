@@ -10,6 +10,7 @@ import { Loader2, Download, RefreshCw, Terminal, Server, LogOut, ArrowLeft } fro
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { LanguageToggle } from "@/components/ui/language-toggle";
 import ClusterSelector from "@/components/ClusterSelector";
+import { ClusterContextRequired } from "@/components/ClusterContextRequired";
 import { useAuth } from "@/lib/auth-context";
 import { useCluster } from "@/lib/cluster-context";
 import { resolveClusterContext, withClusterId } from "@/lib/cluster-context-resolver";
@@ -35,10 +36,12 @@ export default function PodLogsPage() {
     [searchParams, activeCluster?.id]
   );
   const effectiveClusterId = clusterContext.clusterId;
+  const isClusterContextMissing = clusterContext.source === "none";
   const { isAuthenticated, isLoading: authLoading, logout } = useAuth();
 
   const [logs, setLogs] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [logErrorStatus, setLogErrorStatus] = useState<number | null>(null);
   const [selectedContainer, setSelectedContainer] = useState<string>("");
   const [tailLines, setTailLines] = useState(100);
   const [availableContainers, setAvailableContainers] = useState<string[]>([]);
@@ -51,20 +54,30 @@ export default function PodLogsPage() {
   }, [isAuthenticated, authLoading, router]);
 
   useEffect(() => {
-    if (isAuthenticated && namespace && podName) {
-      fetchPodDetails();
+    if (!isAuthenticated || !namespace || !podName) return;
+    if (isClusterContextMissing) {
+      setAvailableContainers([]);
+      setSelectedContainer("");
+      return;
     }
-  }, [isAuthenticated, namespace, podName, effectiveClusterId]);
+    fetchPodDetails();
+  }, [isAuthenticated, namespace, podName, isClusterContextMissing, effectiveClusterId]);
 
   useEffect(() => {
-    if (isAuthenticated && namespace && podName) {
-      fetchLogs();
+    if (!isAuthenticated || !namespace || !podName) return;
+    if (isClusterContextMissing) {
+      setLogs("");
+      setIsLoading(false);
+      setLogErrorStatus(null);
+      return;
     }
-  }, [isAuthenticated, namespace, podName, effectiveClusterId, selectedContainer, tailLines]);
+    fetchLogs();
+  }, [isAuthenticated, namespace, podName, isClusterContextMissing, effectiveClusterId, selectedContainer, tailLines]);
 
   const fetchPodDetails = async () => {
+    if (!effectiveClusterId) return;
     try {
-      const response = await podApi.getPod(effectiveClusterId ?? undefined, namespace, podName);
+      const response = await podApi.getPod(effectiveClusterId, namespace, podName);
       if (response.data) {
         const containers =
           (response.data.containers as Array<{ name: string }>)?.map((container) => container.name) || [];
@@ -96,22 +109,25 @@ export default function PodLogsPage() {
 
       if (response.data !== undefined) {
         setLogs(response.data || t("emptyLogs"));
+        setLogErrorStatus(null);
         return;
       }
 
       const message = response.error || t("unknownError");
       let hint = "";
-      if (message.includes("not found")) {
+      if (response.statusCode === 404 || message.includes("not found")) {
         hint = t("hintNotFound");
-      } else if (message.includes("permission")) {
+      } else if (response.statusCode === 403 || message.includes("permission")) {
         hint = t("hintPermission");
       } else if (message.includes("no active cluster")) {
         hint = t("hintNoCluster");
       }
+      setLogErrorStatus(response.statusCode ?? null);
       setLogs(t("loadLogsFailedWithMessage", { message, hint }));
     } catch (error) {
       console.error("获取日志出错:", error);
       setLogs(t("loadLogsNetworkError"));
+      setLogErrorStatus(null);
     } finally {
       setIsLoading(false);
     }
@@ -209,8 +225,12 @@ export default function PodLogsPage() {
           </p>
         </div>
 
-        {/* 控制面板 */}
-        <Card className="mb-6">
+        {isClusterContextMissing ? (
+          <ClusterContextRequired />
+        ) : (
+          <>
+            {/* 控制面板 */}
+            <Card className="mb-6">
           <CardHeader>
             <CardTitle className="flex items-center">
               <Terminal className="h-5 w-5 mr-2" />
@@ -271,11 +291,16 @@ export default function PodLogsPage() {
               </Button>
             </div>
           </CardContent>
-        </Card>
+            </Card>
 
-        {/* 日志显示区域 */}
-        <Card>
+            {/* 日志显示区域 */}
+            <Card>
           <CardContent className="p-0">
+            {(logErrorStatus === 403 || logErrorStatus === 404) && (
+              <div className="px-4 py-2 text-sm text-amber-700 bg-amber-50 border-b border-amber-200">
+                {logErrorStatus === 404 ? t("hintNotFoundAction") : t("hintPermissionAction")}
+              </div>
+            )}
             <div className="bg-black text-green-400 p-4 rounded-lg min-h-96 max-h-96 overflow-auto">
               {isLoading ? (
                 <div className="flex items-center justify-center h-full">
@@ -293,7 +318,9 @@ export default function PodLogsPage() {
               )}
             </div>
           </CardContent>
-        </Card>
+            </Card>
+          </>
+        )}
       </main>
     </div>
   );

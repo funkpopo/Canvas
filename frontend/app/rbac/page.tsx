@@ -35,6 +35,7 @@ import { useTranslations } from "@/hooks/use-translations";
 export default function RBACPage() {
   const t = useTranslations("rbac");
   const tCommon = useTranslations("common");
+  const PAGE_SIZE = 200;
   const router = useRouter();
   const { user: currentUser, isLoading: authLoading } = useAuth();
   const { activeCluster: selectedCluster } = useCluster();
@@ -49,26 +50,36 @@ export default function RBACPage() {
   const [roles, setRoles] = useState<Role[]>([]);
   const [rolesLoading, setRolesLoading] = useState(true);
   const [rolesSearch, setRolesSearch] = useState("");
+  const [rolesNextToken, setRolesNextToken] = useState<string | null>(null);
+  const [rolesLoadingMore, setRolesLoadingMore] = useState(false);
   
   // RoleBindings
   const [roleBindings, setRoleBindings] = useState<RoleBinding[]>([]);
   const [roleBindingsLoading, setRoleBindingsLoading] = useState(true);
   const [roleBindingsSearch, setRoleBindingsSearch] = useState("");
+  const [roleBindingsNextToken, setRoleBindingsNextToken] = useState<string | null>(null);
+  const [roleBindingsLoadingMore, setRoleBindingsLoadingMore] = useState(false);
   
   // ServiceAccounts
   const [serviceAccounts, setServiceAccounts] = useState<ServiceAccount[]>([]);
   const [serviceAccountsLoading, setServiceAccountsLoading] = useState(true);
   const [serviceAccountsSearch, setServiceAccountsSearch] = useState("");
+  const [serviceAccountsNextToken, setServiceAccountsNextToken] = useState<string | null>(null);
+  const [serviceAccountsLoadingMore, setServiceAccountsLoadingMore] = useState(false);
   
   // ClusterRoles
   const [clusterRoles, setClusterRoles] = useState<ClusterRole[]>([]);
   const [clusterRolesLoading, setClusterRolesLoading] = useState(true);
   const [clusterRolesSearch, setClusterRolesSearch] = useState("");
+  const [clusterRolesNextToken, setClusterRolesNextToken] = useState<string | null>(null);
+  const [clusterRolesLoadingMore, setClusterRolesLoadingMore] = useState(false);
   
   // ClusterRoleBindings
   const [clusterRoleBindings, setClusterRoleBindings] = useState<ClusterRoleBinding[]>([]);
   const [clusterRoleBindingsLoading, setClusterRoleBindingsLoading] = useState(true);
   const [clusterRoleBindingsSearch, setClusterRoleBindingsSearch] = useState("");
+  const [clusterRoleBindingsNextToken, setClusterRoleBindingsNextToken] = useState<string | null>(null);
+  const [clusterRoleBindingsLoadingMore, setClusterRoleBindingsLoadingMore] = useState(false);
 
   // 删除对话框
   const [deleteDialog, setDeleteDialog] = useState<{
@@ -104,6 +115,11 @@ export default function RBACPage() {
 
   const fetchAllData = async () => {
     if (!selectedCluster) return;
+    setRolesNextToken(null);
+    setRoleBindingsNextToken(null);
+    setServiceAccountsNextToken(null);
+    setClusterRolesNextToken(null);
+    setClusterRoleBindingsNextToken(null);
     fetchRoles();
     fetchRoleBindings();
     fetchServiceAccounts();
@@ -111,88 +127,174 @@ export default function RBACPage() {
     fetchClusterRoleBindings();
   };
 
-  const fetchRoles = async () => {
+  const fetchRoles = async (options?: { append?: boolean; continueToken?: string | null }) => {
     if (!selectedCluster) return;
-    setRolesLoading(true);
+    const append = !!options?.append;
+    const continueToken = options?.continueToken || null;
+    if (append && !continueToken) return;
+
+    if (append) {
+      setRolesLoadingMore(true);
+    } else {
+      setRolesLoading(true);
+    }
     try {
-      const response = await rbacApi.getRoles(selectedCluster.id);
+      const response = await rbacApi.getRoles(selectedCluster.id, {
+        limit: PAGE_SIZE,
+        continueToken,
+      });
       if (response.data) {
-        setRoles(response.data.roles);
+        setRoles((prev) => (append ? [...prev, ...response.data!.roles] : response.data!.roles));
+        setRolesNextToken(response.data.continue_token || null);
       } else {
         toast.error(response.error || t("loadRolesError"));
       }
     } catch (error) {
       toast.error(t("loadRolesError"));
     } finally {
-      setRolesLoading(false);
+      if (append) {
+        setRolesLoadingMore(false);
+      } else {
+        setRolesLoading(false);
+      }
     }
   };
 
-  const fetchRoleBindings = async () => {
+  const fetchRoleBindings = async (options?: { append?: boolean; continueToken?: string | null }) => {
     if (!selectedCluster) return;
-    setRoleBindingsLoading(true);
+    const append = !!options?.append;
+    const continueToken = options?.continueToken || null;
+    if (append && !continueToken) return;
+
+    if (append) {
+      setRoleBindingsLoadingMore(true);
+    } else {
+      setRoleBindingsLoading(true);
+    }
     try {
-      const response = await rbacApi.getRoleBindings(selectedCluster.id);
+      const response = await rbacApi.getRoleBindings(selectedCluster.id, {
+        limit: PAGE_SIZE,
+        continueToken,
+      });
       if (response.data) {
-        setRoleBindings(response.data.role_bindings);
+        setRoleBindings((prev) =>
+          append ? [...prev, ...response.data!.role_bindings] : response.data!.role_bindings
+        );
+        setRoleBindingsNextToken(response.data.continue_token || null);
       } else {
         toast.error(response.error || t("loadRoleBindingsError"));
       }
     } catch (error) {
       toast.error(t("loadRoleBindingsError"));
     } finally {
-      setRoleBindingsLoading(false);
+      if (append) {
+        setRoleBindingsLoadingMore(false);
+      } else {
+        setRoleBindingsLoading(false);
+      }
     }
   };
 
-  const fetchServiceAccounts = async () => {
+  const fetchServiceAccounts = async (options?: { append?: boolean; continueToken?: string | null }) => {
     if (!selectedCluster) return;
-    setServiceAccountsLoading(true);
+    const append = !!options?.append;
+    const continueToken = options?.continueToken || null;
+    if (append && !continueToken) return;
+
+    if (append) {
+      setServiceAccountsLoadingMore(true);
+    } else {
+      setServiceAccountsLoading(true);
+    }
     try {
-      const response = await rbacApi.getServiceAccounts(selectedCluster.id);
+      const response = await rbacApi.getServiceAccounts(selectedCluster.id, {
+        limit: PAGE_SIZE,
+        continueToken,
+      });
       if (response.data) {
-        setServiceAccounts(response.data.service_accounts);
+        setServiceAccounts((prev) =>
+          append ? [...prev, ...response.data!.service_accounts] : response.data!.service_accounts
+        );
+        setServiceAccountsNextToken(response.data.continue_token || null);
       } else {
         toast.error(response.error || t("loadServiceAccountsError"));
       }
     } catch (error) {
       toast.error(t("loadServiceAccountsError"));
     } finally {
-      setServiceAccountsLoading(false);
+      if (append) {
+        setServiceAccountsLoadingMore(false);
+      } else {
+        setServiceAccountsLoading(false);
+      }
     }
   };
 
-  const fetchClusterRoles = async () => {
+  const fetchClusterRoles = async (options?: { append?: boolean; continueToken?: string | null }) => {
     if (!selectedCluster) return;
-    setClusterRolesLoading(true);
+    const append = !!options?.append;
+    const continueToken = options?.continueToken || null;
+    if (append && !continueToken) return;
+
+    if (append) {
+      setClusterRolesLoadingMore(true);
+    } else {
+      setClusterRolesLoading(true);
+    }
     try {
-      const response = await rbacApi.getClusterRoles(selectedCluster.id);
+      const response = await rbacApi.getClusterRoles(selectedCluster.id, {
+        limit: PAGE_SIZE,
+        continueToken,
+      });
       if (response.data) {
-        setClusterRoles(response.data.cluster_roles);
+        setClusterRoles((prev) => (append ? [...prev, ...response.data!.cluster_roles] : response.data!.cluster_roles));
+        setClusterRolesNextToken(response.data.continue_token || null);
       } else {
         toast.error(response.error || t("loadClusterRolesError"));
       }
     } catch (error) {
       toast.error(t("loadClusterRolesError"));
     } finally {
-      setClusterRolesLoading(false);
+      if (append) {
+        setClusterRolesLoadingMore(false);
+      } else {
+        setClusterRolesLoading(false);
+      }
     }
   };
 
-  const fetchClusterRoleBindings = async () => {
+  const fetchClusterRoleBindings = async (options?: { append?: boolean; continueToken?: string | null }) => {
     if (!selectedCluster) return;
-    setClusterRoleBindingsLoading(true);
+    const append = !!options?.append;
+    const continueToken = options?.continueToken || null;
+    if (append && !continueToken) return;
+
+    if (append) {
+      setClusterRoleBindingsLoadingMore(true);
+    } else {
+      setClusterRoleBindingsLoading(true);
+    }
     try {
-      const response = await rbacApi.getClusterRoleBindings(selectedCluster.id);
+      const response = await rbacApi.getClusterRoleBindings(selectedCluster.id, {
+        limit: PAGE_SIZE,
+        continueToken,
+      });
       if (response.data) {
-        setClusterRoleBindings(response.data.cluster_role_bindings);
+        setClusterRoleBindings((prev) =>
+          append ? [...prev, ...response.data!.cluster_role_bindings] : response.data!.cluster_role_bindings
+        );
+        setClusterRoleBindingsNextToken(response.data.continue_token || null);
       } else {
         toast.error(response.error || t("loadClusterRoleBindingsError"));
       }
     } catch (error) {
       toast.error(t("loadClusterRoleBindingsError"));
     } finally {
-      setClusterRoleBindingsLoading(false);
+      if (append) {
+        setClusterRoleBindingsLoadingMore(false);
+      } else {
+        setClusterRoleBindingsLoading(false);
+      }
     }
   };
 
@@ -267,7 +369,12 @@ export default function RBACPage() {
       <div className="min-h-screen bg-background p-8">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center space-x-4 mb-6">
-            <Button variant="ghost" onClick={() => router.push("/")}>
+            <Button
+              variant="ghost"
+              onClick={() => router.push("/")}
+              title={tCommon("back")}
+              aria-label={tCommon("back")}
+            >
               <ArrowLeft className="h-4 w-4" />
             </Button>
           <div>
@@ -292,7 +399,12 @@ export default function RBACPage() {
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex items-center space-x-4 mb-6">
-          <Button variant="ghost" onClick={() => router.push("/")}>
+          <Button
+            variant="ghost"
+            onClick={() => router.push("/")}
+            title={tCommon("back")}
+            aria-label={tCommon("back")}
+          >
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
@@ -308,23 +420,23 @@ export default function RBACPage() {
           <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="roles">
               <Shield className="h-4 w-4 mr-2" />
-              Roles ({filteredRoles.length})
+              {t("rolesTab")} ({filteredRoles.length})
             </TabsTrigger>
             <TabsTrigger value="rolebindings">
               <KeyRound className="h-4 w-4 mr-2" />
-              RoleBindings ({filteredRoleBindings.length})
+              {t("roleBindingsTab")} ({filteredRoleBindings.length})
             </TabsTrigger>
             <TabsTrigger value="serviceaccounts">
               <Eye className="h-4 w-4 mr-2" />
-              ServiceAccounts ({filteredServiceAccounts.length})
+              {t("serviceAccountsTab")} ({filteredServiceAccounts.length})
             </TabsTrigger>
             <TabsTrigger value="clusterroles">
               <Shield className="h-4 w-4 mr-2" />
-              ClusterRoles ({filteredClusterRoles.length})
+              {t("clusterRolesTab")} ({filteredClusterRoles.length})
             </TabsTrigger>
             <TabsTrigger value="clusterrolebindings">
               <KeyRound className="h-4 w-4 mr-2" />
-              ClusterRoleBindings ({filteredClusterRoleBindings.length})
+              {t("clusterRoleBindingsTab")} ({filteredClusterRoleBindings.length})
             </TabsTrigger>
           </TabsList>
 
@@ -332,7 +444,7 @@ export default function RBACPage() {
           <TabsContent value="roles">
             <Card>
               <CardHeader>
-                <CardTitle>Roles</CardTitle>
+                <CardTitle>{t("rolesTab")}</CardTitle>
                 <CardDescription>
                   {t("rolesDescription")}
                 </CardDescription>
@@ -375,7 +487,7 @@ export default function RBACPage() {
                           </TableCell>
                           <TableCell>{role.rules?.length || 0}</TableCell>
                           <TableCell className="text-xs">
-                            {new Date(role.creation_timestamp).toLocaleString("zh-CN")}
+                            {new Date(role.creation_timestamp).toLocaleString()}
                           </TableCell>
                           <TableCell className="text-right">
                             <Button
@@ -387,6 +499,8 @@ export default function RBACPage() {
                                 namespace: role.namespace,
                                 name: role.name
                               })}
+                              title={tCommon("delete")}
+                              aria-label={tCommon("delete")}
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
@@ -396,6 +510,24 @@ export default function RBACPage() {
                     </TableBody>
                   </Table>
                 )}
+                {rolesNextToken && (
+                  <div className="flex justify-center pt-4">
+                    <Button
+                      variant="outline"
+                      onClick={() => fetchRoles({ append: true, continueToken: rolesNextToken })}
+                      disabled={rolesLoadingMore}
+                    >
+                      {rolesLoadingMore ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          {tCommon("loading")}
+                        </>
+                      ) : (
+                        t("loadMore")
+                      )}
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -404,7 +536,7 @@ export default function RBACPage() {
           <TabsContent value="rolebindings">
             <Card>
               <CardHeader>
-                <CardTitle>RoleBindings</CardTitle>
+                <CardTitle>{t("roleBindingsTab")}</CardTitle>
                 <CardDescription>
                   {t("roleBindingsDescription")}
                 </CardDescription>
@@ -455,7 +587,7 @@ export default function RBACPage() {
                           </TableCell>
                           <TableCell>{rb.subjects?.length || 0}</TableCell>
                           <TableCell className="text-xs">
-                            {new Date(rb.creation_timestamp).toLocaleString("zh-CN")}
+                            {new Date(rb.creation_timestamp).toLocaleString()}
                           </TableCell>
                           <TableCell className="text-right">
                             <Button
@@ -467,6 +599,8 @@ export default function RBACPage() {
                                 namespace: rb.namespace,
                                 name: rb.name
                               })}
+                              title={tCommon("delete")}
+                              aria-label={tCommon("delete")}
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
@@ -476,6 +610,26 @@ export default function RBACPage() {
                     </TableBody>
                   </Table>
                 )}
+                {roleBindingsNextToken && (
+                  <div className="flex justify-center pt-4">
+                    <Button
+                      variant="outline"
+                      onClick={() =>
+                        fetchRoleBindings({ append: true, continueToken: roleBindingsNextToken })
+                      }
+                      disabled={roleBindingsLoadingMore}
+                    >
+                      {roleBindingsLoadingMore ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          {tCommon("loading")}
+                        </>
+                      ) : (
+                        t("loadMore")
+                      )}
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -484,7 +638,7 @@ export default function RBACPage() {
           <TabsContent value="serviceaccounts">
             <Card>
               <CardHeader>
-                <CardTitle>ServiceAccounts</CardTitle>
+                <CardTitle>{t("serviceAccountsTab")}</CardTitle>
                 <CardDescription>
                   {t("serviceAccountsDescription")}
                 </CardDescription>
@@ -527,7 +681,7 @@ export default function RBACPage() {
                           </TableCell>
                           <TableCell>{sa.secrets?.length || 0}</TableCell>
                           <TableCell className="text-xs">
-                            {new Date(sa.creation_timestamp).toLocaleString("zh-CN")}
+                            {new Date(sa.creation_timestamp).toLocaleString()}
                           </TableCell>
                           <TableCell className="text-right">
                             <Button
@@ -539,6 +693,8 @@ export default function RBACPage() {
                                 namespace: sa.namespace,
                                 name: sa.name
                               })}
+                              title={tCommon("delete")}
+                              aria-label={tCommon("delete")}
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
@@ -548,6 +704,26 @@ export default function RBACPage() {
                     </TableBody>
                   </Table>
                 )}
+                {serviceAccountsNextToken && (
+                  <div className="flex justify-center pt-4">
+                    <Button
+                      variant="outline"
+                      onClick={() =>
+                        fetchServiceAccounts({ append: true, continueToken: serviceAccountsNextToken })
+                      }
+                      disabled={serviceAccountsLoadingMore}
+                    >
+                      {serviceAccountsLoadingMore ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          {tCommon("loading")}
+                        </>
+                      ) : (
+                        t("loadMore")
+                      )}
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -556,7 +732,7 @@ export default function RBACPage() {
           <TabsContent value="clusterroles">
             <Card>
               <CardHeader>
-                <CardTitle>ClusterRoles</CardTitle>
+                <CardTitle>{t("clusterRolesTab")}</CardTitle>
                 <CardDescription>
                   {t("clusterRolesDescription")}
                 </CardDescription>
@@ -594,12 +770,30 @@ export default function RBACPage() {
                           <TableCell className="font-medium">{cr.name}</TableCell>
                           <TableCell>{cr.rules?.length || 0}</TableCell>
                           <TableCell className="text-xs">
-                            {new Date(cr.creation_timestamp).toLocaleString("zh-CN")}
+                            {new Date(cr.creation_timestamp).toLocaleString()}
                           </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
                   </Table>
+                )}
+                {clusterRolesNextToken && (
+                  <div className="flex justify-center pt-4">
+                    <Button
+                      variant="outline"
+                      onClick={() => fetchClusterRoles({ append: true, continueToken: clusterRolesNextToken })}
+                      disabled={clusterRolesLoadingMore}
+                    >
+                      {clusterRolesLoadingMore ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          {tCommon("loading")}
+                        </>
+                      ) : (
+                        t("loadMore")
+                      )}
+                    </Button>
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -609,7 +803,7 @@ export default function RBACPage() {
           <TabsContent value="clusterrolebindings">
             <Card>
               <CardHeader>
-                <CardTitle>ClusterRoleBindings</CardTitle>
+                <CardTitle>{t("clusterRoleBindingsTab")}</CardTitle>
                 <CardDescription>
                   {t("clusterRoleBindingsDescription")}
                 </CardDescription>
@@ -655,12 +849,35 @@ export default function RBACPage() {
                           </TableCell>
                           <TableCell>{crb.subjects?.length || 0}</TableCell>
                           <TableCell className="text-xs">
-                            {new Date(crb.creation_timestamp).toLocaleString("zh-CN")}
+                            {new Date(crb.creation_timestamp).toLocaleString()}
                           </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
                   </Table>
+                )}
+                {clusterRoleBindingsNextToken && (
+                  <div className="flex justify-center pt-4">
+                    <Button
+                      variant="outline"
+                      onClick={() =>
+                        fetchClusterRoleBindings({
+                          append: true,
+                          continueToken: clusterRoleBindingsNextToken,
+                        })
+                      }
+                      disabled={clusterRoleBindingsLoadingMore}
+                    >
+                      {clusterRoleBindingsLoadingMore ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          {tCommon("loading")}
+                        </>
+                      ) : (
+                        t("loadMore")
+                      )}
+                    </Button>
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -675,10 +892,10 @@ export default function RBACPage() {
           description={t("confirmDeleteDescription", {
             type:
               deleteDialog.type === "role"
-                ? "Role"
+                ? t("deleteTypeRole")
                 : deleteDialog.type === "roleBinding"
-                ? "RoleBinding"
-                : "ServiceAccount",
+                ? t("deleteTypeRoleBinding")
+                : t("deleteTypeServiceAccount"),
             name: deleteDialog.name,
           })}
           onConfirm={handleDelete}

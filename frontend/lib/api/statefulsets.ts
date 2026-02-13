@@ -17,8 +17,9 @@ export interface StatefulSet {
 
 // ===== StatefulSet API =====
 export const statefulsetApi = {
-  async getStatefulSets(clusterId: number, namespace: string): Promise<ApiResponse<StatefulSet[]>> {
-    return apiClient.get<StatefulSet[]>(`/statefulsets/clusters/${clusterId}/namespaces/${namespace}/statefulsets`);
+  async getStatefulSets(clusterId: number, namespace?: string): Promise<ApiResponse<StatefulSet[]>> {
+    const ns = namespace?.trim() || "all";
+    return apiClient.get<StatefulSet[]>(`/statefulsets/clusters/${clusterId}/namespaces/${ns}/statefulsets`);
   },
 
   async getStatefulSet(clusterId: number, namespace: string, statefulsetName: string): Promise<ApiResponse<StatefulSet>> {

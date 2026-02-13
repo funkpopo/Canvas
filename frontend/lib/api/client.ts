@@ -6,6 +6,7 @@ export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
 export interface ApiResponse<T = unknown> {
   data?: T;
   error?: string;
+  statusCode?: number;
 }
 
 interface RetryConfig {
@@ -126,7 +127,7 @@ export class ApiClient {
           (unwrapped && !unwrapped.ok && unwrapped.message) ||
           (body && typeof body === "object" && (body as any).detail) ||
           `HTTP ${response.status}: ${response.statusText}`;
-        return { error: msg };
+        return { error: msg, statusCode: response.status };
       }
 
       const body = await this.parseJsonSafe(response);
@@ -153,7 +154,7 @@ export class ApiClient {
           (unwrapped && !unwrapped.ok && unwrapped.message) ||
           (errorBody && typeof errorBody === "object" && (errorBody as any).detail) ||
           `HTTP ${response.status}: ${response.statusText}`;
-        return { error: msg };
+        return { error: msg, statusCode: response.status };
       }
 
       const okBody = await this.parseJsonSafe(response);
@@ -180,7 +181,7 @@ export class ApiClient {
           (unwrapped && !unwrapped.ok && unwrapped.message) ||
           (errorBody && typeof errorBody === "object" && (errorBody as any).detail) ||
           `HTTP ${response.status}: ${response.statusText}`;
-        return { error: msg };
+        return { error: msg, statusCode: response.status };
       }
 
       const okBody = await this.parseJsonSafe(response);
@@ -206,7 +207,7 @@ export class ApiClient {
           (unwrapped && !unwrapped.ok && unwrapped.message) ||
           (errorBody && typeof errorBody === "object" && (errorBody as any).detail) ||
           `HTTP ${response.status}: ${response.statusText}`;
-        return { error: msg };
+        return { error: msg, statusCode: response.status };
       }
 
       if (response.status === 204) return { data: null as T };
@@ -221,5 +222,4 @@ export class ApiClient {
 }
 
 export const apiClient = new ApiClient();
-
 

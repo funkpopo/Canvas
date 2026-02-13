@@ -160,6 +160,7 @@ func New(db *gorm.DB, cfg config.Settings) http.Handler {
 		api.Route("/pods", func(pods chi.Router) {
 			pods.Use(authMiddleware.RequireAuth)
 			pods.Get("/", podHandler.List)
+			pods.Get("/logs/{namespace}/{podName}", podHandler.Logs)
 			pods.Get("/{namespace}/{podName}", podHandler.Get)
 			pods.Get("/{namespace}/{podName}/logs", podHandler.Logs)
 			pods.With(appmw.RequireAdmin).Delete("/{namespace}/{podName}", podHandler.Delete)

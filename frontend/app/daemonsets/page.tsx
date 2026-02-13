@@ -32,7 +32,7 @@ function DaemonSetsContent() {
   const searchParams = useSearchParams();
   const clusterIdFromUrl = searchParams.get("cluster_id");
 
-  const [selectedNamespace, setSelectedNamespace] = useState("default");
+  const [selectedNamespace, setSelectedNamespace] = useState("");
   const [selectedClusterId, setSelectedClusterId] = useState<number | null>(
     clusterIdFromUrl ? parseInt(clusterIdFromUrl) : null
   );
@@ -87,9 +87,9 @@ function DaemonSetsContent() {
       columns={columns}
       actions={actions}
       fetchFn={async (clusterId, namespace) => {
-        if (namespace) setSelectedNamespace(namespace);
+        setSelectedNamespace(namespace || "");
         setSelectedClusterId(clusterId);
-        const result = await daemonsetApi.getDaemonSets(clusterId, namespace!);
+        const result = await daemonsetApi.getDaemonSets(clusterId, namespace);
         return {
           data: result.data as unknown as DaemonSet[],
           error: result.error,
@@ -105,8 +105,8 @@ function DaemonSetsContent() {
       }}
       searchFields={["name"]}
       requireNamespace={true}
-      allowAllNamespaces={false}
-      defaultNamespace="default"
+      allowAllNamespaces={true}
+      defaultNamespace=""
       searchPlaceholder={t("searchPlaceholder")}
       deleteConfirm={{
         title: t("deleteTitle"),

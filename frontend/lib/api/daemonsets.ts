@@ -19,8 +19,9 @@ export interface DaemonSet {
 
 // ===== DaemonSet API =====
 export const daemonsetApi = {
-  async getDaemonSets(clusterId: number, namespace: string): Promise<ApiResponse<DaemonSet[]>> {
-    return apiClient.get<DaemonSet[]>(`/daemonsets/clusters/${clusterId}/namespaces/${namespace}/daemonsets`);
+  async getDaemonSets(clusterId: number, namespace?: string): Promise<ApiResponse<DaemonSet[]>> {
+    const ns = namespace?.trim() || "all";
+    return apiClient.get<DaemonSet[]>(`/daemonsets/clusters/${clusterId}/namespaces/${ns}/daemonsets`);
   },
 
   async getDaemonSet(clusterId: number, namespace: string, daemonsetName: string): Promise<ApiResponse<DaemonSet>> {

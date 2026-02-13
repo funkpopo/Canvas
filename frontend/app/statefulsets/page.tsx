@@ -45,7 +45,7 @@ function StatefulSetsContent() {
   const [scaleTarget, setScaleTarget] = useState<StatefulSet | null>(null);
   const [newReplicas, setNewReplicas] = useState(0);
   const [isOperationLoading, setIsOperationLoading] = useState(false);
-  const [selectedNamespace, setSelectedNamespace] = useState("default");
+  const [selectedNamespace, setSelectedNamespace] = useState("");
   const [selectedClusterId, setSelectedClusterId] = useState<number | null>(
     clusterIdFromUrl ? parseInt(clusterIdFromUrl, 10) : null
   );
@@ -139,9 +139,9 @@ function StatefulSetsContent() {
         columns={columns}
         actions={actions}
         fetchFn={async (clusterId, namespace) => {
-          if (namespace) setSelectedNamespace(namespace);
+          setSelectedNamespace(namespace || "");
           setSelectedClusterId(clusterId);
-          const result = await statefulsetApi.getStatefulSets(clusterId, namespace!);
+          const result = await statefulsetApi.getStatefulSets(clusterId, namespace);
           return {
             data: result.data as unknown as StatefulSet[],
             error: result.error,
@@ -157,8 +157,8 @@ function StatefulSetsContent() {
         }}
         searchFields={["name"]}
         requireNamespace={true}
-        allowAllNamespaces={false}
-        defaultNamespace="default"
+        allowAllNamespaces={true}
+        defaultNamespace=""
         searchPlaceholder={t("searchPlaceholder")}
         deleteConfirm={{
           title: t("deleteTitle"),
