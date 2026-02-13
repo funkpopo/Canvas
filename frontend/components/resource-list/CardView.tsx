@@ -139,7 +139,7 @@ export function ResourceListCardView<T extends BaseResource>({
         return (
           <Card
             key={item.id}
-            className={`hover:shadow-lg transition-shadow ${onCardClick ? "cursor-pointer" : ""}`}
+            className={`hover:bg-accent/50 transition-colors border ${onCardClick ? "cursor-pointer" : ""}`}
             onClick={onCardClick ? () => onCardClick(item) : undefined}
           >
             <CardHeader>

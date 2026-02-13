@@ -23,7 +23,16 @@
     "error": "error occurred",
     "nodes": "nodes",
     "actions": "Actions",
-    "close": "Close"
+    "close": "Close",
+    "connected": "Connected",
+    "connecting": "Connecting",
+    "disconnected": "Disconnected",
+    "logout": "Logout",
+    "loadingClusters": "Loading clusters...",
+    "noClusters": "No active clusters",
+    "refresh": "Refresh",
+    "currentCluster": "Current cluster:",
+    "selectCluster": "Select cluster"
   },
   "clusterContext": {
     "title": "No cluster selected",
@@ -31,12 +40,21 @@
     "action": "Back to dashboard"
   },
   "navigation": {
+    "overview": "Overview",
+    "cluster": "Cluster",
+    "workloads": "Workloads",
+    "networking": "Networking",
+    "configuration": "Configuration",
+    "storageGroup": "Storage",
+    "administration": "Administration",
+    "dashboard": "Dashboard",
     "clusters": "Clusters",
     "namespaces": "Namespaces",
     "pods": "Pods",
     "services": "Services",
     "deployments": "Deployments",
     "jobs": "Jobs",
+    "cronjobs": "CronJobs",
     "configmaps": "ConfigMaps",
     "secrets": "Secrets",
     "nodes": "Nodes",
@@ -46,7 +64,13 @@
     "rbac": "RBAC",
     "networkPolicies": "Network Policies",
     "resourceQuotas": "Resource Quotas",
-    "storage": "Storage"
+    "storage": "Storage",
+    "statefulsets": "StatefulSets",
+    "daemonsets": "DaemonSets",
+    "hpas": "HPAs",
+    "ingress": "Ingress",
+    "alerts": "Alerts",
+    "userCenter": "User Center"
   },
   "cluster": {
     "title": "Cluster Management",

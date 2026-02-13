@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Plus, LayoutGrid, List } from "lucide-react";
+import { Search, Plus, LayoutGrid, List, RefreshCw } from "lucide-react";
 import type { ViewMode } from "./types";
 import { useTranslations } from "@/hooks/use-translations";
 
@@ -32,6 +32,14 @@ export interface ResourceListToolbarProps {
   viewMode: ViewMode;
   onViewModeChange: (mode: ViewMode) => void;
   showViewToggle: boolean;
+  // Namespace selector props
+  namespaces?: string[];
+  selectedNamespace?: string;
+  onNamespaceChange?: (ns: string) => void;
+  allowAllNamespaces?: boolean;
+  // Refresh props
+  onRefresh?: () => void;
+  isFetching?: boolean;
 }
 
 export function ResourceListToolbar({
@@ -49,6 +57,12 @@ export function ResourceListToolbar({
   viewMode,
   onViewModeChange,
   showViewToggle,
+  namespaces,
+  selectedNamespace,
+  onNamespaceChange,
+  allowAllNamespaces,
+  onRefresh,
+  isFetching,
 }: ResourceListToolbarProps) {
   const t = useTranslations("resourceList");
   const hasActiveFilters = activeFilterTags.length > 0;
@@ -56,7 +70,23 @@ export function ResourceListToolbar({
   return (
     <div className="flex flex-col gap-3 mb-4">
       <div className="flex items-center justify-between gap-4">
-      <div className="flex items-center gap-4 flex-1">
+      <div className="flex items-center gap-3 flex-1">
+        {/* Namespace selector */}
+        {namespaces && namespaces.length > 0 && onNamespaceChange && (
+          <Select value={selectedNamespace || "__all__"} onValueChange={(v) => onNamespaceChange(v === "__all__" ? "" : v)}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder={t("allNamespaces")} />
+            </SelectTrigger>
+            <SelectContent>
+              {allowAllNamespaces && (
+                <SelectItem value="__all__">{t("allNamespaces")}</SelectItem>
+              )}
+              {namespaces.map((ns) => (
+                <SelectItem key={ns} value={ns}>{ns}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
@@ -81,6 +111,11 @@ export function ResourceListToolbar({
         )}
       </div>
       <div className="flex items-center gap-2">
+        {onRefresh && (
+          <Button variant="ghost" size="icon" onClick={onRefresh} disabled={isFetching} aria-label={t("refresh")}>
+            <RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
+          </Button>
+        )}
         {headerActions}
         {createButton && createButton.canCreate !== false && (
           <Button onClick={createButton.onClick} disabled={createButton.disabled}>

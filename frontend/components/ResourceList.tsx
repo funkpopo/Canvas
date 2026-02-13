@@ -3,7 +3,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Loader2, Plus } from "lucide-react";
 import { BatchOperations } from "@/components/BatchOperations";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -18,7 +17,6 @@ import type { BaseResource, ResourceListProps, ViewMode } from "./resource-list/
 import { generateResourceId } from "./resource-list/utils";
 import { ResourceListCardView } from "./resource-list/CardView";
 import { ResourceListTableView } from "./resource-list/TableView";
-import { ResourceListHeader } from "./resource-list/Header";
 import { ResourceListToolbar } from "./resource-list/Toolbar";
 
 export type {
@@ -421,113 +419,101 @@ export function ResourceList<T extends BaseResource>({
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <ResourceListHeader
-        selectedClusterId={selectedClusterId}
-        onClusterChange={setSelectedClusterId}
-        namespaces={namespaces}
-        selectedNamespace={selectedNamespace}
-        onNamespaceChange={setSelectedNamespace}
-        showNamespaceInHeader={showNamespaceInHeader}
-        namespaceSource={namespaceSource}
-        requireNamespace={requireNamespace}
-        allowAllNamespaces={allowAllNamespaces}
-        isFetching={isFetching}
-        onRefresh={() => refetchItems()}
-      />
-
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center">
-                {Icon && <Icon className="h-8 w-8 mr-3" />}
-                {title}
-              </h2>
-              <p className="mt-2 text-gray-600 dark:text-gray-400">{description}</p>
-            </div>
-            <div className="flex items-center space-x-2">
-              {statusBadge}
-            </div>
+    <div>
+      {/* Page Title */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-semibold flex items-center">
+              {Icon && <Icon className="h-6 w-6 mr-2" />}
+              {title}
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+          </div>
+          <div className="flex items-center space-x-2">
+            {statusBadge}
           </div>
         </div>
+      </div>
 
-        {/* 加载状态 */}
-        {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin mr-2" />
-            <span className="text-lg">{tCommon("loading")}</span>
-          </div>
-        ) : filteredItems.length === 0 ? (
-          /* 空状态 */
-          <Card>
-            <CardContent className="flex flex-col items-center justify-center py-12">
-              {Icon && <Icon className="h-12 w-12 text-gray-400 mb-4" />}
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                {activeFilterTags.length > 0
-                  ? tResource("noMatchingItems", { resourceType })
-                  : tResource("noItems", { resourceType })}
-              </h3>
-              <p className="text-gray-600 dark:text-gray-400 mb-4">
-                {activeFilterTags.length > 0
-                  ? tResource("emptyFilteredHint")
-                  : emptyText || tResource("createFirstItem", { resourceType })}
-              </p>
-              {activeFilterTags.length > 0 && (
-                <Button variant="outline" onClick={handleResetFilters} className="mb-3">
-                  {tResource("resetFilters")}
-                </Button>
-              )}
-              {createButton && createButton.canCreate !== false && (
-                <Button onClick={createButton.onClick}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  {createButton.label}
-                </Button>
-              )}
-            </CardContent>
-          </Card>
-        ) : (
-          /* 内容区域 */
-          <>
-            {/* 批量操作 */}
-            {(batchOperations.delete || batchOperations.restart || batchOperations.label) && (
-              <BatchOperations
-                items={filteredItems}
-                selectedItems={selectedItems}
-                onSelectionChange={setSelectedItems}
-                onBatchDelete={batchOperations.delete ? handleBatchDelete : undefined}
-                onBatchRestart={batchOperations.restart ? handleBatchRestart : undefined}
-                resourceType={resourceType}
-                supportedOperations={batchOperations}
-              />
-            )}
-
-            {/* 工具栏：搜索、筛选、视图切换 */}
-            <ResourceListToolbar
+      {/* 加载状态 */}
+      {isLoading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin mr-2" />
+          <span className="text-lg">{tCommon("loading")}</span>
+        </div>
+      ) : filteredItems.length === 0 ? (
+        /* 空状态 */
+        <div className="flex flex-col items-center justify-center py-12 border rounded-lg">
+          {Icon && <Icon className="h-12 w-12 text-muted-foreground mb-4" />}
+          <h3 className="text-lg font-medium mb-2">
+            {activeFilterTags.length > 0
+              ? tResource("noMatchingItems", { resourceType })
+              : tResource("noItems", { resourceType })}
+          </h3>
+          <p className="text-muted-foreground mb-4">
+            {activeFilterTags.length > 0
+              ? tResource("emptyFilteredHint")
+              : emptyText || tResource("createFirstItem", { resourceType })}
+          </p>
+          {activeFilterTags.length > 0 && (
+            <Button variant="outline" onClick={handleResetFilters} className="mb-3">
+              {tResource("resetFilters")}
+            </Button>
+          )}
+          {createButton && createButton.canCreate !== false && (
+            <Button onClick={createButton.onClick}>
+              <Plus className="h-4 w-4 mr-2" />
+              {createButton.label}
+            </Button>
+          )}
+        </div>
+      ) : (
+        /* 内容区域 */
+        <>
+          {/* 批量操作 */}
+          {(batchOperations.delete || batchOperations.restart || batchOperations.label) && (
+            <BatchOperations
+              items={filteredItems}
+              selectedItems={selectedItems}
+              onSelectionChange={setSelectedItems}
+              onBatchDelete={batchOperations.delete ? handleBatchDelete : undefined}
+              onBatchRestart={batchOperations.restart ? handleBatchRestart : undefined}
               resourceType={resourceType}
-              searchTerm={searchTerm}
-              onSearchChange={setSearchTerm}
-              searchPlaceholder={searchPlaceholder}
-              statusFilter={statusFilter ? { field: String(statusFilter.field), options: statusFilter.options } : undefined}
-              selectedStatus={selectedStatus}
-              onStatusChange={setSelectedStatus}
-              activeFilterTags={activeFilterTags}
-              onResetFilters={handleResetFilters}
-              headerActions={headerActions}
-              createButton={createButton ? {
-                ...createButton,
-                disabled:
-                  namespaceSource === "api" &&
-                  requireNamespace &&
-                  !allowAllNamespaces &&
-                  !selectedNamespace,
-              } : undefined}
-              viewMode={viewMode}
-              onViewModeChange={setViewMode}
-              showViewToggle={!!cardConfig && allowViewToggle}
+              supportedOperations={batchOperations}
             />
+          )}
+
+          {/* 工具栏：命名空间、搜索、筛选、视图切换 */}
+          <ResourceListToolbar
+            resourceType={resourceType}
+            searchTerm={searchTerm}
+            onSearchChange={setSearchTerm}
+            searchPlaceholder={searchPlaceholder}
+            statusFilter={statusFilter ? { field: String(statusFilter.field), options: statusFilter.options } : undefined}
+            selectedStatus={selectedStatus}
+            onStatusChange={setSelectedStatus}
+            activeFilterTags={activeFilterTags}
+            onResetFilters={handleResetFilters}
+            headerActions={headerActions}
+            createButton={createButton ? {
+              ...createButton,
+              disabled:
+                namespaceSource === "api" &&
+                requireNamespace &&
+                !allowAllNamespaces &&
+                !selectedNamespace,
+            } : undefined}
+            viewMode={viewMode}
+            onViewModeChange={setViewMode}
+            showViewToggle={!!cardConfig && allowViewToggle}
+            namespaces={requireNamespace ? namespaces : undefined}
+            selectedNamespace={selectedNamespace}
+            onNamespaceChange={requireNamespace ? setSelectedNamespace : undefined}
+            allowAllNamespaces={allowAllNamespaces}
+            onRefresh={() => refetchItems()}
+            isFetching={isFetching}
+          />
 
             {/* 卡片视图 */}
             {viewMode === "card" && cardConfig ? (
@@ -578,7 +564,6 @@ export function ResourceList<T extends BaseResource>({
             )}
           </>
         )}
-      </main>
 
       {/* 确认对话框 */}
       <ConfirmDialog

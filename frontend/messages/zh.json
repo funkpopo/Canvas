@@ -23,7 +23,16 @@
     "error": "发生错误",
     "nodes": "节点",
     "actions": "操作",
-    "close": "关闭"
+    "close": "关闭",
+    "connected": "已连接",
+    "connecting": "连接中",
+    "disconnected": "已断开",
+    "logout": "退出登录",
+    "loadingClusters": "加载集群中...",
+    "noClusters": "无活跃集群",
+    "refresh": "刷新",
+    "currentCluster": "当前集群:",
+    "selectCluster": "选择集群"
   },
   "clusterContext": {
     "title": "未选择集群",
@@ -31,12 +40,21 @@
     "action": "返回仪表盘"
   },
   "navigation": {
+    "overview": "概览",
+    "cluster": "集群",
+    "workloads": "工作负载",
+    "networking": "网络",
+    "configuration": "配置",
+    "storageGroup": "存储",
+    "administration": "管理",
+    "dashboard": "仪表盘",
     "clusters": "集群",
     "namespaces": "命名空间",
     "pods": "Pod",
     "services": "服务",
     "deployments": "部署",
     "jobs": "任务",
+    "cronjobs": "定时任务",
     "configmaps": "配置映射",
     "secrets": "密钥",
     "nodes": "节点",
@@ -46,7 +64,13 @@
     "rbac": "RBAC",
     "networkPolicies": "网络策略",
     "resourceQuotas": "资源配额",
-    "storage": "存储"
+    "storage": "存储",
+    "statefulsets": "有状态副本集",
+    "daemonsets": "守护进程集",
+    "hpas": "弹性伸缩",
+    "ingress": "入口",
+    "alerts": "告警",
+    "userCenter": "用户中心"
   },
   "cluster": {
     "title": "集群管理",

@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ItemCheckbox } from "@/components/BatchOperations";
 import { useTranslations } from "@/hooks/use-translations";
@@ -151,19 +150,16 @@ export function ResourceListTableView<T extends BaseResource>({
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle>{t("listTitle", { resourceType })}</CardTitle>
-            <CardDescription>
-              {t("totalItems", { count: items.length, resourceType })}
-              {selectedNamespace && ` · ${t("namespace")}: ${selectedNamespace}`}
-            </CardDescription>
-          </div>
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <p className="text-xs text-muted-foreground">
+            {t("totalItems", { count: items.length, resourceType })}
+            {selectedNamespace && ` · ${t("namespace")}: ${selectedNamespace}`}
+          </p>
         </div>
-      </CardHeader>
-      <CardContent>
+      </div>
+      <div className="border rounded-lg overflow-hidden">
         <div
           ref={tableContainerRef}
           className="overflow-auto max-h-[70vh]"
@@ -174,7 +170,7 @@ export function ResourceListTableView<T extends BaseResource>({
           }}
         >
           <Table>
-            <TableHeader className="sticky top-0 bg-card z-10">
+            <TableHeader className="sticky top-0 bg-background z-10">
               <TableRow>
                 {batchOpsEnabled && (
                   <TableHead
@@ -274,8 +270,8 @@ export function ResourceListTableView<T extends BaseResource>({
             </TableBody>
           </Table>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 

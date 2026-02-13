@@ -4,6 +4,7 @@ import { useCluster } from "@/lib/cluster-context";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Loader2 } from "lucide-react";
+import { useTranslations } from "@/hooks/use-translations";
 
 interface ClusterSelectorProps {
   value?: string;
@@ -11,13 +12,14 @@ interface ClusterSelectorProps {
 }
 
 export default function ClusterSelector({ value, onValueChange }: ClusterSelectorProps) {
+  const t = useTranslations("common");
   const { clusters, activeCluster, setActiveCluster, refreshClusters, isLoading } = useCluster();
 
   if (isLoading) {
     return (
       <div className="flex items-center space-x-2">
         <Loader2 className="h-4 w-4 animate-spin" />
-        <span className="text-sm text-gray-600">加载集群中...</span>
+        <span className="text-sm text-muted-foreground">{t("loadingClusters")}</span>
       </div>
     );
   }
@@ -29,9 +31,9 @@ export default function ClusterSelector({ value, onValueChange }: ClusterSelecto
   if (activeClusters.length === 0) {
     return (
       <div className="flex items-center space-x-2">
-        <span className="text-sm text-gray-600">无活跃集群</span>
-        <button onClick={refreshClusters} className="text-xs text-zinc-600 underline ml-2">
-          刷新
+        <span className="text-sm text-muted-foreground">{t("noClusters")}</span>
+        <button onClick={refreshClusters} className="text-xs text-muted-foreground underline ml-2">
+          {t("refresh")}
         </button>
       </div>
     );
@@ -39,7 +41,6 @@ export default function ClusterSelector({ value, onValueChange }: ClusterSelecto
 
   return (
     <div className="flex items-center space-x-2">
-      <span className="text-sm font-medium">当前集群:</span>
       <Select
         value={value || activeCluster?.id.toString() || ""}
         onValueChange={(value) => {
@@ -51,14 +52,11 @@ export default function ClusterSelector({ value, onValueChange }: ClusterSelecto
           }
         }}
       >
-        <SelectTrigger className="min-w-48 max-w-64">
-          <SelectValue placeholder="选择集群">
+        <SelectTrigger className="min-w-40 max-w-56">
+          <SelectValue placeholder={t("selectCluster")}>
             {activeCluster && (
               <div className="flex items-center space-x-2 min-w-0">
                 <span className="truncate">{activeCluster.name}</span>
-                <Badge variant="outline" className="text-xs flex-shrink-0">
-                  {activeCluster.endpoint}
-                </Badge>
               </div>
             )}
           </SelectValue>
@@ -68,7 +66,7 @@ export default function ClusterSelector({ value, onValueChange }: ClusterSelecto
             <SelectItem key={cluster.id} value={cluster.id.toString()}>
               <div className="flex flex-col min-w-0">
                 <span className="truncate">{cluster.name}</span>
-                <span className="text-xs text-gray-500 truncate">{cluster.endpoint}</span>
+                <span className="text-xs text-muted-foreground truncate">{cluster.endpoint}</span>
               </div>
             </SelectItem>
           ))}
