@@ -1,0 +1,12 @@
+{
+  "apiBasePath": "/api",
+  "apiProxyTarget": "http://localhost:8000/api/:path*",
+  "websocket": {
+    "url": "",
+    "port": 8000
+  },
+  "enableBundleAnalyzer": false,
+  "i18n": {
+    "warnMissingKeys": true
+  }
+}

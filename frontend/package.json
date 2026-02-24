@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "analyze": "cross-env ANALYZE=true next build --webpack",
+    "analyze": "next build --webpack",
     "start": "next start",
     "lint": "eslint . --fix",
     "lint:fix": "eslint . --fix",
@@ -50,7 +50,6 @@
     "@types/node": "^20",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
-    "cross-env": "^7.0.3",
     "eslint": "^9",
     "eslint-config-next": "16.0.0",
     "husky": "^9.1.6",

@@ -27,7 +27,6 @@ export default function DeploymentYamlTab({ namespace, deployment, clusterId }: 
       return;
     }
 
-    console.log(`正在获取 YAML: ${namespace}/${deployment}, clusterId: ${clusterId}`);
     setIsLoading(true);
     try {
       const result = await deploymentApi.getDeploymentYaml(

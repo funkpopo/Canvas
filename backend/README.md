@@ -21,17 +21,15 @@ Default address: `http://localhost:8000`.
 
 ## Configuration
 
-Environment variables:
+Primary config file:
 
-- `HOST`, `APP_PORT`, `BACKEND_PORT`
-- `DATABASE_TYPE` (`sqlite` or `mysql`)
-- `SQLITE_DB_PATH`
-- `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_NAME`, `DATABASE_USER`, `DATABASE_PASSWORD`
-- `JWT_SECRET_KEY` / `SECRET_KEY`
-- `ACCESS_TOKEN_EXPIRE_MINUTES`
-- `REFRESH_TOKEN_EXPIRE_DAYS`
-- `CORS_ORIGINS`
-- `DEFAULT_ADMIN_PASSWORD`
+- `backend/config/settings.yaml`
+
+Production example:
+
+- `backend/config/settings.production.example.yaml`
+
+All runtime configuration is loaded from config files only.
 
 ## Implemented API Scope
 
@@ -48,4 +46,3 @@ Environment variables:
 ## Notes
 
 - Default admin user is auto-created on first startup: `admin` / `admin123`.
-- Migration record is maintained in the repository root `plan.md`.

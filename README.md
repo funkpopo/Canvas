@@ -1,59 +1,48 @@
 # Canvas — Kubernetes Management Console
 
-A monorepo for a lightweight Kubernetes management console with a Go backend and a Next.js (App Router) frontend. It supports multi-cluster management, Kubernetes resource browsing, RBAC, jobs/storage operations, metrics, and alerts.
+Canvas is a monorepo with a Go backend and a Next.js frontend for multi-cluster Kubernetes operations.
 
-## Overview
+## Architecture
 
-- Backend (`backend`): Go (chi + GORM + JWT + Kubernetes client)
-- Frontend (`frontend`): Next.js 15 + React 19 + TypeScript + Tailwind CSS 4 + Radix UI
-- Data: SQLite (default) or MySQL
+- Backend (`backend`): Go + chi + GORM + JWT + Kubernetes client-go
+- Frontend (`frontend`): Next.js App Router + React + TypeScript + Tailwind CSS
+- Database: SQLite by default, MySQL supported
 
-## Getting Started
+## Configuration (without `.env`)
 
-### Prerequisites
+Canvas now uses explicit config files instead of `.env` templates:
 
-- Go 1.26+
-- Node.js 20+ and npm (or yarn/pnpm)
+- Backend: `backend/config/settings.yaml`
+- Frontend: `frontend/config/settings.json`
 
-### Backend (API)
+Configuration values are read from config files only. Environment variable overrides are not used.
+
+## Quick Start
+
+### Backend
 
 ```bash
 cd backend
 go mod tidy
 go run ./cmd/server
-# API at http://localhost:8000
 ```
 
-Notes:
-- Default admin user is auto-created on first run: `admin` / `admin123`.
-- Default CORS includes `http://localhost:3000`.
-- SQLite is used by default; set `SQLITE_DB_PATH` if needed.
+Default API endpoint: `http://localhost:8000`
 
-Common environment variables:
-- `HOST`, `APP_PORT`, `BACKEND_PORT`
-- `DATABASE_TYPE` (`sqlite` or `mysql`)
-- `SQLITE_DB_PATH`
-- `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_NAME`, `DATABASE_USER`, `DATABASE_PASSWORD`
-- `JWT_SECRET_KEY` / `SECRET_KEY`
-- `ACCESS_TOKEN_EXPIRE_MINUTES`
-- `REFRESH_TOKEN_EXPIRE_DAYS`
-- `CORS_ORIGINS`
-- `DEFAULT_ADMIN_PASSWORD`
-
-### Frontend (Web)
+### Frontend
 
 ```bash
 cd frontend
 npm install
 npm run dev
-# App at http://localhost:3000
 ```
 
-## Migration Notes
+Default web endpoint: `http://localhost:3000`
 
-- Python backend has been fully replaced by Go backend.
-- Migration execution log and completion checklist: `plan.md`.
+## Notes
 
----
+- First startup auto-creates admin account: `admin` / `admin123`
+- Production config example: `backend/config/settings.production.example.yaml`
+- Frontend production config example: `frontend/config/settings.production.example.json`
 
-For a Chinese version of this document, see: `README_zh.md`.
+For Chinese documentation, see `README_zh.md`.

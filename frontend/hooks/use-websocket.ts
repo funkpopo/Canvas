@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useAuthStore } from "@/lib/store/auth-store";
+import runtimeConfig from "@/config/settings.json";
 
 export interface WebSocketMessage {
   type: string;
@@ -26,14 +27,14 @@ export interface WebSocketHookReturn {
   removeMessageHandler: (type: string) => void;
 }
 
-// 从 API 基址动态构造 WebSocket URL（兼容 NEXT_PUBLIC_API_URL 为相对路径 `/api`）
+// 从 frontend/config/settings.json 动态构造 WebSocket URL。
 const getWebSocketBaseUrl = (): string => {
-  const explicit = process.env.NEXT_PUBLIC_WS_URL;
+  const explicit = runtimeConfig.websocket?.url;
   if (explicit && typeof explicit === "string") {
     return explicit.replace(/\/$/, "");
   }
 
-  const apiUrl = (process.env.NEXT_PUBLIC_API_URL || "/api").replace(/\/$/, "");
+  const apiUrl = (runtimeConfig.apiBasePath || "/api").replace(/\/$/, "");
 
   // 绝对 URL：http(s)://host/api -> ws(s)://host/api/ws
   if (/^https?:\/\//.test(apiUrl)) {
@@ -43,7 +44,7 @@ const getWebSocketBaseUrl = (): string => {
   // 相对 URL：HTTP 走 Next rewrites，但 WebSocket 不走 rewrites，因此默认连后端 8000 端口
   const loc = typeof window !== "undefined" ? window.location : null;
   const proto = loc && loc.protocol === "https:" ? "wss" : "ws";
-  const wsPort = process.env.NEXT_PUBLIC_WS_PORT || "8000";
+  const wsPort = String(runtimeConfig.websocket?.port || 8000);
   const host = loc ? `${loc.hostname}:${wsPort}` : "localhost:8000";
   const basePath = apiUrl === "/api" ? "/api/ws" : `${apiUrl}/ws`;
   return `${proto}://${host}${basePath}`;
@@ -131,7 +132,6 @@ export function useWebSocket(): WebSocketHookReturn {
       const ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {
-        console.log("WebSocket connected");
         setIsConnected(true);
         setIsConnecting(false);
         connectingRef.current = false;
@@ -157,14 +157,12 @@ export function useWebSocket(): WebSocketHookReturn {
               sendMessage({ type: "pong", data: { timestamp: new Date().toISOString() } });
               break;
             case "status":
-              console.log("WebSocket status:", message.data);
               break;
             case "error":
               console.error("WebSocket error:", message.data);
               setError(message.data.message || "WebSocket error");
               break;
             case "subscription_ack":
-              console.log("Subscription acknowledged:", message.data);
               break;
           }
         } catch (err) {
@@ -173,7 +171,6 @@ export function useWebSocket(): WebSocketHookReturn {
       };
 
       ws.onclose = (event) => {
-        console.log("WebSocket disconnected:", event.code, event.reason);
         setIsConnected(false);
         setIsConnecting(false);
         connectingRef.current = false;
@@ -232,8 +229,6 @@ export function useWebSocket(): WebSocketHookReturn {
     reconnectAttempts.current += 1;
     const delay = Math.min(reconnectDelay * Math.pow(2, reconnectAttempts.current - 1), maxReconnectDelay);
 
-    console.log(`Scheduling reconnect attempt ${reconnectAttempts.current} in ${delay}ms`);
-
     reconnectTimeoutRef.current = setTimeout(() => {
       void connect();
     }, delay);
@@ -241,7 +236,6 @@ export function useWebSocket(): WebSocketHookReturn {
 
   // 手动重连
   const reconnect = useCallback(() => {
-    console.log("Manual reconnect requested");
     stopPolling();
     setError(null);
     disconnect();

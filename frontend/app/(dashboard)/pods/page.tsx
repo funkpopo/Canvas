@@ -72,7 +72,6 @@ function PodsPageContent() {
 
       // 检查更新是否属于当前集群
       if (activeCluster && updateData.cluster_id === activeCluster.id) {
-        console.log("Pod update received:", updateData);
         // 短暂延迟后刷新数据
         setTimeout(() => {
           setRefreshKey((prev) => prev + 1);

@@ -1,7 +1,9 @@
 import { useLanguage } from "@/lib/language-context"
 import { LOCALE_MESSAGES } from "@/lib/store/language-store";
+import runtimeConfig from "@/config/settings.json";
 
 const missingKeyWarnings = new Set<string>();
+const warnMissingTranslationKeys = runtimeConfig.i18n?.warnMissingKeys === true;
 
 function resolveMessage(messages: Record<string, any>, namespace: string | undefined, key: string) {
   const source = namespace ? messages[namespace] : messages;
@@ -20,7 +22,7 @@ export function useTranslations(namespace?: string) {
       resolveMessage(LOCALE_MESSAGES[fallbackLocale], namespace, key);
     let translation = raw ?? key;
 
-    if (!raw && process.env.NODE_ENV !== "production") {
+    if (!raw && warnMissingTranslationKeys) {
       const warningKey = namespace ? `${namespace}.${key}` : key;
       if (!missingKeyWarnings.has(warningKey)) {
         missingKeyWarnings.add(warningKey);

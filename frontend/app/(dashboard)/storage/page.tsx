@@ -108,20 +108,15 @@ export default function StorageManagement() {
   const { activeCluster, clusters, isLoading: clusterLoading } = useCluster();
 
   useEffect(() => {
-    console.log("Storage page useEffect:", { authLoading, isAuthenticated, activeCluster });
-
     if (!authLoading && !isAuthenticated) {
-      console.log("Storage page: User not authenticated, redirecting to login");
       router.push("/login");
       return;
     }
 
     if (activeCluster) {
-      console.log("Storage page: Setting active cluster", activeCluster.id);
       setSelectedClusterId(activeCluster.id);
       loadData(activeCluster.id);
     } else {
-      console.log("Storage page: No active cluster");
       // 没有活跃集群时停止加载状态
       setIsLoading(false);
     }
@@ -130,11 +125,9 @@ export default function StorageManagement() {
   const loadData = async (clusterId?: number) => {
     const id = clusterId ?? selectedClusterId;
     if (!id) {
-      console.log("loadData: No cluster id, skipping");
       return;
     }
 
-    console.log("loadData: Loading data for cluster", id);
     setIsLoading(true);
     try {
       // 并行加载所有存储数据
@@ -144,16 +137,11 @@ export default function StorageManagement() {
         storageApi.getPersistentVolumeClaims(id)
       ]);
 
-      console.log("loadData: API responses", { scResponse, pvResponse, pvcResponse });
-
       // 处理存储类数据
       if (scResponse.data !== undefined) {
-        console.log("loadData: Setting storage classes", scResponse.data);
         setStorageClasses(scResponse.data);
       } else if (scResponse.error) {
         console.error("加载存储类失败:", scResponse.error);
-      } else {
-        console.warn("loadData: No storage class data and no error");
       }
 
       // 处理持久卷数据

@@ -1,59 +1,48 @@
 # Canvas — Kubernetes 管理控制台
 
-一个包含 Go 后端与 Next.js 前端的单仓库（monorepo）。支持多集群管理、Kubernetes 资源浏览、RBAC、任务与存储操作、指标与告警等能力。
+Canvas 是一个前后端同仓项目：Go 后端 + Next.js 前端，用于多集群 Kubernetes 管理。
 
-## 概览
+## 架构概览
 
-- 后端（`backend`）：Go（chi + GORM + JWT + Kubernetes client）
-- 前端（`frontend`）：Next.js 15 + React 19 + TypeScript + Tailwind CSS 4 + Radix UI
-- 数据：默认 SQLite（也支持 MySQL）
+- 后端（`backend`）：Go + chi + GORM + JWT + Kubernetes client-go
+- 前端（`frontend`）：Next.js App Router + React + TypeScript + Tailwind CSS
+- 数据库：默认 SQLite，支持 MySQL
 
-## 快速开始
+## 配置方式
 
-### 依赖
+项目已改为使用显式配置文件：
 
-- Go 1.26+
-- Node.js 20+ 与 npm（或 yarn/pnpm）
+- 后端配置：`backend/config/settings.yaml`
+- 前端配置：`frontend/config/settings.json`
 
-### 启动后端（API）
+配置项仅从配置文件读取，不再支持环境变量覆盖。
+
+## 快速启动
+
+### 启动后端
 
 ```bash
 cd backend
 go mod tidy
 go run ./cmd/server
-# API: http://localhost:8000
 ```
 
-说明：
-- 首次启动会自动创建默认管理员：`admin` / `admin123`。
-- 默认 CORS 已包含 `http://localhost:3000`。
-- 默认使用 SQLite；如需自定义请设置 `SQLITE_DB_PATH`。
+默认地址：`http://localhost:8000`
 
-常用环境变量：
-- `HOST`, `APP_PORT`, `BACKEND_PORT`
-- `DATABASE_TYPE`（`sqlite` 或 `mysql`）
-- `SQLITE_DB_PATH`
-- `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_NAME`, `DATABASE_USER`, `DATABASE_PASSWORD`
-- `JWT_SECRET_KEY` / `SECRET_KEY`
-- `ACCESS_TOKEN_EXPIRE_MINUTES`
-- `REFRESH_TOKEN_EXPIRE_DAYS`
-- `CORS_ORIGINS`
-- `DEFAULT_ADMIN_PASSWORD`
-
-### 启动前端（Web）
+### 启动前端
 
 ```bash
 cd frontend
 npm install
 npm run dev
-# 访问 http://localhost:3000
 ```
 
-## 迁移说明
+默认地址：`http://localhost:3000`
 
-- 原 Python 后端已完成迁移并由 Go 后端完全替代。
-- 迁移过程与完成清单见：`plan.md`。
+## 说明
 
----
+- 首次启动会自动创建管理员账号：`admin` / `admin123`
+- 后端生产配置示例：`backend/config/settings.production.example.yaml`
+- 前端生产配置示例：`frontend/config/settings.production.example.json`
 
-英文版说明见：`README.md`。
+英文文档见 `README.md`。

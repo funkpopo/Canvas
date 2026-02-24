@@ -13,9 +13,9 @@ plan.md
 .env.local
 .env.*.local
 
-# 保留示例文件
-!.env.example
-!.env.prod
+# 配置文件（本项目改为配置文件驱动，避免使用 .env）
+backend/config/settings.local.yaml
+frontend/config/settings.local.json
 
 # Backend (Go)
 backend/*.exe
@@ -46,7 +46,7 @@ Thumbs.db
 
 # Logs
 *.log
-logs/
+/logs/
 backend/logs/
 
 # Temporary files

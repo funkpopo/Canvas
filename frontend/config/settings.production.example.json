@@ -1,0 +1,12 @@
+{
+  "apiBasePath": "/api",
+  "apiProxyTarget": "http://backend:8000/api/:path*",
+  "websocket": {
+    "url": "wss://api.your-domain.example/api/ws",
+    "port": 443
+  },
+  "enableBundleAnalyzer": false,
+  "i18n": {
+    "warnMissingKeys": false
+  }
+}

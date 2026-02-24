@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { useWebSocket, type WebSocketMessage } from "@/hooks/useWebSocket";
+import { useWebSocket, type WebSocketMessage } from "@/hooks/use-websocket";
 import { type Cluster, useClusterStore } from "@/lib/store/cluster-store";
 
 /**

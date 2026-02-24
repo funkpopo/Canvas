@@ -1,5 +1,32 @@
+const fs = require("fs");
+const path = require("path");
+
+const defaultRuntimeConfig = {
+  apiProxyTarget: "http://localhost:8000/api/:path*",
+  enableBundleAnalyzer: false,
+};
+
+function loadRuntimeConfig() {
+  const configPath = path.join(__dirname, "config", "settings.json");
+  try {
+    if (!fs.existsSync(configPath)) return defaultRuntimeConfig;
+
+    const raw = fs.readFileSync(configPath, "utf8");
+    const parsed = JSON.parse(raw);
+    return {
+      ...defaultRuntimeConfig,
+      ...parsed,
+    };
+  } catch (error) {
+    console.warn("[next.config] Failed to load config/settings.json, using defaults.", error);
+    return defaultRuntimeConfig;
+  }
+}
+
+const runtimeConfig = loadRuntimeConfig();
+const analyzeEnabled = runtimeConfig.enableBundleAnalyzer === true;
 const withBundleAnalyzer = require("@next/bundle-analyzer")({
-  enabled: process.env.ANALYZE === "true",
+  enabled: analyzeEnabled,
 });
 
 /** @type {import('next').NextConfig} */
@@ -30,8 +57,8 @@ const nextConfig = {
     return [
       {
         source: "/api/:path*",
-        // 本地开发默认走 localhost；Docker 部署时通过 API_URL 覆盖为 http://backend:8000/api/:path*
-        destination: process.env.API_URL || "http://localhost:8000/api/:path*",
+        // 通过 frontend/config/settings.json 管理后端代理地址
+        destination: runtimeConfig.apiProxyTarget,
       },
     ];
   },
@@ -73,4 +100,4 @@ const nextConfig = {
   },
 };
 
-module.exports = process.env.ANALYZE === "true" ? withBundleAnalyzer(nextConfig) : nextConfig;
+module.exports = analyzeEnabled ? withBundleAnalyzer(nextConfig) : nextConfig;
