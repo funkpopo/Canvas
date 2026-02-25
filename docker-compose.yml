@@ -1,0 +1,79 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      DB_TYPE: ${DB_TYPE:-sqlite}
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-canvas}
+      MYSQL_USER: ${MYSQL_USER:-canvas}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-canvas123}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-this-secret-in-production}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+      REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS:-30}
+      DEFAULT_ADMIN_PASSWORD: ${DEFAULT_ADMIN_PASSWORD:-admin123}
+      FRONTEND_PUBLIC_PORT: ${FRONTEND_PORT:-3000}
+      MYSQL_WAIT_MAX_RETRIES: ${MYSQL_WAIT_MAX_RETRIES:-60}
+      MYSQL_WAIT_SLEEP_SECONDS: ${MYSQL_WAIT_SLEEP_SECONDS:-2}
+    volumes:
+      - canvas_sqlite_data:/app/data
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    networks:
+      - canvas
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        BACKEND_PUBLIC_PORT: ${BACKEND_PORT:-8000}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      HOSTNAME: 0.0.0.0
+      PORT: 3000
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    networks:
+      - canvas
+
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    profiles:
+      - mysql
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-canvas}
+      MYSQL_USER: ${MYSQL_USER:-canvas}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-canvas123}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root123}
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    volumes:
+      - canvas_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - canvas
+
+volumes:
+  canvas_sqlite_data:
+  canvas_mysql_data:
+
+networks:
+  canvas:
+    driver: bridge

@@ -1,0 +1,12 @@
+{
+  "apiBasePath": "/api",
+  "apiProxyTarget": "http://backend:8000/api/:path*",
+  "websocket": {
+    "url": "",
+    "port": "__BACKEND_PUBLIC_PORT__"
+  },
+  "enableBundleAnalyzer": false,
+  "i18n": {
+    "warnMissingKeys": false
+  }
+}

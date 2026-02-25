@@ -122,6 +122,45 @@ npm run dev
 - 用户名：`admin`
 - 密码：`admin123`（或配置中的 `default_admin_password`）
 
+## Docker 部署
+
+### 1）准备环境变量
+
+```bash
+cp .env.example .env
+```
+
+`.env` 重点配置：
+
+- `DB_TYPE=sqlite` 或 `DB_TYPE=mysql`（选择数据库模式）
+- `FRONTEND_PORT`、`BACKEND_PORT`、`MYSQL_PORT`（宿主机端口映射）
+- 使用 MySQL 时配置 `MYSQL_DATABASE`、`MYSQL_USER`、`MYSQL_PASSWORD`、`MYSQL_ROOT_PASSWORD`
+
+### 2）使用 SQLite（默认）
+
+```bash
+docker compose up -d --build
+```
+
+### 3）使用 MySQL
+
+可任选一种方式：
+
+```bash
+docker compose --profile mysql up -d --build
+```
+
+或者在 `.env` 里设置 `COMPOSE_PROFILES=mysql`，再执行：
+
+```bash
+docker compose up -d --build
+```
+
+### 4）说明
+
+- 后端容器启动时会根据环境变量动态写入 `backend/config/settings.yaml`。
+- 修改 `BACKEND_PORT` 后请重新构建（`--build`），以更新前端 WebSocket 端口配置。
+
 ## 前端常用脚本
 
 在 `frontend/` 目录下执行：

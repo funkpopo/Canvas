@@ -122,6 +122,45 @@ On first startup, Canvas auto-creates an admin account:
 - Username: `admin`
 - Password: `admin123` (or the value from `default_admin_password`)
 
+## Docker Deployment
+
+### 1) Prepare environment variables
+
+```bash
+cp .env.example .env
+```
+
+Key fields in `.env`:
+
+- `DB_TYPE=sqlite` or `DB_TYPE=mysql` (choose database mode)
+- `FRONTEND_PORT`, `BACKEND_PORT`, `MYSQL_PORT` (host ports)
+- MySQL credentials (`MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_ROOT_PASSWORD`) when using MySQL
+
+### 2) Start with SQLite (default)
+
+```bash
+docker compose up -d --build
+```
+
+### 3) Start with MySQL
+
+Use either of these:
+
+```bash
+docker compose --profile mysql up -d --build
+```
+
+or set `COMPOSE_PROFILES=mysql` in `.env`, then run:
+
+```bash
+docker compose up -d --build
+```
+
+### 4) Notes
+
+- Backend image writes `backend/config/settings.yaml` on startup from container env vars.
+- If you change `BACKEND_PORT`, rebuild (`--build`) so frontend WebSocket config is regenerated.
+
 ## Frontend Scripts
 
 Run in `frontend/`:
