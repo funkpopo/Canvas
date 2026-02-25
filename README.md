@@ -11,7 +11,6 @@ Canvas focuses on a practical operator workflow:
 - One console for clusters, workloads, networking, storage, and access control
 - Clean UI with role-aware operations (admin vs. viewer)
 - Backend APIs designed for automation and UI consistency
-- File-based runtime configuration (no mandatory `.env` templates)
 
 ## Feature Overview
 
