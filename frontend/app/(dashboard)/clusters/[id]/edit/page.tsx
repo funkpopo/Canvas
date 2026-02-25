@@ -22,7 +22,6 @@ interface Cluster {
 
 function EditClusterPageContent() {
   const tCluster = useTranslations("cluster");
-  const tCommon = useTranslations("common");
   const [cluster, setCluster] = useState<Cluster | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
@@ -53,55 +52,35 @@ function EditClusterPageContent() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin mr-2" />
-        <span className="text-lg">{tCommon("loading")}</span>
+      <div className="flex items-center justify-center py-8">
+        <Loader2 className="h-8 w-8 animate-spin" />
       </div>
     );
   }
 
   if (!cluster) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-            {tCluster("clusterNotFound")}
-          </h2>
-          <p className="text-gray-600 dark:text-gray-400 mb-4">
-            {tCluster("clusterNotFoundDescription")}
-          </p>
-          <Link href="/clusters" className="text-zinc-600 hover:text-zinc-500">
-            {tCluster("backToClusterList")}
-          </Link>
-        </div>
+      <div className="py-8 text-center">
+        <h2 className="mb-2 text-2xl font-bold">{tCluster("clusterNotFound")}</h2>
+        <p className="mb-4 text-muted-foreground">{tCluster("clusterNotFoundDescription")}</p>
+        <Link href="/clusters" className="text-zinc-600 hover:text-zinc-500">
+          {tCluster("backToClusterList")}
+        </Link>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="bg-card shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
-              <Link href="/clusters" className="flex items-center">
-                <ArrowLeft className="h-5 w-5 mr-2" />
-                <span className="text-gray-600 dark:text-gray-400">{tCluster("backToClusterList")}</span>
-              </Link>
-            </div>
-          </div>
-        </div>
-      </header>
+    <div className="space-y-6">
+      <Link
+        href="/clusters"
+        className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
+      >
+        <ArrowLeft className="mr-2 h-4 w-4" />
+        {tCluster("backToClusterList")}
+      </Link>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <ClusterForm
-          initialData={cluster}
-          isEdit={true}
-          clusterId={cluster.id}
-        />
-      </main>
+      <ClusterForm initialData={cluster} isEdit={true} clusterId={cluster.id} />
     </div>
   );
 }

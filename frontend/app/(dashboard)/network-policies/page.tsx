@@ -1,22 +1,40 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Plus, Trash2, Eye, Edit, Loader2 } from "lucide-react";
 import ClusterSelector from "@/components/ClusterSelector";
 import NetworkPolicyForm from "@/components/NetworkPolicyForm";
-import { useAuth } from "@/lib/auth-context";
 import { useCluster } from "@/lib/cluster-context";
 import { networkPolicyApi, namespaceApi } from "@/lib/api";
 import { toast } from "sonner";
 import { useTranslations } from "@/hooks/use-translations";
+import { PageHeader } from "@/components/PageHeader";
 
 interface NetworkPolicy {
   name: string;
@@ -50,16 +68,17 @@ export default function NetworkPoliciesManagement() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editingPolicy, setEditingPolicy] = useState<any | null>(null);
 
-  const { user } = useAuth();
   const { clusters } = useCluster();
-  const router = useRouter();
 
   const fetchNetworkPolicies = async () => {
     if (!selectedClusterId || !selectedNamespace) return;
 
     setIsLoading(true);
     try {
-      const response = await networkPolicyApi.getNetworkPolicies(selectedClusterId, selectedNamespace);
+      const response = await networkPolicyApi.getNetworkPolicies(
+        selectedClusterId,
+        selectedNamespace
+      );
       if (response.data) {
         setPolicies(response.data);
       } else if (response.error) {
@@ -91,10 +110,10 @@ export default function NetworkPoliciesManagement() {
   };
 
   useEffect(() => {
-    if (user && clusters.length > 0 && !selectedClusterId) {
+    if (clusters.length > 0 && !selectedClusterId) {
       setSelectedClusterId(clusters[0].id);
     }
-  }, [user, clusters, selectedClusterId]);
+  }, [clusters, selectedClusterId]);
 
   useEffect(() => {
     if (selectedClusterId) {
@@ -110,7 +129,11 @@ export default function NetworkPoliciesManagement() {
 
   const handleDeleteNetworkPolicy = async (policy: NetworkPolicy) => {
     try {
-      const response = await networkPolicyApi.deleteNetworkPolicy(policy.cluster_id, policy.namespace, policy.name);
+      const response = await networkPolicyApi.deleteNetworkPolicy(
+        policy.cluster_id,
+        policy.namespace,
+        policy.name
+      );
       if (!response.error) {
         toast.success(t("deleteSuccess"));
         fetchNetworkPolicies();
@@ -126,7 +149,11 @@ export default function NetworkPoliciesManagement() {
   const handleViewNetworkPolicy = async (policy: NetworkPolicy) => {
     try {
       setIsPreviewLoading(true);
-      const response = await networkPolicyApi.getNetworkPolicy(policy.cluster_id, policy.namespace, policy.name);
+      const response = await networkPolicyApi.getNetworkPolicy(
+        policy.cluster_id,
+        policy.namespace,
+        policy.name
+      );
       if (response.data) {
         setSelectedPolicy(response.data);
         setIsPreviewOpen(true);
@@ -158,7 +185,11 @@ export default function NetworkPoliciesManagement() {
   const handleEditNetworkPolicy = async (policy: NetworkPolicy) => {
     try {
       setIsPreviewLoading(true);
-      const response = await networkPolicyApi.getNetworkPolicy(policy.cluster_id, policy.namespace, policy.name);
+      const response = await networkPolicyApi.getNetworkPolicy(
+        policy.cluster_id,
+        policy.namespace,
+        policy.name
+      );
       if (response.data) {
         setEditingPolicy(response.data);
         setIsEditOpen(true);
@@ -192,19 +223,9 @@ export default function NetworkPoliciesManagement() {
     }
   };
 
-  if (!user) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold mb-4">{t("pleaseLogin")}</h2>
-          <Button onClick={() => router.push('/login')}>{t("goToLogin")}</Button>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6">
+      <PageHeader title={t("title")} description={t("description")} />
       {/* Toolbar: cluster/namespace selectors + create button */}
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-4">
@@ -217,8 +238,10 @@ export default function NetworkPoliciesManagement() {
               <SelectValue placeholder={t("selectNamespace")} />
             </SelectTrigger>
             <SelectContent>
-              {namespaces.map(ns => (
-                <SelectItem key={ns} value={ns}>{ns}</SelectItem>
+              {namespaces.map((ns) => (
+                <SelectItem key={ns} value={ns}>
+                  {ns}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -233,14 +256,15 @@ export default function NetworkPoliciesManagement() {
         <CardHeader>
           <CardTitle>{t("listTitle")}</CardTitle>
           <CardDescription>
-            {selectedNamespace ? t("namespaceValue", { namespace: selectedNamespace }) : t("selectNamespaceHint")}
+            {selectedNamespace
+              ? t("namespaceValue", { namespace: selectedNamespace })
+              : t("selectNamespaceHint")}
           </CardDescription>
         </CardHeader>
         <CardContent>
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
-              <Loader2 className="w-8 h-8 animate-spin" />
-              <span className="ml-2">{tCommon("loading")}</span>
+              <Loader2 className="h-8 w-8 animate-spin" />
             </div>
           ) : policies.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
@@ -265,7 +289,9 @@ export default function NetworkPoliciesManagement() {
                       {Object.keys(policy.pod_selector).length > 0 ? (
                         <div className="text-sm">
                           {Object.entries(policy.pod_selector).map(([key, value]) => (
-                            <div key={key}>{key}: {String(value)}</div>
+                            <div key={key}>
+                              {key}: {String(value)}
+                            </div>
                           ))}
                         </div>
                       ) : (
@@ -275,7 +301,9 @@ export default function NetworkPoliciesManagement() {
                     <TableCell>
                       <div className="flex gap-1">
                         {policy.policy_types.map((type, index) => (
-                          <Badge key={index} variant="outline">{type}</Badge>
+                          <Badge key={index} variant="outline">
+                            {type}
+                          </Badge>
                         ))}
                       </div>
                     </TableCell>
@@ -324,7 +352,12 @@ export default function NetworkPoliciesManagement() {
         <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              {selectedPolicy ? t("detailsTitleWithName", { namespace: selectedPolicy.namespace, name: selectedPolicy.name }) : t("detailsTitle")}
+              {selectedPolicy
+                ? t("detailsTitleWithName", {
+                    namespace: selectedPolicy.namespace,
+                    name: selectedPolicy.name,
+                  })
+                : t("detailsTitle")}
             </DialogTitle>
           </DialogHeader>
           {selectedPolicy && (
@@ -347,7 +380,8 @@ export default function NetworkPoliciesManagement() {
               <div>
                 <Label className="font-medium">{t("podSelectorLabel")}</Label>
                 <div className="mt-1">
-                  {selectedPolicy.pod_selector && Object.keys(selectedPolicy.pod_selector).length > 0 ? (
+                  {selectedPolicy.pod_selector &&
+                  Object.keys(selectedPolicy.pod_selector).length > 0 ? (
                     <div className="bg-muted p-2 rounded text-sm font-mono">
                       {JSON.stringify(selectedPolicy.pod_selector, null, 2)}
                     </div>
@@ -363,7 +397,9 @@ export default function NetworkPoliciesManagement() {
                   {selectedPolicy.policy_types && selectedPolicy.policy_types.length > 0 ? (
                     <div className="flex flex-wrap gap-2">
                       {selectedPolicy.policy_types.map((type: string, index: number) => (
-                        <Badge key={index} variant="secondary">{type}</Badge>
+                        <Badge key={index} variant="secondary">
+                          {type}
+                        </Badge>
                       ))}
                     </div>
                   ) : (
@@ -388,7 +424,8 @@ export default function NetworkPoliciesManagement() {
               <div>
                 <Label className="font-medium">{t("annotationsLabel")}</Label>
                 <div className="mt-1">
-                  {selectedPolicy.annotations && Object.keys(selectedPolicy.annotations).length > 0 ? (
+                  {selectedPolicy.annotations &&
+                  Object.keys(selectedPolicy.annotations).length > 0 ? (
                     <div className="bg-muted p-2 rounded text-sm font-mono">
                       {JSON.stringify(selectedPolicy.annotations, null, 2)}
                     </div>
@@ -404,14 +441,24 @@ export default function NetworkPoliciesManagement() {
                   <div className="mt-1 space-y-2">
                     {selectedPolicy.ingress.map((rule: any, index: number) => (
                       <div key={index} className="bg-muted p-3 rounded">
-                        <p className="text-sm font-medium">{t("ruleLabel", { index: index + 1 })}</p>
+                        <p className="text-sm font-medium">
+                          {t("ruleLabel", { index: index + 1 })}
+                        </p>
                         {rule.from && rule.from.length > 0 && (
                           <div className="mt-2">
-                            <p className="text-xs font-medium text-muted-foreground">{t("fromLabel")}</p>
+                            <p className="text-xs font-medium text-muted-foreground">
+                              {t("fromLabel")}
+                            </p>
                             {rule.from.map((from: any, fromIndex: number) => (
                               <div key={fromIndex} className="text-xs text-muted-foreground mt-1">
-                                {from.podSelector && t("podSelectorValue", { value: JSON.stringify(from.podSelector) })}
-                                {from.namespaceSelector && t("namespaceSelectorValue", { value: JSON.stringify(from.namespaceSelector) })}
+                                {from.podSelector &&
+                                  t("podSelectorValue", {
+                                    value: JSON.stringify(from.podSelector),
+                                  })}
+                                {from.namespaceSelector &&
+                                  t("namespaceSelectorValue", {
+                                    value: JSON.stringify(from.namespaceSelector),
+                                  })}
                                 {from.ipBlock && t("ipBlockValue", { value: from.ipBlock.cidr })}
                               </div>
                             ))}
@@ -419,7 +466,9 @@ export default function NetworkPoliciesManagement() {
                         )}
                         {rule.ports && rule.ports.length > 0 && (
                           <div className="mt-2">
-                            <p className="text-xs font-medium text-muted-foreground">{t("portsLabel")}</p>
+                            <p className="text-xs font-medium text-muted-foreground">
+                              {t("portsLabel")}
+                            </p>
                             {rule.ports.map((port: any, portIndex: number) => (
                               <div key={portIndex} className="text-xs text-muted-foreground mt-1">
                                 {port.port} ({port.protocol})
@@ -439,14 +488,22 @@ export default function NetworkPoliciesManagement() {
                   <div className="mt-1 space-y-2">
                     {selectedPolicy.egress.map((rule: any, index: number) => (
                       <div key={index} className="bg-muted p-3 rounded">
-                        <p className="text-sm font-medium">{t("ruleLabel", { index: index + 1 })}</p>
+                        <p className="text-sm font-medium">
+                          {t("ruleLabel", { index: index + 1 })}
+                        </p>
                         {rule.to && rule.to.length > 0 && (
                           <div className="mt-2">
-                            <p className="text-xs font-medium text-muted-foreground">{t("toLabel")}</p>
+                            <p className="text-xs font-medium text-muted-foreground">
+                              {t("toLabel")}
+                            </p>
                             {rule.to.map((to: any, toIndex: number) => (
                               <div key={toIndex} className="text-xs text-muted-foreground mt-1">
-                                {to.podSelector && t("podSelectorValue", { value: JSON.stringify(to.podSelector) })}
-                                {to.namespaceSelector && t("namespaceSelectorValue", { value: JSON.stringify(to.namespaceSelector) })}
+                                {to.podSelector &&
+                                  t("podSelectorValue", { value: JSON.stringify(to.podSelector) })}
+                                {to.namespaceSelector &&
+                                  t("namespaceSelectorValue", {
+                                    value: JSON.stringify(to.namespaceSelector),
+                                  })}
                                 {to.ipBlock && t("ipBlockValue", { value: to.ipBlock.cidr })}
                               </div>
                             ))}
@@ -454,7 +511,9 @@ export default function NetworkPoliciesManagement() {
                         )}
                         {rule.ports && rule.ports.length > 0 && (
                           <div className="mt-2">
-                            <p className="text-xs font-medium text-muted-foreground">{t("portsLabel")}</p>
+                            <p className="text-xs font-medium text-muted-foreground">
+                              {t("portsLabel")}
+                            </p>
                             {rule.ports.map((port: any, portIndex: number) => (
                               <div key={portIndex} className="text-xs text-muted-foreground mt-1">
                                 {port.port} ({port.protocol})

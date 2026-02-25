@@ -12,6 +12,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { MetricsServerInstallDialog } from "@/components/MetricsServerInstallDialog";
 import { useTranslations } from "@/hooks/use-translations";
 import { useAsyncActionFeedback } from "@/hooks/use-async-action-feedback";
+import { PageHeader } from "@/components/PageHeader";
 
 interface Cluster {
   id: number;
@@ -30,10 +31,14 @@ function ClustersPageContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [isOperationLoading, setIsOperationLoading] = useState(false);
   const [metricsStatus, setMetricsStatus] = useState<Record<number, boolean>>({});
-  const [installDialog, setInstallDialog] = useState<{ open: boolean; clusterId: number; clusterName: string }>({
+  const [installDialog, setInstallDialog] = useState<{
+    open: boolean;
+    clusterId: number;
+    clusterName: string;
+  }>({
     open: false,
     clusterId: 0,
-    clusterName: ""
+    clusterName: "",
   });
   const [confirmDialog, setConfirmDialog] = useState({
     open: false,
@@ -74,7 +79,6 @@ function ClustersPageContent() {
 
   const fetchClusters = async () => {
     try {
-      const token = localStorage.getItem("token");
       const response = await clusterApi.getClusters();
 
       if (response.data) {
@@ -171,7 +175,9 @@ function ClustersPageContent() {
             throw new Error(response.error || t("toggleClusterErrorUnknown"));
           }
 
-          setClusters(clusters.map((c) => (c.id === cluster.id ? { ...c, is_active: !c.is_active } : c)));
+          setClusters(
+            clusters.map((c) => (c.id === cluster.id ? { ...c, is_active: !c.is_active } : c))
+          );
         },
         {
           loading: t("toggleClusterLoading", { action: tCommon(actionKey), name: cluster.name }),
@@ -187,134 +193,118 @@ function ClustersPageContent() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Main Content */}
-      <main className="py-8">
-        <div className="mb-8">
-          <h2 className="text-3xl font-bold text-gray-900 dark:text-white">
-            {t("title")}
-          </h2>
-          <p className="mt-2 text-gray-600 dark:text-gray-400">
-            {t("description")}
-          </p>
-        </div>
+    <div className="space-y-6">
+      <PageHeader title={t("title")} description={t("description")} />
 
-        {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin mr-2" />
-            <span className="text-lg">{tCommon("loading")}</span>
-          </div>
-        ) : clusters.length === 0 ? (
-          <Card>
-            <CardContent className="flex flex-col items-center justify-center py-12">
-              <div className="text-center">
-                <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                  {t("noClusters")}
-                </h3>
-                <p className="text-gray-600 dark:text-gray-400 mb-4">
-                  {t("noClustersDescription")}
-                </p>
-                <Button asChild>
-                  <Link href="/clusters/new">
-                    <Plus className="h-4 w-4 mr-2" />
-                    {t("addCluster")}
-                  </Link>
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {clusters.map((cluster) => (
-              <Card key={cluster.id}>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg">{cluster.name}</CardTitle>
-                    <Badge variant={cluster.is_active ? "default" : "secondary"}>
-                      {cluster.is_active ? tCommon("active") : tCommon("inactive")}
-                    </Badge>
+      {isLoading ? (
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="h-8 w-8 animate-spin" />
+        </div>
+      ) : clusters.length === 0 ? (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <div className="text-center">
+              <h3 className="text-lg font-medium mb-2">{t("noClusters")}</h3>
+              <p className="text-muted-foreground mb-4">{t("noClustersDescription")}</p>
+              <Button asChild>
+                <Link href="/clusters/new">
+                  <Plus className="h-4 w-4 mr-2" />
+                  {t("addCluster")}
+                </Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {clusters.map((cluster) => (
+            <Card key={cluster.id}>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg">{cluster.name}</CardTitle>
+                  <Badge variant={cluster.is_active ? "default" : "secondary"}>
+                    {cluster.is_active ? tCommon("active") : tCommon("inactive")}
+                  </Badge>
+                </div>
+                <CardDescription>{cluster.endpoint}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="text-sm text-muted-foreground">
+                    {t("authType")}:{" "}
+                    {cluster.auth_type === "kubeconfig" ? t("kubeconfig") : t("token")}
                   </div>
-                  <CardDescription>{cluster.endpoint}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <div className="text-sm text-gray-600 dark:text-gray-400">
-                      {t("authType")}: {cluster.auth_type === 'kubeconfig' ? t("kubeconfig") : t("token")}
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        size="sm"
-                        variant={cluster.is_active ? "secondary" : "default"}
-                        onClick={() => handleToggleActive(cluster)}
-                        disabled={isOperationLoading}
-                      >
-                        {cluster.is_active ? (
-                          <>
-                            <PowerOff className="h-4 w-4 mr-1" />
-                            {tCommon("deactivate")}
-                          </>
-                        ) : (
-                          <>
-                            <Power className="h-4 w-4 mr-1" />
-                            {tCommon("activate")}
-                          </>
-                        )}
-                      </Button>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      variant={cluster.is_active ? "secondary" : "default"}
+                      onClick={() => handleToggleActive(cluster)}
+                      disabled={isOperationLoading}
+                    >
+                      {cluster.is_active ? (
+                        <>
+                          <PowerOff className="h-4 w-4 mr-1" />
+                          {tCommon("deactivate")}
+                        </>
+                      ) : (
+                        <>
+                          <Power className="h-4 w-4 mr-1" />
+                          {tCommon("activate")}
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleTestConnection(cluster.id, cluster.name)}
+                      disabled={isOperationLoading}
+                    >
+                      <TestTube className="h-4 w-4 mr-1" />
+                      {t("testConnection")}
+                    </Button>
+                    {!metricsStatus[cluster.id] && (
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => handleTestConnection(cluster.id, cluster.name)}
-                        disabled={isOperationLoading}
-                      >
-                        <TestTube className="h-4 w-4 mr-1" />
-                        {t("testConnection")}
-                      </Button>
-                      {!metricsStatus[cluster.id] && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setInstallDialog({
+                        onClick={() =>
+                          setInstallDialog({
                             open: true,
                             clusterId: cluster.id,
-                            clusterName: cluster.name
-                          })}
-                        >
-                          <Activity className="h-4 w-4 mr-1" />
-                          {t("installMonitoring")}
-                        </Button>
-                      )}
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        asChild
+                            clusterName: cluster.name,
+                          })
+                        }
                       >
-                        <Link href={`/clusters/${cluster.id}/edit`}>
-                          <Edit className="h-4 w-4 mr-1" />
-                          {tCommon("edit")}
-                        </Link>
+                        <Activity className="h-4 w-4 mr-1" />
+                        {t("installMonitoring")}
                       </Button>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => handleDeleteCluster(cluster.id, cluster.name)}
-                        disabled={isOperationLoading}
-                        aria-label={`${tCommon("delete")}: ${cluster.name}`}
-                        title={`${tCommon("delete")}: ${cluster.name}`}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
+                    )}
+                    <Button size="sm" variant="outline" asChild>
+                      <Link href={`/clusters/${cluster.id}/edit`}>
+                        <Edit className="h-4 w-4 mr-1" />
+                        {tCommon("edit")}
+                      </Link>
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => handleDeleteCluster(cluster.id, cluster.name)}
+                      disabled={isOperationLoading}
+                      aria-label={`${tCommon("delete")}: ${cluster.name}`}
+                      title={`${tCommon("delete")}: ${cluster.name}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
-      </main>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
 
       <ConfirmDialog
         open={confirmDialog.open}
-        onOpenChange={(open) => setConfirmDialog(prev => ({ ...prev, open }))}
+        onOpenChange={(open) => setConfirmDialog((prev) => ({ ...prev, open }))}
         title={confirmDialog.title}
         description={confirmDialog.description}
         onConfirm={confirmDialog.onConfirm}
@@ -323,7 +313,7 @@ function ClustersPageContent() {
 
       <MetricsServerInstallDialog
         open={installDialog.open}
-        onOpenChange={(open) => setInstallDialog(prev => ({ ...prev, open }))}
+        onOpenChange={(open) => setInstallDialog((prev) => ({ ...prev, open }))}
         clusterId={installDialog.clusterId}
         clusterName={installDialog.clusterName}
         onSuccess={checkMetricsStatus}

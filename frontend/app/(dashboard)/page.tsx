@@ -1,15 +1,8 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import {
-  Server,
-  FolderPen,
-  Activity,
-  Settings,
-  Loader2,
-} from "lucide-react";
+import { Server, FolderPen, Activity, Settings, Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useCluster } from "@/lib/cluster-context";
 import { useTranslations } from "@/hooks/use-translations";
@@ -43,7 +36,12 @@ interface DashboardMetricsBundle {
   clusterMetrics: ClusterMetrics | null;
 }
 
-function StatItem({ icon: Icon, value, label, sub }: {
+function StatItem({
+  icon: Icon,
+  value,
+  label,
+  sub,
+}: {
   icon: React.ComponentType<{ className?: string }>;
   value: number | string;
   label: string;
@@ -77,15 +75,8 @@ function StatLoadingSkeleton() {
 
 export default function Home() {
   const t = useTranslations("dashboard");
-  const router = useRouter();
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated } = useAuth();
   const { activeCluster, clusters } = useCluster();
-
-  useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      router.push("/login");
-    }
-  }, [isAuthenticated, isLoading, router]);
 
   const statsQuery = useQuery({
     queryKey: ["dashboard", "stats"],
@@ -132,16 +123,6 @@ export default function Home() {
     ];
   }, [stats, t]);
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
-    );
-  }
-
-  if (!isAuthenticated) return null;
-
   return (
     <div className="space-y-8">
       {/* Page title */}
@@ -161,10 +142,28 @@ export default function Home() {
           </>
         ) : (
           <>
-            <StatItem icon={Server} value={stats?.total_clusters || 0} label={t("totalClusters")} sub={t("activeClustersHint", { count: stats?.active_clusters || 0 })} />
-            <StatItem icon={FolderPen} value={stats?.total_namespaces || 0} label={t("totalNamespaces")} />
-            <StatItem icon={Activity} value={stats?.total_pods || 0} label={t("totalPods")} sub={`${stats?.running_pods || 0} ${t("running")}`} />
-            <StatItem icon={Settings} value={stats?.total_services || 0} label={t("totalServices")} />
+            <StatItem
+              icon={Server}
+              value={stats?.total_clusters || 0}
+              label={t("totalClusters")}
+              sub={t("activeClustersHint", { count: stats?.active_clusters || 0 })}
+            />
+            <StatItem
+              icon={FolderPen}
+              value={stats?.total_namespaces || 0}
+              label={t("totalNamespaces")}
+            />
+            <StatItem
+              icon={Activity}
+              value={stats?.total_pods || 0}
+              label={t("totalPods")}
+              sub={`${stats?.running_pods || 0} ${t("running")}`}
+            />
+            <StatItem
+              icon={Settings}
+              value={stats?.total_services || 0}
+              label={t("totalServices")}
+            />
           </>
         )}
       </div>
@@ -174,7 +173,9 @@ export default function Home() {
         <div className="space-y-6">
           {/* Cluster info line */}
           <div className="flex items-center gap-4 text-sm">
-            <span className="font-medium">{clusterMetrics?.cluster_name ?? activeCluster.name}</span>
+            <span className="font-medium">
+              {clusterMetrics?.cluster_name ?? activeCluster.name}
+            </span>
             {metricsAvailable && clusterMetrics && (
               <>
                 <span className="text-muted-foreground">CPU: {clusterMetrics.cpu_usage}</span>
@@ -216,4 +217,3 @@ export default function Home() {
     </div>
   );
 }
-

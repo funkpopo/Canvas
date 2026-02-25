@@ -1,14 +1,38 @@
 "use client";
 
 import { useEffect, useState, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, RefreshCw, Search, Trash2, Clock, Pause, Play, AlertCircle, Plus } from "lucide-react";import { toast } from "sonner";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Loader2,
+  RefreshCw,
+  Search,
+  Trash2,
+  Clock,
+  Pause,
+  Play,
+  AlertCircle,
+  Plus,
+} from "lucide-react";
+import { toast } from "sonner";
 import dynamic from "next/dynamic";
 import {
   Dialog,
@@ -26,6 +50,7 @@ import { useCluster } from "@/lib/cluster-context";
 import { cronjobApi, namespaceApi } from "@/lib/api";
 import { useTranslations } from "@/hooks/use-translations";
 import { useAsyncActionFeedback } from "@/hooks/use-async-action-feedback";
+import { PageHeader } from "@/components/PageHeader";
 
 interface CronJob {
   name: string;
@@ -49,7 +74,6 @@ function CronJobsContent() {
   const t = useTranslations("cronjobs");
   const tCommon = useTranslations("common");
   const { runWithFeedback } = useAsyncActionFeedback();
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [cronjobs, setCronJobs] = useState<CronJob[]>([]);
   const [namespaces, setNamespaces] = useState<Namespace[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -68,7 +92,6 @@ function CronJobsContent() {
   const [createYamlContent, setCreateYamlContent] = useState("");
   const [createYamlError, setCreateYamlError] = useState("");
 
-  const router = useRouter();
   const searchParams = useSearchParams();
   const { selectedCluster } = useCluster();
   const clusterIdFromUrl = searchParams.get("cluster_id");
@@ -76,25 +99,16 @@ function CronJobsContent() {
   const clusterIdNum = clusterId ? parseInt(clusterId, 10) : null;
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      router.push("/login");
-      return;
-    }
-    setIsAuthenticated(true);
-  }, [router]);
-
-  useEffect(() => {
-    if (isAuthenticated && clusterIdNum) {
+    if (clusterIdNum) {
       fetchNamespaces();
     }
-  }, [isAuthenticated, clusterIdNum]);
+  }, [clusterIdNum]);
 
   useEffect(() => {
-    if (isAuthenticated && clusterIdNum && selectedNamespace) {
+    if (clusterIdNum && selectedNamespace) {
       fetchCronJobs();
     }
-  }, [isAuthenticated, clusterIdNum, selectedNamespace]);
+  }, [clusterIdNum, selectedNamespace]);
 
   const fetchNamespaces = async () => {
     if (!clusterIdNum) return;
@@ -217,13 +231,10 @@ spec:
     }
   };
 
-  if (!isAuthenticated) {
-    return <div>{t("authVerifying")}</div>;
-  }
-
   if (!clusterIdNum) {
     return (
-      <div className="container mx-auto p-6">
+      <div className="space-y-6">
+        <PageHeader title={t("title")} description={t("description")} />
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <AlertCircle className="h-8 w-8 text-yellow-600 mb-2" />
@@ -236,43 +247,60 @@ spec:
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-end gap-2">
-        <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={() => { setCreateYamlContent(cronjobYamlTemplate); setCreateYamlError(""); }}>
-              <Plus className="h-4 w-4 mr-2" />
-              {t("createCronJob")}
+    <div className="space-y-6">
+      <PageHeader
+        title={t("title")}
+        description={t("description")}
+        actions={
+          <>
+            <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+              <DialogTrigger asChild>
+                <Button
+                  onClick={() => {
+                    setCreateYamlContent(cronjobYamlTemplate);
+                    setCreateYamlError("");
+                  }}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  {t("createCronJob")}
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>{t("createTitle")}</DialogTitle>
+                  <DialogDescription>{t("createDescription")}</DialogDescription>
+                </DialogHeader>
+                <YamlEditor
+                  value={createYamlContent}
+                  onChange={(value) => {
+                    setCreateYamlContent(value);
+                    setCreateYamlError("");
+                  }}
+                  error={createYamlError}
+                  label={t("yamlEditorLabel")}
+                  template={cronjobYamlTemplate}
+                  onApplyTemplate={() => setCreateYamlContent(cronjobYamlTemplate)}
+                />
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
+                    {tCommon("cancel")}
+                  </Button>
+                  <Button
+                    onClick={handleCreateCronJob}
+                    disabled={!createYamlContent.trim() || !!createYamlError}
+                  >
+                    {t("createCronJob")}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+            <Button onClick={fetchCronJobs} disabled={isLoading}>
+              <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
+              {t("refresh")}
             </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>{t("createTitle")}</DialogTitle>
-              <DialogDescription>{t("createDescription")}</DialogDescription>
-            </DialogHeader>
-            <YamlEditor
-              value={createYamlContent}
-              onChange={(value) => { setCreateYamlContent(value); setCreateYamlError(""); }}
-              error={createYamlError}
-              label={t("yamlEditorLabel")}
-              template={cronjobYamlTemplate}
-              onApplyTemplate={() => setCreateYamlContent(cronjobYamlTemplate)}
-            />
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
-                {tCommon("cancel")}
-              </Button>
-              <Button onClick={handleCreateCronJob} disabled={!createYamlContent.trim() || !!createYamlError}>
-                {t("createCronJob")}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-        <Button onClick={fetchCronJobs} disabled={isLoading}>
-          <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
-          {t("refresh")}
-        </Button>
-      </div>
+          </>
+        }
+      />
 
       <Card>
         <CardHeader>
@@ -312,7 +340,6 @@ spec:
             {isLoading ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="h-8 w-8 animate-spin" />
-                <span className="ml-2">{tCommon("loading")}</span>
               </div>
             ) : (
               <div className="border rounded-lg">
@@ -332,7 +359,9 @@ spec:
                     {filteredCronJobs.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                          {selectedNamespace ? t("noCronJobsInNamespace") : t("selectNamespaceFirst")}
+                          {selectedNamespace
+                            ? t("noCronJobsInNamespace")
+                            : t("selectNamespaceFirst")}
                         </TableCell>
                       </TableRow>
                     ) : (
@@ -363,7 +392,9 @@ spec:
                             )}
                           </TableCell>
                           <TableCell>
-                            <Badge variant={cj.active > 0 ? "default" : "outline"}>{cj.active}</Badge>
+                            <Badge variant={cj.active > 0 ? "default" : "outline"}>
+                              {cj.active}
+                            </Badge>
                           </TableCell>
                           <TableCell>{cj.last_schedule_time || t("neverRun")}</TableCell>
                           <TableCell>{cj.age}</TableCell>
@@ -410,7 +441,13 @@ spec:
 
 export default function CronJobsPage() {
   return (
-    <Suspense fallback={<div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin" /></div>}>
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="h-8 w-8 animate-spin" />
+        </div>
+      }
+    >
       <CronJobsContent />
     </Suspense>
   );

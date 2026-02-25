@@ -1,15 +1,26 @@
 "use client";
 
 import { useEffect, useState, Suspense } from "react";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Loader2, RefreshCw, Search, Trash2, Globe, Plus } from "lucide-react";
-import { useAuth } from "@/lib/auth-context";
 import { useCluster } from "@/lib/cluster-context";
 import { toast } from "sonner";
 import dynamic from "next/dynamic";
@@ -28,6 +39,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ingressApi, namespaceApi } from "@/lib/api";
 import { useTranslations } from "@/hooks/use-translations";
 import { useAsyncActionFeedback } from "@/hooks/use-async-action-feedback";
+import { PageHeader } from "@/components/PageHeader";
 
 interface Ingress {
   name: string;
@@ -49,7 +61,6 @@ function IngressesContent() {
   const t = useTranslations("ingresses");
   const tCommon = useTranslations("common");
   const { runWithFeedback } = useAsyncActionFeedback();
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const { activeCluster } = useCluster();
   const [ingresses, setIngresses] = useState<Ingress[]>([]);
   const [namespaces, setNamespaces] = useState<Namespace[]>([]);
@@ -69,28 +80,20 @@ function IngressesContent() {
   const [createYamlContent, setCreateYamlContent] = useState("");
   const [createYamlError, setCreateYamlError] = useState("");
 
-  const router = useRouter();
   const clusterId = activeCluster?.id.toString();
   const clusterIdNum = clusterId ? parseInt(clusterId, 10) : null;
 
   useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
-      router.push("/login");
-      return;
-    }
-  }, [isAuthenticated, authLoading, router]);
-
-  useEffect(() => {
-    if (isAuthenticated && clusterIdNum) {
+    if (clusterIdNum) {
       fetchNamespaces();
     }
-  }, [isAuthenticated, clusterIdNum]);
+  }, [clusterIdNum]);
 
   useEffect(() => {
-    if (isAuthenticated && clusterIdNum && selectedNamespace) {
+    if (clusterIdNum && selectedNamespace) {
       fetchIngresses();
     }
-  }, [isAuthenticated, clusterIdNum, selectedNamespace]);
+  }, [clusterIdNum, selectedNamespace]);
 
   const fetchNamespaces = async () => {
     if (!clusterIdNum) return;
@@ -216,21 +219,10 @@ spec:
     }
   };
 
-  if (authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
-    );
-  }
-
-  if (!isAuthenticated) {
-    return null;
-  }
-
   if (!clusterIdNum) {
     return (
-      <div className="p-6">
+      <div className="space-y-6">
+        <PageHeader title={t("title")} description={t("description")} />
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <h3 className="text-lg font-medium mb-2">{t("clusterRequiredTitle")}</h3>
@@ -242,183 +234,214 @@ spec:
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-end gap-2">
-        <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={() => { setCreateYamlContent(ingressYamlTemplate); setCreateYamlError(""); }}>
-              <Plus className="h-4 w-4 mr-2" />
-              {t("createIngress")}
+    <div className="space-y-6">
+      <PageHeader
+        title={t("title")}
+        description={t("description")}
+        actions={
+          <>
+            <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+              <DialogTrigger asChild>
+                <Button
+                  onClick={() => {
+                    setCreateYamlContent(ingressYamlTemplate);
+                    setCreateYamlError("");
+                  }}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  {t("createIngress")}
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>{t("createTitle")}</DialogTitle>
+                  <DialogDescription>{t("createDescription")}</DialogDescription>
+                </DialogHeader>
+                <YamlEditor
+                  value={createYamlContent}
+                  onChange={(value) => {
+                    setCreateYamlContent(value);
+                    setCreateYamlError("");
+                  }}
+                  error={createYamlError}
+                  label={t("yamlEditorLabel")}
+                  template={ingressYamlTemplate}
+                  onApplyTemplate={() => setCreateYamlContent(ingressYamlTemplate)}
+                />
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
+                    {tCommon("cancel")}
+                  </Button>
+                  <Button
+                    onClick={handleCreateIngress}
+                    disabled={!createYamlContent.trim() || !!createYamlError}
+                  >
+                    {t("createIngress")}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+            <Button onClick={fetchIngresses} disabled={isLoading}>
+              <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
+              {t("refresh")}
             </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>{t("createTitle")}</DialogTitle>
-              <DialogDescription>{t("createDescription")}</DialogDescription>
-            </DialogHeader>
-            <YamlEditor
-              value={createYamlContent}
-              onChange={(value) => { setCreateYamlContent(value); setCreateYamlError(""); }}
-              error={createYamlError}
-              label={t("yamlEditorLabel")}
-              template={ingressYamlTemplate}
-              onApplyTemplate={() => setCreateYamlContent(ingressYamlTemplate)}
-            />
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
-                {tCommon("cancel")}
-              </Button>
-              <Button onClick={handleCreateIngress} disabled={!createYamlContent.trim() || !!createYamlError}>
-                {t("createIngress")}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-        <Button onClick={fetchIngresses} disabled={isLoading}>
-          <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
-          {t("refresh")}
-        </Button>
-      </div>
+          </>
+        }
+      />
 
       <Card>
-          <CardHeader>
-            <CardTitle>{t("listTitle")}</CardTitle>
-            <CardDescription>{t("listDescription")}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col space-y-4">
-              <div className="flex flex-wrap gap-4">
-                <div className="flex-1 min-w-[200px]">
-                  <Select value={selectedNamespace} onValueChange={setSelectedNamespace}>
-                    <SelectTrigger>
-                      <SelectValue placeholder={t("namespacePlaceholder")} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {namespaces.map((ns) => (
-                        <SelectItem key={ns.name} value={ns.name}>
-                          {ns.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex-1 min-w-[200px]">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                    <Input
-                      placeholder={t("searchPlaceholder")}
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="pl-10"
-                    />
-                  </div>
+        <CardHeader>
+          <CardTitle>{t("listTitle")}</CardTitle>
+          <CardDescription>{t("listDescription")}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col space-y-4">
+            <div className="flex flex-wrap gap-4">
+              <div className="flex-1 min-w-[200px]">
+                <Select value={selectedNamespace} onValueChange={setSelectedNamespace}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={t("namespacePlaceholder")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {namespaces.map((ns) => (
+                      <SelectItem key={ns.name} value={ns.name}>
+                        {ns.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex-1 min-w-[200px]">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                  <Input
+                    placeholder={t("searchPlaceholder")}
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10"
+                  />
                 </div>
               </div>
+            </div>
 
-              {isLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-8 w-8 animate-spin" />
-                  <span className="ml-2">{tCommon("loading")}</span>
-                </div>
-              ) : (
-                <div className="border rounded-lg">
-                  <Table>
-                    <TableHeader>
+            {isLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-8 w-8 animate-spin" />
+              </div>
+            ) : (
+              <div className="border rounded-lg">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>{t("nameLabel")}</TableHead>
+                      <TableHead>{t("hostsLabel")}</TableHead>
+                      <TableHead>{t("addressesLabel")}</TableHead>
+                      <TableHead>{t("ageLabel")}</TableHead>
+                      <TableHead>{tCommon("actions")}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredIngresses.length === 0 ? (
                       <TableRow>
-                        <TableHead>{t("nameLabel")}</TableHead>
-                        <TableHead>{t("hostsLabel")}</TableHead>
-                        <TableHead>{t("addressesLabel")}</TableHead>
-                        <TableHead>{t("ageLabel")}</TableHead>
-                        <TableHead>{tCommon("actions")}</TableHead>
+                        <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                          {selectedNamespace
+                            ? t("noIngressesInNamespace")
+                            : t("selectNamespaceFirst")}
+                        </TableCell>
                       </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredIngresses.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                            {selectedNamespace ? t("noIngressesInNamespace") : t("selectNamespaceFirst")}
+                    ) : (
+                      filteredIngresses.map((ing) => (
+                        <TableRow key={ing.name}>
+                          <TableCell className="font-medium">
+                            <div className="flex items-center">
+                              <Globe className="h-4 w-4 mr-2 text-blue-500" />
+                              {ing.name}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col gap-1">
+                              {ing.hosts.length > 0 ? (
+                                ing.hosts.map((host, idx) => (
+                                  <Badge key={idx} variant="outline" className="w-fit">
+                                    {host}
+                                  </Badge>
+                                ))
+                              ) : (
+                                <span className="text-muted-foreground text-sm">
+                                  {t("emptyHost")}
+                                </span>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col gap-1">
+                              {ing.addresses.length > 0 ? (
+                                ing.addresses.map((addr, idx) => (
+                                  <code
+                                    key={idx}
+                                    className="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded"
+                                  >
+                                    {addr}
+                                  </code>
+                                ))
+                              ) : (
+                                <span className="text-muted-foreground text-sm">
+                                  {t("emptyAddress")}
+                                </span>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>{ing.age}</TableCell>
+                          <TableCell>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                setConfirmDialog({
+                                  open: true,
+                                  title: t("deleteTitle"),
+                                  description: t("deleteDescription", { name: ing.name }),
+                                  onConfirm: () => handleDelete(ing.name),
+                                })
+                              }
+                              disabled={isOperationLoading}
+                              aria-label={`${tCommon("delete")}: ${ing.name}`}
+                              title={`${tCommon("delete")}: ${ing.name}`}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
                           </TableCell>
                         </TableRow>
-                      ) : (
-                        filteredIngresses.map((ing) => (
-                          <TableRow key={ing.name}>
-                            <TableCell className="font-medium">
-                              <div className="flex items-center">
-                                <Globe className="h-4 w-4 mr-2 text-blue-500" />
-                                {ing.name}
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex flex-col gap-1">
-                                {ing.hosts.length > 0 ? (
-                                  ing.hosts.map((host, idx) => (
-                                    <Badge key={idx} variant="outline" className="w-fit">
-                                      {host}
-                                    </Badge>
-                                  ))
-                                ) : (
-                                  <span className="text-muted-foreground text-sm">{t("emptyHost")}</span>
-                                )}
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex flex-col gap-1">
-                                {ing.addresses.length > 0 ? (
-                                  ing.addresses.map((addr, idx) => (
-                                    <code key={idx} className="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
-                                      {addr}
-                                    </code>
-                                  ))
-                                ) : (
-                                  <span className="text-muted-foreground text-sm">{t("emptyAddress")}</span>
-                                )}
-                              </div>
-                            </TableCell>
-                            <TableCell>{ing.age}</TableCell>
-                            <TableCell>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() =>
-                                  setConfirmDialog({
-                                    open: true,
-                                    title: t("deleteTitle"),
-                                    description: t("deleteDescription", { name: ing.name }),
-                                    onConfirm: () => handleDelete(ing.name),
-                                  })
-                                }
-                                disabled={isOperationLoading}
-                                aria-label={`${tCommon("delete")}: ${ing.name}`}
-                                title={`${tCommon("delete")}: ${ing.name}`}
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
-        <ConfirmDialog
-          open={confirmDialog.open}
-          onOpenChange={(open) => setConfirmDialog((prev) => ({ ...prev, open }))}
-          title={confirmDialog.title}
-          description={confirmDialog.description}
-          onConfirm={confirmDialog.onConfirm}
-        />
+      <ConfirmDialog
+        open={confirmDialog.open}
+        onOpenChange={(open) => setConfirmDialog((prev) => ({ ...prev, open }))}
+        title={confirmDialog.title}
+        description={confirmDialog.description}
+        onConfirm={confirmDialog.onConfirm}
+      />
     </div>
   );
 }
 
 export default function IngressesPage() {
   return (
-    <Suspense fallback={<div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin" /></div>}>
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="h-8 w-8 animate-spin" />
+        </div>
+      }
+    >
       <IngressesContent />
     </Suspense>
   );

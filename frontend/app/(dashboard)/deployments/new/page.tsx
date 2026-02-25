@@ -83,12 +83,14 @@ function buildYamlFromForm(
         if (hasLimits) {
           yaml += "\n          limits:";
           if (c.resources.limits.cpu) yaml += `\n            cpu: "${c.resources.limits.cpu}"`;
-          if (c.resources.limits.memory) yaml += `\n            memory: "${c.resources.limits.memory}"`;
+          if (c.resources.limits.memory)
+            yaml += `\n            memory: "${c.resources.limits.memory}"`;
         }
         if (hasRequests) {
           yaml += "\n          requests:";
           if (c.resources.requests.cpu) yaml += `\n            cpu: "${c.resources.requests.cpu}"`;
-          if (c.resources.requests.memory) yaml += `\n            memory: "${c.resources.requests.memory}"`;
+          if (c.resources.requests.memory)
+            yaml += `\n            memory: "${c.resources.requests.memory}"`;
         }
       }
       return yaml;
@@ -189,7 +191,9 @@ export default function CreateDeploymentPage() {
     try {
       await runWithFeedback(
         async () => {
-          const response = await deploymentApi.createDeployment(clusterId, { yaml_content: content });
+          const response = await deploymentApi.createDeployment(clusterId, {
+            yaml_content: content,
+          });
           if (!response.data) {
             throw new Error(response.error || t("createErrorUnknown"));
           }
@@ -209,7 +213,7 @@ export default function CreateDeploymentPage() {
   };
 
   return (
-    <div className="container mx-auto p-6 max-w-4xl space-y-6">
+    <div className="max-w-4xl space-y-6">
       <div className="flex items-center gap-4">
         <Link href="/deployments">
           <Button variant="outline" size="sm">
@@ -356,7 +360,10 @@ export default function CreateDeploymentPage() {
                           value={port.containerPort}
                           onChange={(e) => {
                             const newPorts = [...container.ports];
-                            newPorts[pIdx] = { ...newPorts[pIdx], containerPort: parseInt(e.target.value) || 0 };
+                            newPorts[pIdx] = {
+                              ...newPorts[pIdx],
+                              containerPort: parseInt(e.target.value) || 0,
+                            };
                             updateContainer(idx, { ports: newPorts });
                           }}
                           className="w-32"
@@ -381,7 +388,9 @@ export default function CreateDeploymentPage() {
                           variant="ghost"
                           size="sm"
                           onClick={() =>
-                            updateContainer(idx, { ports: container.ports.filter((_, i) => i !== pIdx) })
+                            updateContainer(idx, {
+                              ports: container.ports.filter((_, i) => i !== pIdx),
+                            })
                           }
                           aria-label={`${tCommon("delete")}: ${t("containerPort")} ${pIdx + 1}`}
                           title={`${tCommon("delete")}: ${t("containerPort")} ${pIdx + 1}`}
@@ -445,7 +454,10 @@ export default function CreateDeploymentPage() {
                             updateContainer(idx, {
                               resources: {
                                 ...container.resources,
-                                requests: { ...container.resources.requests, memory: e.target.value },
+                                requests: {
+                                  ...container.resources.requests,
+                                  memory: e.target.value,
+                                },
                               },
                             })
                           }
@@ -478,14 +490,18 @@ export default function CreateDeploymentPage() {
                     placeholder={t("labelKey")}
                     value={label.key}
                     onChange={(e) =>
-                      setLabels((prev) => prev.map((l, i) => (i === idx ? { ...l, key: e.target.value } : l)))
+                      setLabels((prev) =>
+                        prev.map((l, i) => (i === idx ? { ...l, key: e.target.value } : l))
+                      )
                     }
                   />
                   <Input
                     placeholder={t("labelValue")}
                     value={label.value}
                     onChange={(e) =>
-                      setLabels((prev) => prev.map((l, i) => (i === idx ? { ...l, value: e.target.value } : l)))
+                      setLabels((prev) =>
+                        prev.map((l, i) => (i === idx ? { ...l, value: e.target.value } : l))
+                      )
                     }
                   />
                   <Button

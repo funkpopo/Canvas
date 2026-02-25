@@ -1,19 +1,49 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ArrowLeft, Loader2, RefreshCw, Plus, Search, Edit, Trash2, Eye, EyeOff } from "lucide-react";
+import {
+  ArrowLeft,
+  Loader2,
+  RefreshCw,
+  Plus,
+  Search,
+  Edit,
+  Trash2,
+  Eye,
+  EyeOff,
+} from "lucide-react";
 import { jobApi, JobTemplate } from "@/lib/api";
 import { useTranslations } from "@/hooks/use-translations";
 import { useAsyncActionFeedback } from "@/hooks/use-async-action-feedback";
@@ -24,7 +54,6 @@ export default function JobTemplatesPage() {
   const t = useTranslations("jobs");
   const tCommon = useTranslations("common");
   const { runWithFeedback } = useAsyncActionFeedback();
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [templates, setTemplates] = useState<JobTemplate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -48,28 +77,16 @@ export default function JobTemplatesPage() {
     onConfirm: () => {},
   });
 
-  const router = useRouter();
-
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      router.push("/login");
-      return;
-    }
-
-    setIsAuthenticated(true);
-  }, [router]);
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetchTemplates();
-    }
-  }, [isAuthenticated]);
+    fetchTemplates();
+  }, []);
 
   const fetchTemplates = async () => {
     setIsLoading(true);
     try {
-      const response = await jobApi.getJobTemplates(categoryFilter && categoryFilter !== "all" ? categoryFilter : undefined);
+      const response = await jobApi.getJobTemplates(
+        categoryFilter && categoryFilter !== "all" ? categoryFilter : undefined
+      );
       if (response.data) {
         setTemplates(response.data);
       } else if (response.error) {
@@ -191,7 +208,7 @@ export default function JobTemplatesPage() {
             throw new Error(response.error || t("templateDetailsLoadErrorUnknown"));
           }
 
-          setFormData(prev => ({
+          setFormData((prev) => ({
             ...prev,
             yaml_content: response.data.yaml_content,
           }));
@@ -220,22 +237,22 @@ export default function JobTemplatesPage() {
     setSelectedTemplate(null);
   };
 
-  const filteredTemplates = templates.filter(template => {
-    const matchesSearch = template.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         (template.description && template.description.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filteredTemplates = templates.filter((template) => {
+    const matchesSearch =
+      template.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (template.description &&
+        template.description.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchesCategory = !categoryFilter || template.category === categoryFilter;
     return matchesSearch && matchesCategory;
   });
 
   // 获取所有分类
-  const categories = Array.from(new Set(templates.map(t => t.category).filter(Boolean))) as string[];
-
-  if (!isAuthenticated) {
-    return <div>{t("authVerifying")}</div>;
-  }
+  const categories = Array.from(
+    new Set(templates.map((t) => t.category).filter(Boolean))
+  ) as string[];
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
           <Link href="/jobs">
@@ -251,7 +268,7 @@ export default function JobTemplatesPage() {
         </div>
         <div className="flex space-x-2">
           <Button onClick={fetchTemplates} disabled={isLoading}>
-            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
             {t("refresh")}
           </Button>
           <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
@@ -264,9 +281,7 @@ export default function JobTemplatesPage() {
             <DialogContent className="max-w-4xl">
               <DialogHeader>
                 <DialogTitle>{t("createTemplateTitle")}</DialogTitle>
-                <DialogDescription>
-                  {t("createTemplateDescription")}
-                </DialogDescription>
+                <DialogDescription>{t("createTemplateDescription")}</DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
@@ -275,7 +290,7 @@ export default function JobTemplatesPage() {
                     <Input
                       id="template-name"
                       value={formData.name}
-                      onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
                       placeholder={t("templateNamePlaceholder")}
                     />
                   </div>
@@ -284,7 +299,9 @@ export default function JobTemplatesPage() {
                     <Input
                       id="template-category"
                       value={formData.category}
-                      onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
+                      onChange={(e) =>
+                        setFormData((prev) => ({ ...prev, category: e.target.value }))
+                      }
                       placeholder={t("categoryPlaceholder")}
                     />
                   </div>
@@ -294,7 +311,9 @@ export default function JobTemplatesPage() {
                   <Input
                     id="template-description"
                     value={formData.description}
-                    onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                    onChange={(e) =>
+                      setFormData((prev) => ({ ...prev, description: e.target.value }))
+                    }
                     placeholder={t("descriptionPlaceholder")}
                   />
                 </div>
@@ -304,7 +323,9 @@ export default function JobTemplatesPage() {
                     id="template-yaml"
                     placeholder={t("yamlPlaceholder")}
                     value={formData.yaml_content}
-                    onChange={(e) => setFormData(prev => ({ ...prev, yaml_content: e.target.value }))}
+                    onChange={(e) =>
+                      setFormData((prev) => ({ ...prev, yaml_content: e.target.value }))
+                    }
                     className="min-h-[300px] font-mono text-sm"
                   />
                 </div>
@@ -312,7 +333,9 @@ export default function JobTemplatesPage() {
                   <Checkbox
                     id="template-public"
                     checked={formData.is_public}
-                    onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_public: checked as boolean }))}
+                    onCheckedChange={(checked) =>
+                      setFormData((prev) => ({ ...prev, is_public: checked as boolean }))
+                    }
                   />
                   <Label htmlFor="template-public">{t("publicTemplateDescription")}</Label>
                 </div>
@@ -334,9 +357,7 @@ export default function JobTemplatesPage() {
       <Card>
         <CardHeader>
           <CardTitle>{t("templatesListTitle")}</CardTitle>
-          <CardDescription>
-            {t("templatesListDescription")}
-          </CardDescription>
+          <CardDescription>{t("templatesListDescription")}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex flex-col space-y-4">
@@ -374,7 +395,6 @@ export default function JobTemplatesPage() {
             {isLoading ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="h-8 w-8 animate-spin" />
-                <span className="ml-2">{tCommon("loading")}</span>
               </div>
             ) : (
               <div className="border rounded-lg">
@@ -426,9 +446,7 @@ export default function JobTemplatesPage() {
                               </Badge>
                             )}
                           </TableCell>
-                          <TableCell>
-                            {new Date(template.created_at).toLocaleString()}
-                          </TableCell>
+                          <TableCell>{new Date(template.created_at).toLocaleString()}</TableCell>
                           <TableCell>
                             <div className="flex space-x-2">
                               <Button
@@ -444,12 +462,16 @@ export default function JobTemplatesPage() {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => setConfirmDialog({
-                                  open: true,
-                                  title: t("deleteTemplateTitle"),
-                                  description: t("deleteTemplateDescription", { name: template.name }),
-                                  onConfirm: () => handleDeleteTemplate(template.id),
-                                })}
+                                onClick={() =>
+                                  setConfirmDialog({
+                                    open: true,
+                                    title: t("deleteTemplateTitle"),
+                                    description: t("deleteTemplateDescription", {
+                                      name: template.name,
+                                    }),
+                                    onConfirm: () => handleDeleteTemplate(template.id),
+                                  })
+                                }
                                 disabled={isOperationLoading}
                                 aria-label={`${tCommon("delete")}: ${template.name}`}
                                 title={`${tCommon("delete")}: ${template.name}`}
@@ -474,9 +496,7 @@ export default function JobTemplatesPage() {
         <DialogContent className="max-w-4xl">
           <DialogHeader>
             <DialogTitle>{t("editTemplateTitle")}</DialogTitle>
-            <DialogDescription>
-              {t("editTemplateDescription")}
-            </DialogDescription>
+            <DialogDescription>{t("editTemplateDescription")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
@@ -485,7 +505,7 @@ export default function JobTemplatesPage() {
                 <Input
                   id="edit-template-name"
                   value={formData.name}
-                  onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
                   placeholder={t("templateNamePlaceholder")}
                 />
               </div>
@@ -494,7 +514,7 @@ export default function JobTemplatesPage() {
                 <Input
                   id="edit-template-category"
                   value={formData.category}
-                  onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, category: e.target.value }))}
                   placeholder={t("categoryPlaceholder")}
                 />
               </div>
@@ -504,7 +524,7 @@ export default function JobTemplatesPage() {
               <Input
                 id="edit-template-description"
                 value={formData.description}
-                onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
                 placeholder={t("descriptionPlaceholder")}
               />
             </div>
@@ -514,7 +534,7 @@ export default function JobTemplatesPage() {
                 id="edit-template-yaml"
                 placeholder={t("yamlPlaceholder")}
                 value={formData.yaml_content}
-                onChange={(e) => setFormData(prev => ({ ...prev, yaml_content: e.target.value }))}
+                onChange={(e) => setFormData((prev) => ({ ...prev, yaml_content: e.target.value }))}
                 disabled={isEditTemplateLoading}
                 className="min-h-[300px] font-mono text-sm"
               />
@@ -523,7 +543,9 @@ export default function JobTemplatesPage() {
               <Checkbox
                 id="edit-template-public"
                 checked={formData.is_public}
-                onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_public: checked as boolean }))}
+                onCheckedChange={(checked) =>
+                  setFormData((prev) => ({ ...prev, is_public: checked as boolean }))
+                }
               />
               <Label htmlFor="edit-template-public">{t("publicTemplateDescription")}</Label>
             </div>
@@ -532,7 +554,10 @@ export default function JobTemplatesPage() {
             <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
               {tCommon("cancel")}
             </Button>
-            <Button onClick={handleEditTemplate} disabled={isOperationLoading || isEditTemplateLoading}>
+            <Button
+              onClick={handleEditTemplate}
+              disabled={isOperationLoading || isEditTemplateLoading}
+            >
               {isOperationLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               {t("update")}
             </Button>
@@ -542,7 +567,7 @@ export default function JobTemplatesPage() {
 
       <ConfirmDialog
         open={confirmDialog.open}
-        onOpenChange={(open) => setConfirmDialog(prev => ({ ...prev, open }))}
+        onOpenChange={(open) => setConfirmDialog((prev) => ({ ...prev, open }))}
         title={confirmDialog.title}
         description={confirmDialog.description}
         onConfirm={confirmDialog.onConfirm}
@@ -550,4 +575,3 @@ export default function JobTemplatesPage() {
     </div>
   );
 }
-

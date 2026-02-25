@@ -1,22 +1,40 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Plus, Trash2, Eye, Loader2 } from "lucide-react";
 import ClusterSelector from "@/components/ClusterSelector";
 import ResourceQuotaForm from "@/components/ResourceQuotaForm";
-import { useAuth } from "@/lib/auth-context";
 import { useCluster } from "@/lib/cluster-context";
 import { resourceQuotaApi, namespaceApi } from "@/lib/api";
 import { toast } from "sonner";
 import { useTranslations } from "@/hooks/use-translations";
+import { PageHeader } from "@/components/PageHeader";
 
 interface ResourceQuota {
   name: string;
@@ -48,16 +66,17 @@ export default function ResourceQuotasManagement() {
   // 创建对话框状态
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
-  const { user, isAuthenticated, isLoading } = useAuth();
   const { clusters } = useCluster();
-  const router = useRouter();
 
   const fetchResourceQuotas = async () => {
     if (!selectedClusterId || !selectedNamespace) return;
 
     setIsQuotasLoading(true);
     try {
-      const response = await resourceQuotaApi.getResourceQuotas(selectedClusterId, selectedNamespace);
+      const response = await resourceQuotaApi.getResourceQuotas(
+        selectedClusterId,
+        selectedNamespace
+      );
       if (response.data) {
         setQuotas(response.data);
       } else if (response.error) {
@@ -65,7 +84,11 @@ export default function ResourceQuotasManagement() {
       }
     } catch (error) {
       console.error("获取Resource Quota列表失败:", error);
-      toast.error(t("loadListErrorWithMessage", { message: error instanceof Error ? error.message : t("networkError") }));
+      toast.error(
+        t("loadListErrorWithMessage", {
+          message: error instanceof Error ? error.message : t("networkError"),
+        })
+      );
     } finally {
       setIsQuotasLoading(false);
     }
@@ -90,10 +113,10 @@ export default function ResourceQuotasManagement() {
   };
 
   useEffect(() => {
-    if (user && clusters.length > 0 && !selectedClusterId) {
+    if (clusters.length > 0 && !selectedClusterId) {
       setSelectedClusterId(clusters[0].id);
     }
-  }, [user, clusters, selectedClusterId]);
+  }, [clusters, selectedClusterId]);
 
   useEffect(() => {
     if (selectedClusterId) {
@@ -109,7 +132,11 @@ export default function ResourceQuotasManagement() {
 
   const handleDeleteResourceQuota = async (quota: ResourceQuota) => {
     try {
-      const response = await resourceQuotaApi.deleteResourceQuota(quota.cluster_id, quota.namespace, quota.name);
+      const response = await resourceQuotaApi.deleteResourceQuota(
+        quota.cluster_id,
+        quota.namespace,
+        quota.name
+      );
       if (!response.error) {
         toast.success(t("deleteSuccess"));
         fetchResourceQuotas();
@@ -125,7 +152,11 @@ export default function ResourceQuotasManagement() {
   const handleViewResourceQuota = async (quota: ResourceQuota) => {
     try {
       setIsPreviewLoading(true);
-      const response = await resourceQuotaApi.getResourceQuota(quota.cluster_id, quota.namespace, quota.name);
+      const response = await resourceQuotaApi.getResourceQuota(
+        quota.cluster_id,
+        quota.namespace,
+        quota.name
+      );
       if (response.data) {
         setSelectedQuota(response.data);
         setIsPreviewOpen(true);
@@ -160,28 +191,9 @@ export default function ResourceQuotasManagement() {
     }
   };
 
-  // 检查认证状态
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
-    );
-  }
-
-  if (!isAuthenticated || !user) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold mb-4">{t("pleaseLogin")}</h2>
-          <Button onClick={() => router.push('/login')}>{t("goToLogin")}</Button>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6">
+      <PageHeader title={t("title")} description={t("description")} />
       {/* Toolbar: cluster/namespace selectors + create button */}
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-4">
@@ -194,8 +206,10 @@ export default function ResourceQuotasManagement() {
               <SelectValue placeholder={t("selectNamespace")} />
             </SelectTrigger>
             <SelectContent>
-              {namespaces.map(ns => (
-                <SelectItem key={ns} value={ns}>{ns}</SelectItem>
+              {namespaces.map((ns) => (
+                <SelectItem key={ns} value={ns}>
+                  {ns}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -210,14 +224,15 @@ export default function ResourceQuotasManagement() {
         <CardHeader>
           <CardTitle>{t("listTitle")}</CardTitle>
           <CardDescription>
-            {selectedNamespace ? t("namespaceValue", { namespace: selectedNamespace }) : t("selectNamespaceHint")}
+            {selectedNamespace
+              ? t("namespaceValue", { namespace: selectedNamespace })
+              : t("selectNamespaceHint")}
           </CardDescription>
         </CardHeader>
         <CardContent>
           {isQuotasLoading ? (
             <div className="flex items-center justify-center py-8">
-              <Loader2 className="w-8 h-8 animate-spin" />
-              <span className="ml-2">{tCommon("loading")}</span>
+              <Loader2 className="h-8 w-8 animate-spin" />
             </div>
           ) : quotas.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
@@ -240,21 +255,33 @@ export default function ResourceQuotasManagement() {
                     <TableCell className="font-medium">{quota.name}</TableCell>
                     <TableCell>
                       <div className="text-sm max-w-xs">
-                        {Object.entries(quota.hard).slice(0, 3).map(([key, value]) => (
-                          <div key={key} className="truncate">{key}: {String(value)}</div>
-                        ))}
+                        {Object.entries(quota.hard)
+                          .slice(0, 3)
+                          .map(([key, value]) => (
+                            <div key={key} className="truncate">
+                              {key}: {String(value)}
+                            </div>
+                          ))}
                         {Object.keys(quota.hard).length > 3 && (
-                          <div className="text-muted-foreground">{t("moreCount", { count: Object.keys(quota.hard).length - 3 })}</div>
+                          <div className="text-muted-foreground">
+                            {t("moreCount", { count: Object.keys(quota.hard).length - 3 })}
+                          </div>
                         )}
                       </div>
                     </TableCell>
                     <TableCell>
                       <div className="text-sm max-w-xs">
-                        {Object.entries(quota.used).slice(0, 3).map(([key, value]) => (
-                          <div key={key} className="truncate">{key}: {String(value)}</div>
-                        ))}
+                        {Object.entries(quota.used)
+                          .slice(0, 3)
+                          .map(([key, value]) => (
+                            <div key={key} className="truncate">
+                              {key}: {String(value)}
+                            </div>
+                          ))}
                         {Object.keys(quota.used).length > 3 && (
-                          <div className="text-muted-foreground">{t("moreCount", { count: Object.keys(quota.used).length - 3 })}</div>
+                          <div className="text-muted-foreground">
+                            {t("moreCount", { count: Object.keys(quota.used).length - 3 })}
+                          </div>
                         )}
                       </div>
                     </TableCell>
@@ -296,7 +323,12 @@ export default function ResourceQuotasManagement() {
         <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              {selectedQuota ? t("detailsTitleWithName", { namespace: selectedQuota.namespace, name: selectedQuota.name }) : t("detailsTitle")}
+              {selectedQuota
+                ? t("detailsTitleWithName", {
+                    namespace: selectedQuota.namespace,
+                    name: selectedQuota.name,
+                  })
+                : t("detailsTitle")}
             </DialogTitle>
           </DialogHeader>
           {selectedQuota && (
@@ -372,7 +404,8 @@ export default function ResourceQuotasManagement() {
               <div>
                 <Label className="font-medium">{t("annotationsLabel")}</Label>
                 <div className="mt-1">
-                  {selectedQuota.annotations && Object.keys(selectedQuota.annotations).length > 0 ? (
+                  {selectedQuota.annotations &&
+                  Object.keys(selectedQuota.annotations).length > 0 ? (
                     <div className="bg-muted p-2 rounded text-sm font-mono">
                       {JSON.stringify(selectedQuota.annotations, null, 2)}
                     </div>
@@ -388,7 +421,9 @@ export default function ResourceQuotasManagement() {
                   <div className="mt-1">
                     <div className="flex flex-wrap gap-2">
                       {selectedQuota.scopes.map((scope: string, index: number) => (
-                        <Badge key={index} variant="outline">{scope}</Badge>
+                        <Badge key={index} variant="outline">
+                          {scope}
+                        </Badge>
                       ))}
                     </div>
                   </div>

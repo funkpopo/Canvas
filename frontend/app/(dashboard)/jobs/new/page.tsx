@@ -6,8 +6,13 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -24,9 +29,7 @@ interface Namespace {
 
 function CreateJobContent() {
   const t = useTranslations("jobs");
-  const tCommon = useTranslations("common");
   const { runWithFeedback } = useAsyncActionFeedback();
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [namespaces, setNamespaces] = useState<Namespace[]>([]);
   const [templates, setTemplates] = useState<JobTemplate[]>([]);
   const [selectedNamespace, setSelectedNamespace] = useState<string>("");
@@ -38,25 +41,15 @@ function CreateJobContent() {
 
   const router = useRouter();
   const searchParams = useSearchParams();
-  const clusterId = searchParams.get('cluster_id');
+  const clusterId = searchParams.get("cluster_id");
   const clusterIdNum = clusterId ? parseInt(clusterId, 10) : null;
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      router.push("/login");
-      return;
-    }
-
-    setIsAuthenticated(true);
-  }, [router]);
-
-  useEffect(() => {
-    if (isAuthenticated && clusterIdNum) {
+    if (clusterIdNum) {
       fetchNamespaces();
       fetchTemplates();
     }
-  }, [isAuthenticated, clusterIdNum]);
+  }, [clusterIdNum]);
 
   const fetchNamespaces = async () => {
     if (!clusterIdNum) return;
@@ -156,18 +149,16 @@ function CreateJobContent() {
     }
   };
 
-  const filteredTemplates = templates.filter(template =>
-    template.name.toLowerCase().includes(templateSearch.toLowerCase()) ||
-    (template.description && template.description.toLowerCase().includes(templateSearch.toLowerCase())) ||
-    (template.category && template.category.toLowerCase().includes(templateSearch.toLowerCase()))
+  const filteredTemplates = templates.filter(
+    (template) =>
+      template.name.toLowerCase().includes(templateSearch.toLowerCase()) ||
+      (template.description &&
+        template.description.toLowerCase().includes(templateSearch.toLowerCase())) ||
+      (template.category && template.category.toLowerCase().includes(templateSearch.toLowerCase()))
   );
 
-  if (!isAuthenticated) {
-    return <div>{t("authVerifying")}</div>;
-  }
-
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
           <Link href={`/jobs?cluster_id=${clusterId}`}>
@@ -189,9 +180,7 @@ function CreateJobContent() {
           <Card>
             <CardHeader>
               <CardTitle>{t("selectTemplate")}</CardTitle>
-              <CardDescription>
-                {t("selectTemplateDescription")}
-              </CardDescription>
+              <CardDescription>{t("selectTemplateDescription")}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {/* 命名空间选择 */}
@@ -230,7 +219,7 @@ function CreateJobContent() {
               <div className="space-y-2 max-h-[400px] overflow-y-auto">
                 <div
                   className={`p-3 border rounded-lg cursor-pointer transition-colors ${
-                    !selectedTemplate ? 'border-blue-500 bg-blue-50' : 'hover:bg-gray-50'
+                    !selectedTemplate ? "border-blue-500 bg-blue-50" : "hover:bg-gray-50"
                   }`}
                   onClick={() => {
                     setSelectedTemplate(null);
@@ -241,16 +230,16 @@ function CreateJobContent() {
                     <FileText className="h-4 w-4" />
                     <span className="font-medium">{t("customYaml")}</span>
                   </div>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {t("customYamlDescription")}
-                  </p>
+                  <p className="text-sm text-muted-foreground mt-1">{t("customYamlDescription")}</p>
                 </div>
 
                 {filteredTemplates.map((template) => (
                   <div
                     key={template.id}
                     className={`p-3 border rounded-lg cursor-pointer transition-colors ${
-                      selectedTemplate?.id === template.id ? 'border-blue-500 bg-blue-50' : 'hover:bg-gray-50'
+                      selectedTemplate?.id === template.id
+                        ? "border-blue-500 bg-blue-50"
+                        : "hover:bg-gray-50"
                     }`}
                     onClick={() => handleSelectTemplate(template)}
                   >
@@ -260,7 +249,9 @@ function CreateJobContent() {
                         <span className="font-medium">{template.name}</span>
                       </div>
                       {template.is_public && (
-                        <Badge variant="outline" className="text-xs">{t("publicTemplate")}</Badge>
+                        <Badge variant="outline" className="text-xs">
+                          {t("publicTemplate")}
+                        </Badge>
                       )}
                     </div>
                     {template.category && (
@@ -269,9 +260,7 @@ function CreateJobContent() {
                       </Badge>
                     )}
                     {template.description && (
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {template.description}
-                      </p>
+                      <p className="text-sm text-muted-foreground mt-1">{template.description}</p>
                     )}
                   </div>
                 ))}
@@ -305,15 +294,13 @@ function CreateJobContent() {
               <CardDescription>
                 {selectedTemplate
                   ? t("templateBasedConfig", { name: selectedTemplate.name })
-                  : t("yamlInputDescription")
-                }
+                  : t("yamlInputDescription")}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {isLoading ? (
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="h-6 w-6 animate-spin" />
-                  <span className="ml-2">{t("loadingTemplate")}</span>
                 </div>
               ) : (
                 <Textarea
@@ -328,7 +315,10 @@ function CreateJobContent() {
                 <Button variant="outline" onClick={() => setYamlContent("")}>
                   {t("clear")}
                 </Button>
-                <Button onClick={handleCreateJob} disabled={isOperationLoading || !selectedNamespace}>
+                <Button
+                  onClick={handleCreateJob}
+                  disabled={isOperationLoading || !selectedNamespace}
+                >
                   {isOperationLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                   {t("createJob")}
                 </Button>
@@ -343,9 +333,14 @@ function CreateJobContent() {
 
 export default function CreateJobPage() {
   return (
-    <Suspense fallback={<div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin" /></div>}>
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="h-8 w-8 animate-spin" />
+        </div>
+      }
+    >
       <CreateJobContent />
     </Suspense>
   );
 }
-

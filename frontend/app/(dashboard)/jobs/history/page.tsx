@@ -1,14 +1,27 @@
 "use client";
 
 import { useEffect, useState, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { ArrowLeft, Loader2, RefreshCw, Search, Filter, Calendar } from "lucide-react";
 import { jobApi, clusterApi, namespaceApi, JobHistory } from "@/lib/api";
 import { useTranslations } from "@/hooks/use-translations";
@@ -29,7 +42,6 @@ function JobHistoryContent() {
   const t = useTranslations("jobs");
   const tCommon = useTranslations("common");
   const { runWithFeedback } = useAsyncActionFeedback();
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [history, setHistory] = useState<JobHistory[]>([]);
   const [clusters, setClusters] = useState<Cluster[]>([]);
   const [namespaces, setNamespaces] = useState<Namespace[]>([]);
@@ -45,28 +57,12 @@ function JobHistoryContent() {
   const [endDate, setEndDate] = useState<string>("");
   const [limit] = useState<number>(50);
 
-  const router = useRouter();
+  useEffect(() => {
+    fetchClusters();
+    fetchHistory();
+  }, []);
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      router.push("/login");
-      return;
-    }
-
-    setIsAuthenticated(true);
-  }, [router]);
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetchClusters();
-      fetchHistory();
-    }
-  }, [isAuthenticated]);
-
-  useEffect(() => {
-    if (!isAuthenticated) return;
-
     if (!clusterFilter || clusterFilter === "all") {
       setNamespaces([]);
       setNamespaceFilter("all");
@@ -74,7 +70,7 @@ function JobHistoryContent() {
     }
 
     fetchNamespaces();
-  }, [isAuthenticated, clusterFilter]);
+  }, [clusterFilter]);
 
   const fetchClusters = async () => {
     try {
@@ -205,16 +201,13 @@ function JobHistoryContent() {
   const filteredHistory = history.filter((record) => {
     const matchesSearch =
       record.job_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (record.error_message && record.error_message.toLowerCase().includes(searchTerm.toLowerCase()));
+      (record.error_message &&
+        record.error_message.toLowerCase().includes(searchTerm.toLowerCase()));
     return matchesSearch;
   });
 
-  if (!isAuthenticated) {
-    return <div>{t("authVerifying")}</div>;
-  }
-
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
           <Link href="/jobs">
@@ -265,7 +258,11 @@ function JobHistoryContent() {
               </SelectContent>
             </Select>
 
-            <Select value={namespaceFilter} onValueChange={setNamespaceFilter} disabled={clusterFilter === "all"}>
+            <Select
+              value={namespaceFilter}
+              onValueChange={setNamespaceFilter}
+              disabled={clusterFilter === "all"}
+            >
               <SelectTrigger>
                 <SelectValue placeholder={t("selectNamespacePlaceholder")} />
               </SelectTrigger>
@@ -327,13 +324,14 @@ function JobHistoryContent() {
       <Card>
         <CardHeader>
           <CardTitle>{t("historyListTitle")}</CardTitle>
-          <CardDescription>{t("historyRecordsCount", { count: filteredHistory.length })}</CardDescription>
+          <CardDescription>
+            {t("historyRecordsCount", { count: filteredHistory.length })}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-8 w-8 animate-spin" />
-              <span className="ml-2">{tCommon("loading")}</span>
             </div>
           ) : filteredHistory.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">{t("noMatchingHistory")}</div>
@@ -360,10 +358,20 @@ function JobHistoryContent() {
                       <TableCell>{record.namespace}</TableCell>
                       <TableCell>{record.cluster_id}</TableCell>
                       <TableCell>
-                        <Badge variant={getStatusBadgeVariant(record.status)}>{getStatusLabel(record.status)}</Badge>
+                        <Badge variant={getStatusBadgeVariant(record.status)}>
+                          {getStatusLabel(record.status)}
+                        </Badge>
                       </TableCell>
-                      <TableCell>{record.start_time ? new Date(record.start_time).toLocaleString() : t("emptyValue")}</TableCell>
-                      <TableCell>{record.end_time ? new Date(record.end_time).toLocaleString() : t("emptyValue")}</TableCell>
+                      <TableCell>
+                        {record.start_time
+                          ? new Date(record.start_time).toLocaleString()
+                          : t("emptyValue")}
+                      </TableCell>
+                      <TableCell>
+                        {record.end_time
+                          ? new Date(record.end_time).toLocaleString()
+                          : t("emptyValue")}
+                      </TableCell>
                       <TableCell>{formatDuration(record.duration || undefined)}</TableCell>
                       <TableCell>
                         <div className="text-sm">
@@ -397,7 +405,13 @@ function JobHistoryContent() {
 
 export default function JobHistoryPage() {
   return (
-    <Suspense fallback={<div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin" /></div>}>
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="h-8 w-8 animate-spin" />
+        </div>
+      }
+    >
       <JobHistoryContent />
     </Suspense>
   );
