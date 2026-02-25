@@ -155,4 +155,4 @@ Before deploying to production:
 
 ## License
 
-This project is licensed under the terms of the `LICENSE` file.
+This project is licensed under the terms of MIT.
